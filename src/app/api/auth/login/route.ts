@@ -34,14 +34,19 @@ export async function POST(request: NextRequest) {
 
     if (authType === 'ldap') {
       // --- LDAP authentication ---
+      // Check if user exists (any status)
       const existingRow = db.prepare(
-        "SELECT * FROM users WHERE username = ? AND active = 1 AND auth_type = 'ldap'"
+        "SELECT * FROM users WHERE username = ? AND auth_type = 'ldap'"
       ).get(username) as UserRow | undefined;
 
       if (existingRow) {
         const ldapOk = await tryLDAPAuth(db, username, password);
         if (!ldapOk) {
           return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
+        }
+        // Check if account is pending approval
+        if (!existingRow.active) {
+          return NextResponse.json({ error: 'Your account is pending approval by an administrator.' }, { status: 403 });
         }
         // Re-read after LDAP sync to get fresh data
         const freshRow = db.prepare(
@@ -56,10 +61,10 @@ export async function POST(request: NextRequest) {
           role: freshRow.role as UserRole,
         };
       } else {
-        // User not in DB yet — authenticate and auto-provision from LDAP
-        const ldapUser = await tryLDAPAuthAndProvision(db, username, password);
-        if (ldapUser) {
-          user = ldapUser;
+        // User not in DB yet — authenticate and auto-provision from LDAP (pending)
+        const provisioned = await tryLDAPAuthAndProvision(db, username, password);
+        if (provisioned) {
+          return NextResponse.json({ error: 'Your account has been created and is pending approval by an administrator.' }, { status: 403 });
         }
       }
     } else {
@@ -213,15 +218,14 @@ async function tryLDAPAuthAndProvision(
     const role = client.getUserRole(ldapUser.groups);
     const id = crypto.randomUUID();
 
-    // Upsert into users table with avatar
+    // Insert as inactive (pending approval) — admin must activate
     db.prepare(
       `INSERT INTO users (id, username, email, firstname, lastname, role, active, avatar, auth_type)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'ldap')
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'ldap')
        ON CONFLICT(username) DO UPDATE SET
          email = excluded.email,
          firstname = excluded.firstname,
          lastname = excluded.lastname,
-         role = excluded.role,
          avatar = excluded.avatar,
          updated_at = unixepoch()`
     ).run(id, ldapUser.username, ldapUser.email, ldapUser.firstName, ldapUser.lastName, role, ldapUser.avatar || null);

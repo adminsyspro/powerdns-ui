@@ -1,4 +1,4 @@
-# PowerDNS Center
+# PowerDNS-UI
 
 A modern, feature-rich web interface for managing PowerDNS servers. Built as a replacement for the unmaintained [PowerDNS-Admin](https://github.com/PowerDNS-Admin/PowerDNS-Admin).
 

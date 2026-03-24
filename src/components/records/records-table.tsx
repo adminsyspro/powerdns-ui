@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +64,19 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
   const [historyData, setHistoryData] = React.useState<api.RRSetLastChange | null>(null);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+
+  // Sort state
+  const [sortColumn, setSortColumn] = React.useState<'name' | 'type' | 'ttl' | 'content' | 'status' | null>(null);
+  const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (column: 'name' | 'type' | 'ttl' | 'content' | 'status') => {
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
   // Selection state
   const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set());
@@ -141,20 +154,45 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
 
   // When server-paginated, records are already filtered/sorted by the API
   const filteredRecords = React.useMemo(() => {
-    if (isServerPaginated) return flatRecords;
-    return flatRecords
-      .filter(({ rrset, record }) => {
-        const matchesSearch = rrset.name.toLowerCase().includes(searchTerm.toLowerCase()) || record.content.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = typeFilter === 'all' || rrset.type === typeFilter;
-        return matchesSearch && matchesType;
-      })
-      .sort((a, b) => {
-        const typeA = TYPE_ORDER[a.rrset.type] ?? 99;
-        const typeB = TYPE_ORDER[b.rrset.type] ?? 99;
-        if (typeA !== typeB) return typeA - typeB;
-        return a.rrset.name.localeCompare(b.rrset.name);
-      });
-  }, [flatRecords, searchTerm, typeFilter, isServerPaginated]);
+    const filtered = isServerPaginated
+      ? flatRecords
+      : flatRecords.filter(({ rrset, record }) => {
+          const matchesSearch = rrset.name.toLowerCase().includes(searchTerm.toLowerCase()) || record.content.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesType = typeFilter === 'all' || rrset.type === typeFilter;
+          return matchesSearch && matchesType;
+        });
+
+    // Apply sort
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortColumn) {
+        const dir = sortDirection === 'asc' ? 1 : -1;
+        switch (sortColumn) {
+          case 'name':
+            return dir * a.rrset.name.localeCompare(b.rrset.name);
+          case 'type': {
+            const cmp = a.rrset.type.localeCompare(b.rrset.type);
+            return cmp !== 0 ? dir * cmp : a.rrset.name.localeCompare(b.rrset.name);
+          }
+          case 'ttl':
+            return dir * (a.rrset.ttl - b.rrset.ttl);
+          case 'content':
+            return dir * a.record.content.localeCompare(b.record.content);
+          case 'status': {
+            const aVal = a.record.disabled ? 1 : 0;
+            const bVal = b.record.disabled ? 1 : 0;
+            return dir * (aVal - bVal);
+          }
+        }
+      }
+      // Default sort: by type order then name
+      const typeA = TYPE_ORDER[a.rrset.type] ?? 99;
+      const typeB = TYPE_ORDER[b.rrset.type] ?? 99;
+      if (typeA !== typeB) return typeA - typeB;
+      return a.rrset.name.localeCompare(b.rrset.name);
+    });
+
+    return sorted;
+  }, [flatRecords, searchTerm, typeFilter, isServerPaginated, sortColumn, sortDirection]);
 
   const toggleAll = (checked: boolean) => {
     if (checked) {
@@ -300,11 +338,36 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     aria-label="Select all"
                   />
                 </TableHead>
-                <TableHead className="w-[180px] font-semibold text-slate-700 dark:text-slate-200">Name</TableHead>
-                <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">Type</TableHead>
-                <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">TTL</TableHead>
-                <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Content</TableHead>
-                <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">Status</TableHead>
+                <TableHead className="w-[180px] font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('name')}>
+                    Name
+                    {sortColumn === 'name' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
+                <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('type')}>
+                    Type
+                    {sortColumn === 'type' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
+                <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('ttl')}>
+                    TTL
+                    {sortColumn === 'ttl' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
+                <TableHead className="font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('content')}>
+                    Content
+                    {sortColumn === 'content' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
+                <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('status')}>
+                    Status
+                    {sortColumn === 'status' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
                 <TableHead className="w-[40px] font-semibold text-slate-700 dark:text-slate-200">Comment</TableHead>
                 <TableHead className="w-[140px] font-semibold text-slate-700 dark:text-slate-200">Actions</TableHead>
               </TableRow>

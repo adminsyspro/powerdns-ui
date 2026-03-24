@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -81,6 +81,15 @@ export default function UsersPage() {
     setFormData({ username: user.username, email: user.email, firstname: user.firstname || '', lastname: user.lastname || '', role: user.role, password: '' });
     setError('');
     setDialogOpen(true);
+  };
+
+  const handleApprove = async (user: UserData) => {
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    if (res.ok) fetchUsers();
   };
 
   const [deleteError, setDeleteError] = React.useState('');
@@ -167,10 +176,28 @@ export default function UsersPage() {
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{getRoleBadge(user.role)}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{user.authType === 'ldap' ? 'LDAP' : 'Local'}</Badge></TableCell>
-                <TableCell><Badge variant={user.active ? 'default' : 'secondary'}>{user.active ? 'Active' : 'Inactive'}</Badge></TableCell>
+                <TableCell>
+                  {user.active ? (
+                    <Badge variant="default">Active</Badge>
+                  ) : (
+                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Pending</Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(user.created_at)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
+                    {!user.active && (
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-green-600 hover:text-green-600" onClick={() => handleApprove(user)}>
+                              <UserCheck className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Approve</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     <TooltipProvider delayDuration={300}>
                       <Tooltip>
                         <TooltipTrigger asChild>

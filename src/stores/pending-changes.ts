@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PendingChange, ChangeAction, RRSet } from '@/types/powerdns';
+import { generateId } from '@/lib/utils';
 
 function rrsetKey(name: string, type: string): string {
   return `${name}::${type}`;
@@ -75,7 +76,7 @@ export const usePendingChangesStore = create<PendingChangesStore>()(
             };
           } else {
             changes.push({
-              id: crypto.randomUUID(),
+              id: generateId(),
               zoneId,
               action,
               rrsetKey: key,

@@ -10,6 +10,7 @@ import type {
   ActivityLog,
 } from '@/types/powerdns';
 import * as api from '@/lib/api';
+import { generateId } from '@/lib/utils';
 
 // Server Connection Store (backed by SQLite via API)
 interface ServerConnectionStore {
@@ -226,7 +227,7 @@ export const useTemplatesStore = create<TemplatesStore>()(
       addTemplate: (template) => {
         const newTemplate: ZoneTemplate = {
           ...template,
-          id: crypto.randomUUID(),
+          id: generateId(),
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -267,7 +268,7 @@ export const useActivityLogStore = create<ActivityLogStore>()(
       addLog: (log) => {
         const newLog: ActivityLog = {
           ...log,
-          id: crypto.randomUUID(),
+          id: generateId(),
           timestamp: new Date(),
         };
         set((state) => ({

@@ -5,11 +5,7 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error('AUTH_SECRET environment variable is required for encryption');
-  }
-  // Derive a 256-bit key from the secret using scrypt
+  const secret = process.env.AUTH_SECRET || 'powerdns-ui-default-secret-change-me';
   return scryptSync(secret, 'powerdns-ui-connections', 32);
 }
 

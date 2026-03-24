@@ -19,6 +19,7 @@ import { ChangeDiffCard } from './change-diff-card';
 import { usePendingChangesStore } from '@/stores';
 import { changesToRRSets } from '@/lib/pending-changes-utils';
 import * as api from '@/lib/api';
+import { generateId } from '@/lib/utils';
 import type { ChangesetSubmission } from '@/types/powerdns';
 
 interface ValidationModalProps {
@@ -45,7 +46,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
     const result = await api.updateZoneRecords(zoneId, rrsets);
 
     const submission: ChangesetSubmission = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       zoneId,
       zoneName,
       changes,

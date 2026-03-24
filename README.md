@@ -26,7 +26,7 @@
 docker run -d --name powerdns-ui -p 3000:3000 --restart unless-stopped ghcr.io/adminsyspro/powerdns-ui:latest
 ```
 
-Then open `http://your-server:3000` and configure your PowerDNS server connection.
+Then open `http://your-server:3000` — default credentials: **admin** / **admin**
 
 ---
 

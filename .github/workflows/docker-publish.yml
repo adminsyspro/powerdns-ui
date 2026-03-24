@@ -18,7 +18,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/powerdns-center
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/powerdns-ui
 
 jobs:
   # ========================================
@@ -89,5 +89,5 @@ jobs:
           curl -sS -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/user/packages/container/powerdns-center \
+            https://api.github.com/user/packages/container/powerdns-ui \
             -d '{"visibility":"public"}'

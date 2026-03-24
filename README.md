@@ -22,46 +22,11 @@
 
 ## Quick Start
 
-### Docker Compose (recommended)
-
-```yaml
-version: '3.8'
-
-services:
-  powerdns-center:
-    image: ghcr.io/adminsyspro/powerdns-center:latest
-    container_name: powerdns-center
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-    restart: unless-stopped
-```
-
 ```bash
-docker compose up -d
+docker run -d --name powerdns-ui -p 3000:3000 --restart unless-stopped ghcr.io/adminsyspro/powerdns-ui:latest
 ```
 
 Then open `http://your-server:3000` and configure your PowerDNS server connection.
-
-### Docker Run
-
-```bash
-docker run -d \
-  --name powerdns-center \
-  -p 3000:3000 \
-  ghcr.io/adminsyspro/powerdns-center:latest
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/adminsyspro/powerdns-ui.git
-cd powerdns-ui
-npm ci
-npm run build
-npm start
-```
 
 ---
 

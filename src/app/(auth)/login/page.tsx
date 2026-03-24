@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Globe, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +15,19 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
   const [formData, setFormData] = React.useState({ username: '', password: '' });
+  const [authType, setAuthType] = React.useState<'local' | 'ldap'>('local');
+  const [ldapAvailable, setLdapAvailable] = React.useState(false);
   const [error, setError] = React.useState('');
+
+  // Check available auth providers on mount
+  React.useEffect(() => {
+    fetch('/api/auth/providers')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ldap) setLdapAvailable(true);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,28 +35,38 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Simulate authentication
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      // For demo purposes, accept any credentials
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, authType }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Invalid username or password');
+        return;
+      }
+
       login(
         {
-          id: '1',
-          username: formData.username,
-          email: `${formData.username}@example.com`,
-          firstname: 'Admin',
-          lastname: 'User',
-          role: 'Administrator',
+          id: data.user.id,
+          username: data.user.username,
+          email: data.user.email,
+          firstname: data.user.firstname,
+          lastname: data.user.lastname,
+          role: data.user.role,
+          avatar: data.user.avatar,
           active: true,
           created_at: new Date(),
           updated_at: new Date(),
         },
-        'demo-token-12345'
+        data.token
       );
-      
+
       router.push('/dashboard');
     } catch {
-      setError('Invalid username or password');
+      setError('Connection error. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -55,10 +76,10 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <Globe className="h-6 w-6 text-primary-foreground" />
+          <div className="mx-auto mb-4">
+            <img src="/powerdns-logo.png" alt="PowerDNS" className="h-12" />
           </div>
-          <CardTitle className="text-2xl">PowerDNS Center</CardTitle>
+          <CardTitle className="text-2xl">PowerDNS-UI</CardTitle>
           <CardDescription>Sign in to manage your DNS infrastructure</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -68,11 +89,39 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+
+            {ldapAvailable && (
+              <div className="flex rounded-lg border p-1 gap-1">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    authType === 'local'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setAuthType('local')}
+                >
+                  Local
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    authType === 'ldap'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setAuthType('ldap')}
+                >
+                  LDAP
+                </button>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                placeholder="admin"
+                placeholder=""
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
@@ -80,17 +129,12 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder=""
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
@@ -106,16 +150,10 @@ export default function LoginPage() {
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-primary hover:underline">
-                Contact administrator
-              </Link>
-            </p>
           </CardFooter>
         </form>
       </Card>

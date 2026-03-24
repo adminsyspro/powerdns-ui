@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useServerConnectionStore } from '@/stores';
+import { useConfirm } from '@/hooks/use-confirm';
 import * as api from '@/lib/api';
 import type { ServerConnection } from '@/types/powerdns';
 
@@ -20,16 +21,17 @@ export default function ServersPage() {
   const [formData, setFormData] = React.useState({ name: '', url: '', apiKey: '', isDefault: false });
   const [testResult, setTestResult] = React.useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = React.useState(false);
+  const { confirm, ConfirmDialog } = useConfirm();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      updateConnection(editingId, {
+      await updateConnection(editingId, {
         ...formData,
         version: testResult?.success ? testResult.message.match(/v([\d.]+)/)?.[1] : undefined,
       });
     } else {
-      addConnection({
+      await addConnection({
         ...formData,
         version: testResult?.success ? testResult.message.match(/v([\d.]+)/)?.[1] : undefined,
       });
@@ -44,10 +46,14 @@ export default function ServersPage() {
     setDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to remove this server connection?')) {
-      removeConnection(id);
-    }
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Remove server',
+      description: 'Are you sure you want to remove this server connection?',
+      confirmLabel: 'Remove',
+      variant: 'destructive',
+    });
+    if (ok) await removeConnection(id);
   };
 
   const resetForm = () => {
@@ -214,6 +220,7 @@ export default function ServersPage() {
           ))}
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

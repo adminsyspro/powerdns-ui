@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { seedDefaultAdmin } from '@/lib/auth/seed';
 
 let db: Database.Database | null = null;
 
@@ -59,5 +60,48 @@ function initSchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_change_history_zone ON change_history(server_url, zone_id);
     CREATE INDEX IF NOT EXISTS idx_change_history_time ON change_history(submitted_at DESC);
+
+    CREATE TABLE IF NOT EXISTS server_connections (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL,
+      url             TEXT NOT NULL,
+      api_key         TEXT NOT NULL,
+      version         TEXT DEFAULT NULL,
+      is_default      INTEGER NOT NULL DEFAULT 0,
+      last_connected  INTEGER DEFAULT NULL,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id              TEXT PRIMARY KEY,
+      username        TEXT NOT NULL UNIQUE,
+      email           TEXT NOT NULL,
+      firstname       TEXT DEFAULT '',
+      lastname        TEXT DEFAULT '',
+      role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','User')),
+      active          INTEGER NOT NULL DEFAULT 1,
+      password_hash   TEXT DEFAULT NULL,
+      avatar          TEXT DEFAULT NULL,
+      auth_type       TEXT NOT NULL DEFAULT 'local' CHECK(auth_type IN ('local','ldap')),
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
+
+  // Migrations — add columns that may not exist in older databases
+  const cols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  const colNames = cols.map((c) => c.name);
+  if (!colNames.includes('avatar')) {
+    db.exec('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL');
+  }
+
+  seedDefaultAdmin(db);
 }

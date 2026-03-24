@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { MoreHorizontal, Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History } from 'lucide-react';
+import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { RRSet, RecordType, Comment, ChangeAction, PendingChange } from '@/types/powerdns';
 import type { MergedRecord } from '@/lib/pending-changes-utils';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
-import { getRecordTypeColor, getRecordTypeRowColor, copyToClipboard, formatDateTime } from '@/lib/utils';
+import { getRecordTypeColor, getRecordTypeRowColor, copyToClipboard, formatDateTime, formatTTL } from '@/lib/utils';
 import * as api from '@/lib/api';
 
 interface RecordsTableProps {
@@ -33,11 +34,27 @@ interface RecordsTableProps {
   mergedRecords?: MergedRecord[];
   onUndoChange?: (changeId: string) => void;
   zoneId?: string;
+  // Server-side pagination props
+  pagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  serverTypeStats?: Record<string, number>;
+  onTypeFilterChange?: (type: string) => void;
+  onSearchChange?: (search: string) => void;
+  // Selection
+  onSelectionChange?: (selectedKeys: string[]) => void;
+  onBulkDelete?: (records: RRSet[]) => void;
+  onBulkToggle?: (records: RRSet[], disabled: boolean) => void;
 }
 
 const RECORD_TYPES: RecordType[] = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'SRV', 'PTR', 'CAA', 'ALIAS', 'DNSKEY', 'DS', 'NAPTR', 'SSHFP', 'TLSA', 'URI'];
 
-export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId }: RecordsTableProps) {
+export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle }: RecordsTableProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<RecordType | 'all'>('all');
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
@@ -47,6 +64,54 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
   const [historyData, setHistoryData] = React.useState<api.RRSetLastChange | null>(null);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+
+  // Selection state
+  const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set());
+
+  const makeRecordKey = (rrsetName: string, rrsetType: string, index: number) => `${rrsetName}::${rrsetType}::${index}`;
+
+  const toggleOne = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      onSelectionChange?.(Array.from(next));
+      return next;
+    });
+  };
+
+  const getSelectedRRSets = (): RRSet[] => {
+    const rrsetMap = new Map<string, RRSet>();
+    for (const { rrset, index } of filteredRecords) {
+      const key = makeRecordKey(rrset.name, rrset.type, index);
+      if (selectedKeys.has(key)) {
+        const rrsetKey = `${rrset.name}::${rrset.type}`;
+        if (!rrsetMap.has(rrsetKey)) rrsetMap.set(rrsetKey, rrset);
+      }
+    }
+    return Array.from(rrsetMap.values());
+  };
+
+  const isServerPaginated = !!pagination;
+
+  // Debounce search for server-side pagination
+  const searchTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    if (isServerPaginated && onSearchChange) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        onSearchChange(value);
+      }, 300);
+    }
+  };
+
+  const handleTypeFilterChange = (value: string) => {
+    setTypeFilter(value as RecordType | 'all');
+    if (isServerPaginated && onTypeFilterChange) {
+      onTypeFilterChange(value);
+    }
+  };
 
   const handleOpenHistory = async (rrset: RRSet) => {
     if (!zoneId) return;
@@ -74,7 +139,9 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
     return result;
   }, [records, mergedRecords]);
 
+  // When server-paginated, records are already filtered/sorted by the API
   const filteredRecords = React.useMemo(() => {
+    if (isServerPaginated) return flatRecords;
     return flatRecords
       .filter(({ rrset, record }) => {
         const matchesSearch = rrset.name.toLowerCase().includes(searchTerm.toLowerCase()) || record.content.toLowerCase().includes(searchTerm.toLowerCase());
@@ -87,13 +154,29 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
         if (typeA !== typeB) return typeA - typeB;
         return a.rrset.name.localeCompare(b.rrset.name);
       });
-  }, [flatRecords, searchTerm, typeFilter]);
+  }, [flatRecords, searchTerm, typeFilter, isServerPaginated]);
+
+  const toggleAll = (checked: boolean) => {
+    if (checked) {
+      const allKeys = new Set(filteredRecords.map(({ rrset, index }) => makeRecordKey(rrset.name, rrset.type, index)));
+      setSelectedKeys(allKeys);
+      onSelectionChange?.(Array.from(allKeys));
+    } else {
+      setSelectedKeys(new Set());
+      onSelectionChange?.([]);
+    }
+  };
+
+  const allSelected = filteredRecords.length > 0 && filteredRecords.every(({ rrset, index }) => selectedKeys.has(makeRecordKey(rrset.name, rrset.type, index)));
+  const someSelected = filteredRecords.some(({ rrset, index }) => selectedKeys.has(makeRecordKey(rrset.name, rrset.type, index))) && !allSelected;
+  const selectionCount = filteredRecords.filter(({ rrset, index }) => selectedKeys.has(makeRecordKey(rrset.name, rrset.type, index))).length;
 
   const typeStats = React.useMemo(() => {
+    if (serverTypeStats) return serverTypeStats;
     const stats: Record<string, number> = {};
     flatRecords.forEach(({ rrset }) => { stats[rrset.type] = (stats[rrset.type] || 0) + 1; });
     return stats;
-  }, [flatRecords]);
+  }, [flatRecords, serverTypeStats]);
 
   const formatRecordName = (name: string) => {
     if (name === zoneName || name === `${zoneName}.`) return '@';
@@ -123,17 +206,17 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                 key={type}
                 variant={typeFilter === type ? 'default' : 'outline'}
                 className={`cursor-pointer text-xs ${typeFilter === type ? '' : getRecordTypeColor(type)}`}
-                onClick={() => setTypeFilter(typeFilter === type ? 'all' : type as RecordType)}
+                onClick={() => handleTypeFilterChange(typeFilter === type ? 'all' : type as RecordType)}
               >
                 {type}: {count}
               </Badge>
             ))}
             {typeFilter !== 'all' && (
-              <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => setTypeFilter('all')}>All</Badge>
+              <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => handleTypeFilterChange('all')}>All</Badge>
             )}
           </div>
           <div className="ml-auto flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{isServerPaginated ? pagination.total : filteredRecords.length} record{(isServerPaginated ? pagination.total : filteredRecords.length) !== 1 ? 's' : ''}</span>
 
             {/* Export buttons */}
             {onCopyAll && (
@@ -159,14 +242,14 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
 
             <div className="w-px h-5 bg-border" />
 
-            <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as RecordType | 'all')}>
+            <Select value={typeFilter} onValueChange={(value) => handleTypeFilterChange(value)}>
               <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {RECORD_TYPES.map((type) => (<SelectItem key={type} value={type}>{type} {typeStats[type] ? `(${typeStats[type]})` : ''}</SelectItem>))}
               </SelectContent>
             </Select>
-            <Input placeholder="Search..." className="w-[180px] h-8 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Input placeholder="Search..." className="w-[180px] h-8 text-xs" value={searchTerm} onChange={(e) => handleSearchChange(e.target.value)} />
 
             {onAdd && (
               <>
@@ -179,10 +262,44 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
           </div>
         </div>
 
+        {/* Bulk action bar */}
+        {selectionCount > 0 && (
+          <div className="flex items-center gap-3 rounded-md border bg-muted/50 px-4 py-2">
+            <span className="text-sm font-medium">{selectionCount} selected</span>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {onBulkToggle && (
+                <>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onBulkToggle(getSelectedRRSets(), true)}>
+                    <PowerOff className="mr-1.5 h-3.5 w-3.5" />Disable
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onBulkToggle(getSelectedRRSets(), false)}>
+                    <Power className="mr-1.5 h-3.5 w-3.5" />Enable
+                  </Button>
+                </>
+              )}
+              {onBulkDelete && (
+                <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => onBulkDelete(getSelectedRRSets())}>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedKeys(new Set()); onSelectionChange?.([]); }}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-md border">
           <Table>
             <TableHeader className="bg-slate-100 dark:bg-slate-800">
               <TableRow>
+                <TableHead className="w-[40px]">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                    onCheckedChange={(checked) => toggleAll(!!checked)}
+                    aria-label="Select all"
+                  />
+                </TableHead>
                 <TableHead className="w-[180px] font-semibold text-slate-700 dark:text-slate-200">Name</TableHead>
                 <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">Type</TableHead>
                 <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">TTL</TableHead>
@@ -194,9 +311,9 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading records...</TableCell></TableRow>
               ) : filteredRecords.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">No records found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">No records found</TableCell></TableRow>
               ) : (
                 filteredRecords.map(({ rrset, record, index, pendingAction, changeId }) => {
                   const pendingBorder = pendingAction === 'ADD' ? 'border-l-4 border-l-green-500'
@@ -204,7 +321,14 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     : pendingAction === 'DELETE' ? 'border-l-4 border-l-red-500 line-through opacity-60'
                     : '';
                   return (
-                  <TableRow key={`${rrset.name}-${rrset.type}-${index}`} className={`${getRecordTypeRowColor(rrset.type)} ${pendingBorder} ${record.disabled && !pendingAction ? 'opacity-50' : ''} cursor-pointer`} onClick={() => setDetailRecord(rrset)}>
+                  <TableRow key={`${rrset.name}-${rrset.type}-${index}`} className={`${getRecordTypeRowColor(rrset.type)} ${pendingBorder} ${record.disabled && !pendingAction ? 'opacity-50' : ''} ${selectedKeys.has(makeRecordKey(rrset.name, rrset.type, index)) ? 'bg-muted/50' : ''} cursor-pointer`} onClick={() => setDetailRecord(rrset)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedKeys.has(makeRecordKey(rrset.name, rrset.type, index))}
+                        onCheckedChange={() => toggleOne(makeRecordKey(rrset.name, rrset.type, index))}
+                        aria-label={`Select ${rrset.name} ${rrset.type}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-2">
                         {formatRecordName(rrset.name)}
@@ -215,7 +339,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium">{rrset.type}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{rrset.ttl}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatTTL(rrset.ttl)}</TableCell>
                     <TableCell className="text-sm max-w-md">
                       <Tooltip>
                         <TooltipTrigger className="truncate block max-w-full text-left font-mono">{record.content}</TooltipTrigger>
@@ -274,6 +398,42 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {isServerPaginated && (
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page</span>
+              <Select value={String(pagination.pageSize)} onValueChange={(v) => onPageSizeChange?.(Number(v))}>
+                <SelectTrigger className="h-8 w-[70px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[25, 50, 100, 200].map((size) => (
+                    <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={pagination.page <= 1} onClick={() => onPageChange?.(1)}>
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={pagination.page <= 1} onClick={() => onPageChange?.(pagination.page - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange?.(pagination.page + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange?.(pagination.totalPages)}>
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Comment Dialog */}
         <Dialog open={commentDialogOpen} onOpenChange={setCommentDialogOpen}>
@@ -341,7 +501,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </div>
                     <div className="p-2.5 rounded-md bg-muted/30 border">
                       <p className="text-muted-foreground text-xs">TTL</p>
-                      <p className="font-mono mt-0.5">{detailRecord.ttl}s</p>
+                      <p className="font-mono mt-0.5">{formatTTL(detailRecord.ttl)}</p>
                     </div>
                     <div className="p-2.5 rounded-md bg-muted/30 border">
                       <p className="text-muted-foreground text-xs">Type</p>

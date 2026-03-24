@@ -3,6 +3,7 @@
 import { AlertCircle, Check, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useConfirm } from '@/hooks/use-confirm';
 import { usePendingChangesStore } from '@/stores';
 
 interface PendingChangesBarProps {
@@ -12,6 +13,7 @@ interface PendingChangesBarProps {
 
 export function PendingChangesBar({ zoneId, onOpenValidation }: PendingChangesBarProps) {
   const { getZoneChanges, clearZone } = usePendingChangesStore();
+  const { confirm, ConfirmDialog } = useConfirm();
   const changes = getZoneChanges(zoneId);
 
   if (changes.length === 0) return null;
@@ -20,7 +22,18 @@ export function PendingChangesBar({ zoneId, onOpenValidation }: PendingChangesBa
   const edits = changes.filter((c) => c.action === 'EDIT' || c.action === 'TOGGLE').length;
   const deletes = changes.filter((c) => c.action === 'DELETE').length;
 
+  const handleDiscard = async () => {
+    const ok = await confirm({
+      title: 'Discard changes',
+      description: `Discard all ${changes.length} pending change(s)? This cannot be undone.`,
+      confirmLabel: 'Discard all',
+      variant: 'destructive',
+    });
+    if (ok) clearZone(zoneId);
+  };
+
   return (
+    <>
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-lg">
       <div className="container mx-auto flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
@@ -35,13 +48,7 @@ export function PendingChangesBar({ zoneId, onOpenValidation }: PendingChangesBa
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (confirm('Discard all pending changes?')) clearZone(zoneId);
-            }}
-          >
+          <Button variant="outline" size="sm" onClick={handleDiscard}>
             <Trash2 className="mr-2 h-4 w-4" />
             Discard All
           </Button>
@@ -52,5 +59,7 @@ export function PendingChangesBar({ zoneId, onOpenValidation }: PendingChangesBa
         </div>
       </div>
     </div>
+    <ConfirmDialog />
+    </>
   );
 }

@@ -10,22 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { useUIPreferencesStore, type ThemeColor } from '@/stores';
-import { cn } from '@/lib/utils';
-
-const themeColors: { value: ThemeColor; label: string; color: string }[] = [
-  { value: 'blue', label: 'Blue', color: 'bg-blue-500' },
-  { value: 'green', label: 'Green', color: 'bg-green-500' },
-  { value: 'purple', label: 'Purple', color: 'bg-purple-500' },
-  { value: 'orange', label: 'Orange', color: 'bg-orange-500' },
-  { value: 'red', label: 'Red', color: 'bg-red-500' },
-  { value: 'teal', label: 'Teal', color: 'bg-teal-500' },
-  { value: 'slate', label: 'Slate', color: 'bg-slate-500' },
-  { value: 'rose', label: 'Rose', color: 'bg-rose-500' },
-];
+import { useUIPreferencesStore } from '@/stores';
 
 export default function SettingsPage() {
-  const { theme, setTheme, themeColor, setThemeColor, recordsPerPage, setRecordsPerPage, zonesPerPage, setZonesPerPage, showDisabledRecords, setShowDisabledRecords, confirmDeletion, setConfirmDeletion, compactMode, setCompactMode } = useUIPreferencesStore();
+  const { theme, setTheme, recordsPerPage, setRecordsPerPage, zonesPerPage, setZonesPerPage, showDisabledRecords, setShowDisabledRecords, confirmDeletion, setConfirmDeletion, compactMode, setCompactMode } = useUIPreferencesStore();
 
   const [ldapConfig, setLdapConfig] = React.useState({
     enabled: false,
@@ -37,6 +25,26 @@ export default function SettingsPage() {
     adminGroup: 'pdns-admins',
     operatorGroup: 'pdns-operators',
   });
+  const [ldapSaving, setLdapSaving] = React.useState(false);
+  const [ldapMessage, setLdapMessage] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/settings/ldap')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data) setLdapConfig(data); });
+  }, []);
+
+  const handleSaveLdap = async () => {
+    setLdapSaving(true);
+    setLdapMessage('');
+    const res = await fetch('/api/settings/ldap', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ldapConfig),
+    });
+    setLdapSaving(false);
+    setLdapMessage(res.ok ? 'Configuration saved.' : 'Error saving configuration.');
+  };
 
   return (
     <div className="space-y-6">
@@ -66,19 +74,6 @@ export default function SettingsPage() {
                     <SelectItem value="system">System</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <Separator />
-              <div>
-                <Label>Accent Color</Label>
-                <p className="text-sm text-muted-foreground mb-3">Choose your preferred accent color</p>
-                <div className="flex flex-wrap gap-2">
-                  {themeColors.map((c) => (
-                    <button key={c.value} onClick={() => setThemeColor(c.value)} className={cn('flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all', themeColor === c.value ? 'border-primary bg-muted' : 'border-transparent hover:bg-muted')}>
-                      <div className={cn('w-4 h-4 rounded-full', c.color)} />
-                      <span className="text-sm">{c.label}</span>
-                    </button>
-                  ))}
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -186,9 +181,15 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">Users not in these groups will have read-only access</p>
                   </div>
+                  {ldapMessage && (
+                    <div className={`p-3 rounded-lg text-sm ${ldapMessage.includes('Error') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                      {ldapMessage}
+                    </div>
+                  )}
                   <div className="flex gap-2">
-                    <Button>Save Configuration</Button>
-                    <Button variant="outline">Test Connection</Button>
+                    <Button onClick={handleSaveLdap} disabled={ldapSaving}>
+                      {ldapSaving ? 'Saving...' : 'Save Configuration'}
+                    </Button>
                   </div>
                 </>
               )}

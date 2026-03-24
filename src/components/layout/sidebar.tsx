@@ -10,9 +10,7 @@ import {
   Users,
   Settings,
   LayoutDashboard,
-  Key,
   Shield,
-  Search,
   ChevronLeft,
   ChevronRight,
   Activity,
@@ -24,13 +22,15 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useUIPreferencesStore } from '@/stores';
+import { useUIPreferencesStore, useAuthStore } from '@/stores';
+import type { UserRole } from '@/types/powerdns';
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
   badge?: string;
+  requiredRole?: UserRole[];
 }
 
 interface NavGroup {
@@ -43,7 +43,6 @@ const navigation: NavGroup[] = [
     title: 'Overview',
     items: [
       { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { title: 'Search', href: '/search', icon: Search },
     ],
   },
   {
@@ -64,11 +63,10 @@ const navigation: NavGroup[] = [
   {
     title: 'Administration',
     items: [
-      { title: 'Users', href: '/users', icon: Users },
-      { title: 'API Keys', href: '/api-keys', icon: Key },
+      { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
       { title: 'Change History', href: '/history', icon: History },
       { title: 'Activity Log', href: '/activity', icon: FileText },
-      { title: 'Settings', href: '/settings', icon: Settings },
+      { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },
     ],
   },
 ];
@@ -76,6 +74,7 @@ const navigation: NavGroup[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed, setSidebarCollapsed } = useUIPreferencesStore();
+  const { user } = useAuthStore();
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -103,7 +102,12 @@ export function Sidebar() {
         {/* Navigation */}
         <ScrollArea className="flex-1 px-3 py-4">
           <nav className="space-y-6">
-            {navigation.map((group) => (
+            {navigation.map((group) => {
+              const visibleItems = group.items.filter(
+                (item) => !item.requiredRole || (user && item.requiredRole.includes(user.role))
+              );
+              if (visibleItems.length === 0) return null;
+              return (
               <div key={group.title}>
                 {!sidebarCollapsed && (
                   <h4 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-muted-foreground">
@@ -111,7 +115,7 @@ export function Sidebar() {
                   </h4>
                 )}
                 <div className="space-y-1">
-                  {group.items.map((item) => {
+                  {visibleItems.map((item) => {
                     const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
                     const Icon = item.icon;
 
@@ -158,7 +162,8 @@ export function Sidebar() {
                   })}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </nav>
         </ScrollArea>
 

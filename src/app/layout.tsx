@@ -6,7 +6,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'PowerDNS Center',
+  title: 'PowerDNS-UI',
   description: 'Modern PowerDNS Management Interface',
   icons: {
     icon: '/favicon.ico',

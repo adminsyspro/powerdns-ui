@@ -183,6 +183,7 @@ export interface User {
   lastname?: string;
   role: UserRole;
   active: boolean;
+  avatar?: string | null;
   otp_secret?: string;
   created_at: Date;
   updated_at: Date;

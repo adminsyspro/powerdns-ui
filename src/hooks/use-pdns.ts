@@ -42,7 +42,8 @@ interface FetchState<T> {
 function useFetch<T>(
   fetcher: () => Promise<{ data?: T; error?: string; status: number }>,
   deps: unknown[] = [],
-  enabled = true
+  enabled = true,
+  refreshInterval = 0,
 ) {
   const [state, setState] = useState<FetchState<T>>({
     data: null,
@@ -67,8 +68,17 @@ function useFetch<T>(
   useEffect(() => {
     mountedRef.current = true;
     refetch();
-    return () => { mountedRef.current = false; };
-  }, [refetch]);
+
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (refreshInterval > 0 && enabled) {
+      interval = setInterval(refetch, refreshInterval);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [refetch, refreshInterval, enabled]);
 
   return { ...state, refetch };
 }
@@ -125,13 +135,14 @@ export function useServerInfo() {
   );
 }
 
-/** Fetch server statistics */
+/** Fetch server statistics (polls every 15s for sparklines) */
 export function useStatistics() {
   const conn = useConnectionSync();
   return useFetch<ServerStatistic[]>(
     () => api.fetchStatistics(),
     [conn?.id],
-    !!conn
+    !!conn,
+    15_000
   );
 }
 

@@ -2,7 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', 'ldapjs'],
   images: {
     domains: ['localhost'],
   },

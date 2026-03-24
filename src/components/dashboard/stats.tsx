@@ -14,10 +14,12 @@ interface StatCardProps {
   description?: string;
   icon: React.ElementType;
   trend?: { value: number; isPositive: boolean };
+  sparklineData?: number[];
+  sparklineColor?: string;
   className?: string;
 }
 
-export function StatCard({ title, value, description, icon: Icon, trend, className }: StatCardProps) {
+export function StatCard({ title, value, description, icon: Icon, trend, sparklineData, sparklineColor = '#3b82f6', className }: StatCardProps) {
   return (
     <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -26,6 +28,21 @@ export function StatCard({ title, value, description, icon: Icon, trend, classNa
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
+        {sparklineData && sparklineData.length >= 2 && (
+          <div className="h-8 mt-1 -mx-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sparklineData.map((v, i) => ({ v, i }))} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`spark-${title.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={sparklineColor} stopOpacity={0.3} />
+                    <stop offset="100%" stopColor={sparklineColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="v" stroke={sparklineColor} strokeWidth={1.5} fill={`url(#spark-${title.replace(/\s/g, '')})`} dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         {(description || trend) && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {trend && (
@@ -77,6 +94,23 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+const MAX_HISTORY = 20;
+
+function useSparklineHistory(value: number): number[] {
+  const historyRef = React.useRef<number[]>([]);
+
+  React.useEffect(() => {
+    if (value > 0) {
+      const h = historyRef.current;
+      if (h.length === 0 || h[h.length - 1] !== value) {
+        historyRef.current = [...h.slice(-(MAX_HISTORY - 1)), value];
+      }
+    }
+  }, [value]);
+
+  return historyRef.current;
+}
+
 export function DashboardStats({ stats, serverStats = {} }: DashboardStatsProps) {
   const s = (key: string) => parseInt(serverStats[key] || '0') || 0;
   const dnssecPercentage = stats.totalZones > 0 ? Math.round((stats.dnssecEnabled / stats.totalZones) * 100) : 0;
@@ -89,6 +123,9 @@ export function DashboardStats({ stats, serverStats = {} }: DashboardStatsProps)
     ? Math.round((packetHits / (packetHits + packetMisses)) * 100)
     : 0;
   const latency = serverStats['latency'] || '0';
+
+  const memoryHistory = useSparklineHistory(memory);
+  const cacheHistory = useSparklineHistory(cacheRate);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -121,12 +158,16 @@ export function DashboardStats({ stats, serverStats = {} }: DashboardStatsProps)
         value={memory > 0 ? formatBytes(memory) : '-'}
         description={`Latency: ${latency}ms`}
         icon={HardDrive}
+        sparklineData={memoryHistory}
+        sparklineColor="#6366f1"
       />
       <StatCard
         title="Cache Hit Rate"
         value={cacheRate > 0 ? `${cacheRate}%` : '-'}
         description={packetHits > 0 ? `${formatNumber(packetHits)} hits / ${formatNumber(packetMisses)} misses` : ''}
         icon={Zap}
+        sparklineData={cacheHistory}
+        sparklineColor="#22c55e"
       />
     </div>
   );

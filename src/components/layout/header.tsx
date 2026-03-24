@@ -3,17 +3,14 @@
 import * as React from 'react';
 import { useTheme } from 'next-themes';
 import {
-  Bell,
   Moon,
   Sun,
-  Search,
   User,
   LogOut,
   Settings,
   Server,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -36,15 +33,6 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const { connections, activeConnection, setActiveConnection } = useServerConnectionStore();
   const { user, logout } = useAuthStore();
-  const [searchQuery, setSearchQuery] = React.useState('');
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
-    }
-  };
-
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-700 dark:border-border bg-slate-900 text-slate-100 dark:bg-background dark:text-foreground px-6">
       {/* Left: Server Selector */}
@@ -89,7 +77,7 @@ export function Header() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-800 dark:hover:bg-accent">
               <Avatar>
-                <AvatarImage src="/avatars/default.png" alt={user?.username || 'User'} />
+                <AvatarImage src={user?.avatar || undefined} alt={user?.username || 'User'} />
                 <AvatarFallback className="bg-slate-700 text-slate-100 dark:bg-muted dark:text-muted-foreground">
                   {user?.username?.slice(0, 2).toUpperCase() || 'AD'}
                 </AvatarFallback>
@@ -108,16 +96,23 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
               <User className="mr-2 h-4 w-4" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive">
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={async () => {
+                await fetch('/api/auth/login', { method: 'DELETE' });
+                logout();
+                window.location.href = '/login';
+              }}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>

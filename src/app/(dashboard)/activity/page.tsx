@@ -10,9 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { useActivityLogStore } from '@/stores';
+import { useConfirm } from '@/hooks/use-confirm';
 
 export default function ActivityPage() {
   const { logs, clearLogs } = useActivityLogStore();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [searchTerm, setSearchTerm] = React.useState('');
   const [actionFilter, setActionFilter] = React.useState<string>('all');
 
@@ -71,7 +73,15 @@ export default function ActivityPage() {
             <Download className="mr-2 h-4 w-4" />Export
           </Button>
           {logs.length > 0 && (
-            <Button variant="outline" onClick={() => { if (confirm('Clear all activity logs?')) clearLogs(); }}>
+            <Button variant="outline" onClick={async () => {
+              const ok = await confirm({
+                title: 'Clear activity logs',
+                description: 'Clear all activity logs? This cannot be undone.',
+                confirmLabel: 'Clear all',
+                variant: 'destructive',
+              });
+              if (ok) clearLogs();
+            }}>
               <Trash2 className="mr-2 h-4 w-4" />Clear
             </Button>
           )}
@@ -131,6 +141,7 @@ export default function ActivityPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog />
     </div>
   );
 }

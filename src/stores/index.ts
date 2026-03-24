@@ -9,45 +9,67 @@ import type {
   ZoneTemplate,
   ActivityLog,
 } from '@/types/powerdns';
+import * as api from '@/lib/api';
 
-// Server Connection Store
+// Server Connection Store (backed by SQLite via API)
 interface ServerConnectionStore {
   connections: ServerConnection[];
   activeConnection: ServerConnection | null;
-  addConnection: (connection: Omit<ServerConnection, 'id'>) => void;
-  updateConnection: (id: string, connection: Partial<ServerConnection>) => void;
-  removeConnection: (id: string) => void;
+  isLoaded: boolean;
+  loadConnections: () => Promise<void>;
+  addConnection: (connection: Omit<ServerConnection, 'id'>) => Promise<void>;
+  updateConnection: (id: string, connection: Partial<ServerConnection>) => Promise<void>;
+  removeConnection: (id: string) => Promise<void>;
   setActiveConnection: (id: string) => void;
   getDefaultConnection: () => ServerConnection | null;
 }
 
 export const useServerConnectionStore = create<ServerConnectionStore>()(
-  persist(
-    (set, get) => ({
-      connections: [],
-      activeConnection: null,
-      addConnection: (connection) => {
-        const newConnection: ServerConnection = {
-          ...connection,
-          id: crypto.randomUUID(),
-        };
+  (set, get) => ({
+    connections: [],
+    activeConnection: null,
+    isLoaded: false,
+    loadConnections: async () => {
+      const result = await api.fetchConnections();
+      if (result.data) {
+        const connections = result.data;
+        const state = get();
+        // Restore active connection: try to keep current, else use default, else first
+        let active = state.activeConnection
+          ? connections.find((c) => c.id === state.activeConnection!.id) || null
+          : null;
+        if (!active) {
+          active = connections.find((c) => c.isDefault) || connections[0] || null;
+        }
+        set({ connections, activeConnection: active, isLoaded: true });
+      } else {
+        set({ isLoaded: true });
+      }
+    },
+    addConnection: async (connection) => {
+      const result = await api.createConnection(connection);
+      if (result.data) {
+        const newConn = result.data;
         set((state) => ({
-          connections: [...state.connections, newConnection],
-          activeConnection: state.activeConnection || newConnection,
+          connections: [...state.connections, newConn],
+          activeConnection: state.activeConnection || newConn,
         }));
-      },
-      updateConnection: (id, connection) => {
+      }
+    },
+    updateConnection: async (id, connection) => {
+      const result = await api.updateConnectionApi(id, connection);
+      if (result.data) {
+        const updated = result.data;
         set((state) => ({
-          connections: state.connections.map((c) =>
-            c.id === id ? { ...c, ...connection } : c
-          ),
+          connections: state.connections.map((c) => (c.id === id ? updated : c)),
           activeConnection:
-            state.activeConnection?.id === id
-              ? { ...state.activeConnection, ...connection }
-              : state.activeConnection,
+            state.activeConnection?.id === id ? updated : state.activeConnection,
         }));
-      },
-      removeConnection: (id) => {
+      }
+    },
+    removeConnection: async (id) => {
+      const result = await api.deleteConnection(id);
+      if (result.data?.success) {
         set((state) => {
           const connections = state.connections.filter((c) => c.id !== id);
           return {
@@ -58,21 +80,18 @@ export const useServerConnectionStore = create<ServerConnectionStore>()(
                 : state.activeConnection,
           };
         });
-      },
-      setActiveConnection: (id) => {
-        set((state) => ({
-          activeConnection: state.connections.find((c) => c.id === id) || null,
-        }));
-      },
-      getDefaultConnection: () => {
-        const state = get();
-        return state.connections.find((c) => c.isDefault) || state.connections[0] || null;
-      },
-    }),
-    {
-      name: 'pdns-server-connections',
-    }
-  )
+      }
+    },
+    setActiveConnection: (id) => {
+      set((state) => ({
+        activeConnection: state.connections.find((c) => c.id === id) || null,
+      }));
+    },
+    getDefaultConnection: () => {
+      const state = get();
+      return state.connections.find((c) => c.isDefault) || state.connections[0] || null;
+    },
+  })
 );
 
 // Zones Store

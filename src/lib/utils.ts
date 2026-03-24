@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function formatTTL(seconds: number): string {
+  if (seconds < 3600) return `${seconds}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}m`;
+}
+
 export function formatDate(date: Date | string | number): string {
   const d = new Date(date);
   return d.toLocaleDateString('en-US', {
@@ -216,7 +224,7 @@ export function downloadAsFile(content: string, filename: string, mimeType = 'te
 export function exportZoneFile(zoneName: string, records: Array<{ name: string; ttl: number; type: string; content: string }>): string {
   const lines: string[] = [
     `; Zone file for ${zoneName}`,
-    `; Exported from PowerDNS Center`,
+    `; Exported from PowerDNS-UI`,
     `; Date: ${new Date().toISOString()}`,
     '',
     `$ORIGIN ${ensureTrailingDot(zoneName)}`,

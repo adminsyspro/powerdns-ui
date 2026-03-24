@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTemplatesStore } from '@/stores';
+import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate, getRecordTypeColor, getRecordTypeRowColor } from '@/lib/utils';
 import type { TemplateRecord, RecordType, ZoneTemplate } from '@/types/powerdns';
 
@@ -216,6 +217,7 @@ export default function TemplatesPage() {
   const { templates, addTemplate, updateTemplate, removeTemplate } = useTemplatesStore();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingTemplate, setEditingTemplate] = React.useState<ZoneTemplate | null>(null);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const handleCreate = (name: string, description: string, records: TemplateRecord[]) => {
     addTemplate({ name, description, records });
@@ -240,10 +242,14 @@ export default function TemplatesPage() {
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this template?')) {
-      removeTemplate(id);
-    }
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Delete template',
+      description: 'Are you sure you want to delete this template?',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (ok) removeTemplate(id);
   };
 
   return (
@@ -341,6 +347,7 @@ export default function TemplatesPage() {
         </div>
       )}
     </div>
+    <ConfirmDialog />
     </TooltipProvider>
   );
 }

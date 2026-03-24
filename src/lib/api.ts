@@ -6,6 +6,7 @@ import type {
   ServerStatistic,
   SearchResult,
   RRSet,
+  ServerConnection,
 } from '@/types/powerdns';
 
 /**
@@ -77,6 +78,32 @@ async function apiRequest<T>(
   }
 }
 
+// ---- Server Connections (SQLite-backed) ----
+
+export async function fetchConnections() {
+  return apiRequest<ServerConnection[]>('/api/connections');
+}
+
+export async function createConnection(connection: Omit<ServerConnection, 'id'>) {
+  return apiRequest<ServerConnection>('/api/connections', {
+    method: 'POST',
+    body: JSON.stringify(connection),
+  });
+}
+
+export async function updateConnectionApi(id: string, connection: Partial<ServerConnection>) {
+  return apiRequest<ServerConnection>(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(connection),
+  });
+}
+
+export async function deleteConnection(id: string) {
+  return apiRequest<{ success: boolean }>(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 // ---- Server ----
 
 export async function fetchServerInfo() {
@@ -124,6 +151,46 @@ export async function createZone(zone: {
     method: 'POST',
     body: JSON.stringify(zone),
   });
+}
+
+// ---- Zone Records (paginated) ----
+
+export interface ZoneRecordsParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  type?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}
+
+export interface FlatRecord {
+  name: string;
+  type: string;
+  ttl: number;
+  content: string;
+  disabled: boolean;
+  comments: Array<{ content: string; account: string; modified_at: number }>;
+}
+
+export interface PaginatedRecordsResponse {
+  items: FlatRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  typeStats: Record<string, number>;
+  rrsets: import('@/types/powerdns').RRSet[];
+}
+
+export async function fetchZoneRecords(zoneId: string, params: ZoneRecordsParams = {}) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') searchParams.set(k, String(v));
+  });
+  return apiRequest<PaginatedRecordsResponse>(
+    `/api/pdns/zones/${encodeURIComponent(zoneId)}/records?${searchParams}`
+  );
 }
 
 export async function deleteZone(zoneId: string) {

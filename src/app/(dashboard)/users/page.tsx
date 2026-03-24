@@ -1,53 +1,113 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, MoreHorizontal, Edit2, Trash2, Shield } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDate } from '@/lib/utils';
-import type { User, UserRole } from '@/types/powerdns';
+import type { UserRole } from '@/types/powerdns';
 
-const mockUsers: User[] = [
-  { id: '1', username: 'admin', email: 'admin@example.com', firstname: 'Admin', lastname: 'User', role: 'Administrator', active: true, created_at: new Date('2024-01-01'), updated_at: new Date() },
-  { id: '2', username: 'operator1', email: 'op1@example.com', firstname: 'John', lastname: 'Doe', role: 'Operator', active: true, created_at: new Date('2024-01-15'), updated_at: new Date() },
-  { id: '3', username: 'user1', email: 'user1@example.com', firstname: 'Jane', lastname: 'Smith', role: 'User', active: true, created_at: new Date('2024-02-01'), updated_at: new Date() },
-  { id: '4', username: 'operator2', email: 'op2@example.com', firstname: 'Bob', lastname: 'Wilson', role: 'Operator', active: false, created_at: new Date('2024-02-15'), updated_at: new Date() },
-];
+interface UserData {
+  id: string;
+  username: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  role: UserRole;
+  active: boolean;
+  authType: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function UsersPage() {
-  const [users, setUsers] = React.useState<User[]>(mockUsers);
+  const [users, setUsers] = React.useState<UserData[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editingUser, setEditingUser] = React.useState<User | null>(null);
+  const [editingUser, setEditingUser] = React.useState<UserData | null>(null);
   const [formData, setFormData] = React.useState({ username: '', email: '', firstname: '', lastname: '', role: 'User' as UserRole, password: '' });
+  const [error, setError] = React.useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData, updated_at: new Date() } : u));
-    } else {
-      setUsers([...users, { ...formData, id: Date.now().toString(), active: true, created_at: new Date(), updated_at: new Date() }]);
+  const fetchUsers = async () => {
+    const res = await fetch('/api/users');
+    if (res.ok) {
+      const data = await res.json();
+      setUsers(data);
     }
+    setIsLoading(false);
+  };
+
+  React.useEffect(() => { fetchUsers(); }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
+    const method = editingUser ? 'PUT' : 'POST';
+
+    const body: Record<string, unknown> = { ...formData };
+    if (editingUser && !formData.password) {
+      delete body.password;
+    }
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || 'An error occurred');
+      return;
+    }
+
     setDialogOpen(false);
     setEditingUser(null);
     setFormData({ username: '', email: '', firstname: '', lastname: '', role: 'User', password: '' });
+    fetchUsers();
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = (user: UserData) => {
     setEditingUser(user);
     setFormData({ username: user.username, email: user.email, firstname: user.firstname || '', lastname: user.lastname || '', role: user.role, password: '' });
+    setError('');
     setDialogOpen(true);
+  };
+
+  const [deleteError, setDeleteError] = React.useState('');
+
+  const handleDelete = async (user: UserData) => {
+    setDeleteError('');
+    const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      setDeleteError(data.error || 'Failed to delete user');
+      return;
+    }
+    fetchUsers();
   };
 
   const getRoleBadge = (role: UserRole) => {
     const variants: Record<UserRole, 'default' | 'secondary' | 'outline'> = { Administrator: 'default', Operator: 'secondary', User: 'outline' };
     return <Badge variant={variants[role]}>{role}</Badge>;
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -56,11 +116,14 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold tracking-tight">Users</h1>
           <p className="text-muted-foreground">Manage user accounts and permissions</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingUser(null); setError(''); } }}>
           <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Add User</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingUser ? 'Edit User' : 'Add User'}</DialogTitle></DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>First Name</Label><Input value={formData.firstname} onChange={(e) => setFormData({ ...formData, firstname: e.target.value })} /></div>
                 <div className="space-y-2"><Label>Last Name</Label><Input value={formData.lastname} onChange={(e) => setFormData({ ...formData, lastname: e.target.value })} /></div>
@@ -91,9 +154,10 @@ export default function UsersPage() {
               <TableHead>User</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Auth</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -102,16 +166,53 @@ export default function UsersPage() {
                 <TableCell className="font-medium">{user.firstname} {user.lastname}<div className="text-xs text-muted-foreground">@{user.username}</div></TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{getRoleBadge(user.role)}</TableCell>
-                <TableCell><Badge variant={user.active ? 'success' : 'secondary'}>{user.active ? 'Active' : 'Inactive'}</Badge></TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{user.authType === 'ldap' ? 'LDAP' : 'Local'}</Badge></TableCell>
+                <TableCell><Badge variant={user.active ? 'default' : 'secondary'}>{user.active ? 'Active' : 'Inactive'}</Badge></TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(user.created_at)}</TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEdit(user)}><Edit2 className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => setUsers(users.filter(u => u.id !== user.id))}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <AlertDialog>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete user</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete <span className="font-semibold">{user.username}</span>? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        {deleteError && (
+                          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{deleteError}</div>
+                        )}
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(user)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

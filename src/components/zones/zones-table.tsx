@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import {
@@ -65,6 +66,14 @@ interface ZonesTableProps {
   dnssecValue?: string;
   // Whether pagination is server-side
   serverPagination?: boolean;
+  // Global search callback
+  onGlobalSearch?: (query: string) => void;
+  isGlobalSearching?: boolean;
+  // Action buttons slot
+  actions?: React.ReactNode;
+  // Selection
+  onSelectionChange?: (selectedIds: string[]) => void;
+  onBulkDelete?: (zoneIds: string[]) => void;
 }
 
 export function ZonesTable({
@@ -89,21 +98,62 @@ export function ZonesTable({
   kindValue = 'all',
   dnssecValue = 'all',
   serverPagination = false,
+  onGlobalSearch,
+  isGlobalSearching = false,
+  actions,
+  onSelectionChange,
+  onBulkDelete,
 }: ZonesTableProps) {
+  // Selection state
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      onSelectionChange?.(Array.from(next));
+      return next;
+    });
+  };
+
   // Local filter state for client-side mode
   const [localSearch, setLocalSearch] = React.useState('');
   const [localKind, setLocalKind] = React.useState<ZoneKind | 'all'>('all');
   const [localDnssec, setLocalDnssec] = React.useState<'all' | 'enabled' | 'disabled'>('all');
+  const [searchMode, setSearchMode] = React.useState<'zones' | 'global'>('zones');
 
   // Debounce for search
   const searchTimerRef = React.useRef<NodeJS.Timeout>();
   const handleSearchInput = (value: string) => {
-    if (serverPagination && onSearchChange) {
-      setLocalSearch(value); // update input immediately
-      clearTimeout(searchTimerRef.current);
-      searchTimerRef.current = setTimeout(() => onSearchChange(value), 300);
+    setLocalSearch(value);
+    if (searchMode === 'zones') {
+      if (serverPagination && onSearchChange) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => onSearchChange(value), 300);
+      }
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && searchMode === 'global' && onGlobalSearch && localSearch.trim()) {
+      onGlobalSearch(localSearch.trim());
+    }
+  };
+
+  const handleSearchModeChange = (mode: string) => {
+    const newMode = mode as 'zones' | 'global';
+    setSearchMode(newMode);
+    if (newMode === 'zones') {
+      // Restore zone filtering
+      if (serverPagination && onSearchChange) {
+        onSearchChange(localSearch);
+      }
     } else {
-      setLocalSearch(value);
+      // Clear zone filter when switching to global
+      if (serverPagination && onSearchChange) {
+        onSearchChange('');
+      }
     }
   };
 
@@ -119,6 +169,20 @@ export function ZonesTable({
           (localDnssec === 'disabled' && !zone.dnssec);
         return matchesSearch && matchesKind && matchesDnssec;
       });
+
+  const toggleAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = new Set(displayedZones.map((z) => z.id));
+      setSelectedIds(allIds);
+      onSelectionChange?.(Array.from(allIds));
+    } else {
+      setSelectedIds(new Set());
+      onSelectionChange?.([]);
+    }
+  };
+
+  const allSelected = displayedZones.length > 0 && displayedZones.every((z) => selectedIds.has(z.id));
+  const someSelected = displayedZones.some((z) => selectedIds.has(z.id)) && !allSelected;
 
   const displayTotal = serverPagination ? (total || 0) : displayedZones.length;
 
@@ -150,12 +214,26 @@ export function ZonesTable({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[200px] max-w-sm">
+        <div className="flex-1 min-w-[200px] max-w-md flex items-center gap-0">
+          <Select value={searchMode} onValueChange={handleSearchModeChange}>
+            <SelectTrigger className="w-[110px] rounded-r-none border-r-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zones">Zones</SelectItem>
+              <SelectItem value="global">Global</SelectItem>
+            </SelectContent>
+          </Select>
           <Input
-            placeholder="Search zones..."
-            value={serverPagination ? (localSearch !== undefined ? localSearch : searchValue) : localSearch}
+            placeholder={searchMode === 'zones' ? 'Search zones...' : 'Search zones, records, IPs... (Enter)'}
+            className="rounded-l-none"
+            value={localSearch}
             onChange={(e) => handleSearchInput(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
           />
+          {searchMode === 'global' && isGlobalSearching && (
+            <RefreshCw className="ml-2 h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+          )}
         </div>
         <Select
           value={serverPagination ? kindValue : localKind}
@@ -196,16 +274,41 @@ export function ZonesTable({
             <SelectItem value="disabled">DNSSEC Disabled</SelectItem>
           </SelectContent>
         </Select>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground whitespace-nowrap">
           {displayTotal.toLocaleString()} zone{displayTotal !== 1 ? 's' : ''}
         </div>
+        {actions && <div className="flex items-center gap-2 ml-auto">{actions}</div>}
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-md border bg-muted/50 px-4 py-2">
+          <span className="text-sm font-medium">{selectedIds.size} zone{selectedIds.size !== 1 ? 's' : ''} selected</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            {onBulkDelete && (
+              <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => onBulkDelete(Array.from(selectedIds))}>
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedIds(new Set()); onSelectionChange?.([]); }}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                  onCheckedChange={(checked) => toggleAll(!!checked)}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead><SortHeader column="name">Zone Name</SortHeader></TableHead>
               <TableHead><SortHeader column="kind">Type</SortHeader></TableHead>
               <TableHead><SortHeader column="serial">Serial</SortHeader></TableHead>
@@ -217,7 +320,7 @@ export function ZonesTable({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex items-center justify-center">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -225,7 +328,7 @@ export function ZonesTable({
               </TableRow>
             ) : displayedZones.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Globe className="h-8 w-8 text-muted-foreground" />
                     <p className="text-muted-foreground">No zones found</p>
@@ -234,7 +337,14 @@ export function ZonesTable({
               </TableRow>
             ) : (
               displayedZones.map((zone) => (
-                <TableRow key={zone.id}>
+                <TableRow key={zone.id} className={selectedIds.has(zone.id) ? 'bg-muted/50' : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(zone.id)}
+                      onCheckedChange={() => toggleOne(zone.id)}
+                      aria-label={`Select ${zone.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Link
                       href={`/zones/${encodeURIComponent(zone.id)}`}

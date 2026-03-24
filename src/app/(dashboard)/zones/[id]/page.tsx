@@ -5,12 +5,11 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
-  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History,
+  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -26,6 +25,7 @@ import type { RRSet, ZoneListItem } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
 import { useZone } from '@/hooks/use-pdns';
+import { useConfirm } from '@/hooks/use-confirm';
 import { useActivityLogStore, usePendingChangesStore } from '@/stores';
 import * as api from '@/lib/api';
 
@@ -104,6 +104,7 @@ function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" className="h-auto py-1 px-3 text-left gap-2 max-w-[400px]">
+          <Globe2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
           <h1 className="text-2xl font-bold tracking-tight truncate">{displayName}</h1>
           <ChevronsUpDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </Button>
@@ -143,7 +144,7 @@ function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
                       if (!isActive) router.push(`/zones/${encodeURIComponent(z.id)}`);
                     }}
                   >
-                    {isActive ? <Check className="h-4 w-4 flex-shrink-0" /> : <div className="w-4" />}
+                    <Globe2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     <span className="truncate font-medium">{z.name.replace(/\.$/, '')}</span>
                     <Badge variant="outline" className={`${getZoneKindColor(z.kind)} text-[10px] px-1.5 py-0 ml-auto flex-shrink-0`}>{z.kind}</Badge>
                   </button>
@@ -234,6 +235,7 @@ export default function ZoneDetailPage() {
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
 
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
+  const { confirm, ConfirmDialog } = useConfirm();
   const [recordDialogOpen, setRecordDialogOpen] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<RRSet | undefined>();
   const [validationOpen, setValidationOpen] = React.useState(false);
@@ -241,6 +243,47 @@ export default function ZoneDetailPage() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyData, setHistoryData] = React.useState<ChangesetSubmission[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+
+  // Paginated records state
+  const [recordsPage, setRecordsPage] = React.useState(1);
+  const [recordsPageSize, setRecordsPageSize] = React.useState(25);
+  const [recordsSearch, setRecordsSearch] = React.useState('');
+  const [recordsType, setRecordsType] = React.useState('all');
+  const [paginatedData, setPaginatedData] = React.useState<api.PaginatedRecordsResponse | null>(null);
+  const [recordsLoading, setRecordsLoading] = React.useState(false);
+
+  // Fetch paginated records
+  const fetchRecords = React.useCallback(async () => {
+    setRecordsLoading(true);
+    const result = await api.fetchZoneRecords(zoneId, {
+      page: recordsPage,
+      pageSize: recordsPageSize,
+      search: recordsSearch || undefined,
+      type: recordsType !== 'all' ? recordsType : undefined,
+    });
+    if (result.data) {
+      setPaginatedData(result.data);
+    }
+    setRecordsLoading(false);
+  }, [zoneId, recordsPage, recordsPageSize, recordsSearch, recordsType]);
+
+  React.useEffect(() => {
+    if (zone) fetchRecords();
+  }, [fetchRecords, zone]);
+
+  const handleRecordsPageChange = (page: number) => setRecordsPage(page);
+  const handleRecordsPageSizeChange = (size: number) => {
+    setRecordsPageSize(size);
+    setRecordsPage(1);
+  };
+  const handleRecordsSearchChange = (search: string) => {
+    setRecordsSearch(search);
+    setRecordsPage(1);
+  };
+  const handleRecordsTypeChange = (type: string) => {
+    setRecordsType(type);
+    setRecordsPage(1);
+  };
 
   const handleOpenHistory = async () => {
     setHistoryOpen(true);
@@ -257,11 +300,34 @@ export default function ZoneDetailPage() {
     return map;
   }, [pendingChanges]);
 
-  // Merge server records with pending changes for display
+  // Build rrsets from paginated items (current page only) for the table
+  const pageRrsets = React.useMemo(() => {
+    if (!paginatedData?.items) return [];
+    // Group flat records back into RRSets
+    const map = new Map<string, RRSet>();
+    for (const item of paginatedData.items) {
+      const key = `${item.name}::${item.type}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.records.push({ content: item.content, disabled: item.disabled });
+      } else {
+        map.set(key, {
+          name: item.name,
+          type: item.type as RRSet['type'],
+          ttl: item.ttl,
+          records: [{ content: item.content, disabled: item.disabled }],
+          comments: item.comments,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [paginatedData?.items]);
+
+  // Merge current page records with pending changes for display
   const mergedRecords = React.useMemo(() => {
-    if (!zone?.rrsets) return [];
-    return mergeRecordsWithPending(zone.rrsets, pendingChanges);
-  }, [zone?.rrsets, pendingChanges]);
+    if (!pageRrsets.length && !pendingChanges.length) return [];
+    return mergeRecordsWithPending(pageRrsets, pendingChanges);
+  }, [pageRrsets, pendingChanges]);
 
   // Fetch NS + WHOIS lookup when zone loads
   React.useEffect(() => {
@@ -280,8 +346,14 @@ export default function ZoneDetailPage() {
     setRecordDialogOpen(true);
   };
 
-  const handleDeleteRecord = (record: RRSet) => {
-    if (!confirm(`Delete ${record.type} record for ${record.name}?`)) return;
+  const handleDeleteRecord = async (record: RRSet) => {
+    const ok = await confirm({
+      title: 'Delete record',
+      description: `Delete ${record.type} record for "${record.name}"?`,
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     addChange(zoneId, 'DELETE', record, null);
   };
 
@@ -340,6 +412,29 @@ export default function ZoneDetailPage() {
     setEditingRecord(undefined);
   };
 
+  const handleBulkDelete = async (records: RRSet[]) => {
+    const ok = await confirm({
+      title: 'Delete records',
+      description: `Delete ${records.length} record(s)? They will be added to pending changes.`,
+      confirmLabel: 'Delete all',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    for (const record of records) {
+      addChange(zoneId, 'DELETE', record, null);
+    }
+  };
+
+  const handleBulkToggle = (records: RRSet[], disabled: boolean) => {
+    for (const record of records) {
+      const after: RRSet = {
+        ...record,
+        records: record.records.map((r) => ({ ...r, disabled })),
+      };
+      addChange(zoneId, 'TOGGLE', record, after);
+    }
+  };
+
   const handleUndoChange = (changeId: string) => {
     removeChange(zoneId, changeId);
   };
@@ -347,12 +442,19 @@ export default function ZoneDetailPage() {
   const handleApplySuccess = () => {
     addLog({ action: 'Records Updated', resource: zoneName, user: 'admin', details: `${pendingChanges.length} changes applied` });
     refetch();
+    fetchRecords();
   };
 
   const zoneName = zone?.name || zoneId;
 
   const handleDeleteZone = async () => {
-    if (!confirm(`Are you sure you want to DELETE zone ${zoneId}? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: 'Delete zone',
+      description: `Are you sure you want to delete zone "${zoneId}"? This action cannot be undone.`,
+      confirmLabel: 'Delete zone',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     const result = await api.deleteZone(zoneId);
     if (result.error) {
       alert(`Error deleting zone: ${result.error}`);
@@ -440,7 +542,7 @@ export default function ZoneDetailPage() {
                 <>
                   <div className="w-px h-5 bg-border" />
                   <div className="flex items-center gap-1.5 text-xs">
-                    <Globe2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     {lookup.ns.map((ns) => (
                       <Badge key={ns} variant="outline" className="font-mono text-[11px] font-normal py-0">{ns}</Badge>
                     ))}
@@ -509,65 +611,36 @@ export default function ZoneDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Tabs */}
-      <Tabs defaultValue="records" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="records">Records</TabsTrigger>
-          <TabsTrigger value="dnssec">DNSSEC</TabsTrigger>
-          <TabsTrigger value="metadata">Metadata</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="records">
-          <RecordsTable
-            records={zone.rrsets || []}
-            zoneName={zone.name}
-            onEdit={handleEditRecord}
-            onDelete={handleDeleteRecord}
-            onToggle={handleToggleRecord}
-            onAdd={() => { setEditingRecord(undefined); setRecordDialogOpen(true); }}
-            onCopyAll={handleCopyRecords}
-            onExportText={handleExportText}
-            onExportCsv={handleExportCsv}
-            onExportPdf={handleExportPdf}
-            mergedRecords={mergedRecords}
-            onUndoChange={handleUndoChange}
-            zoneId={zoneId}
-          />
-        </TabsContent>
-
-        <TabsContent value="dnssec">
-          <Card>
-            <CardHeader>
-              <CardTitle>DNSSEC Configuration</CardTitle>
-              <CardDescription>Manage DNSSEC keys and settings for this zone</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {zone.dnssec ? (
-                <p className="text-muted-foreground">DNSSEC is enabled for this zone. Key management coming soon.</p>
-              ) : (
-                <div className="text-center py-8">
-                  <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <h3 className="mt-4 text-lg font-semibold">DNSSEC Not Enabled</h3>
-                  <p className="text-muted-foreground">Enable DNSSEC to secure this zone with cryptographic signatures.</p>
-                  <Button className="mt-4">Enable DNSSEC</Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="metadata">
-          <Card>
-            <CardHeader>
-              <CardTitle>Zone Metadata</CardTitle>
-              <CardDescription>Additional zone configuration options</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Metadata management coming soon.</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Records */}
+      <RecordsTable
+        records={pageRrsets.length > 0 ? pageRrsets : (zone.rrsets || [])}
+        zoneName={zone.name}
+        isLoading={recordsLoading}
+        onEdit={handleEditRecord}
+        onDelete={handleDeleteRecord}
+        onToggle={handleToggleRecord}
+        onAdd={() => { setEditingRecord(undefined); setRecordDialogOpen(true); }}
+        onCopyAll={handleCopyRecords}
+        onExportText={handleExportText}
+        onExportCsv={handleExportCsv}
+        onExportPdf={handleExportPdf}
+        mergedRecords={mergedRecords}
+        onUndoChange={handleUndoChange}
+        zoneId={zoneId}
+        pagination={paginatedData ? {
+          page: paginatedData.page,
+          pageSize: paginatedData.pageSize,
+          total: paginatedData.total,
+          totalPages: paginatedData.totalPages,
+        } : undefined}
+        onPageChange={handleRecordsPageChange}
+        onPageSizeChange={handleRecordsPageSizeChange}
+        onSearchChange={handleRecordsSearchChange}
+        onTypeFilterChange={handleRecordsTypeChange}
+        serverTypeStats={paginatedData?.typeStats}
+        onBulkDelete={handleBulkDelete}
+        onBulkToggle={handleBulkToggle}
+      />
 
       {/* Record Form Dialog */}
       <RecordFormDialog
@@ -663,6 +736,7 @@ export default function ZoneDetailPage() {
 
       {/* Bottom padding when pending bar is visible */}
       {pendingChanges.length > 0 && <div className="h-16" />}
+      <ConfirmDialog />
     </div>
     </TooltipProvider>
   );

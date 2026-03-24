@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Globe, Plus, ArrowRight, Shield, Activity, Server, AlertCircle, Loader2 } from 'lucide-react';
+import { Globe, ArrowRight, Shield, Activity, Server, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,14 +41,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Overview of your PowerDNS infrastructure</p>
-        </div>
-        <Button asChild>
-          <Link href="/zones"><Plus className="mr-2 h-4 w-4" />New Zone</Link>
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">Overview of your PowerDNS infrastructure</p>
       </div>
 
       {!activeConnection && (

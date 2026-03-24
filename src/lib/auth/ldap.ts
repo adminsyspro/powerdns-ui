@@ -1,5 +1,5 @@
-// LDAP Authentication Module
-// Note: In production, you'll need to install 'ldapjs' package
+import ldap from 'ldapjs';
+import type { UserRole } from '@/types/powerdns';
 
 export interface LDAPConfig {
   url: string;
@@ -7,17 +7,8 @@ export interface LDAPConfig {
   bindDN?: string;
   bindPassword?: string;
   userSearchFilter: string;
-  groupSearchFilter?: string;
-  usernameAttribute: string;
-  emailAttribute: string;
-  firstNameAttribute: string;
-  lastNameAttribute: string;
-  groupAttribute?: string;
   adminGroup?: string;
   operatorGroup?: string;
-  tlsOptions?: {
-    rejectUnauthorized: boolean;
-  };
 }
 
 export interface LDAPUser {
@@ -27,158 +18,166 @@ export interface LDAPUser {
   lastName: string;
   groups: string[];
   dn: string;
+  avatar?: string; // base64 data URI
 }
 
-export const defaultLDAPConfig: LDAPConfig = {
-  url: process.env.LDAP_URL || 'ldap://localhost:389',
-  baseDN: process.env.LDAP_BASE_DN || 'dc=example,dc=com',
-  bindDN: process.env.LDAP_BIND_DN,
-  bindPassword: process.env.LDAP_BIND_PASSWORD,
-  userSearchFilter: process.env.LDAP_USER_FILTER || '(uid={{username}})',
-  groupSearchFilter: process.env.LDAP_GROUP_FILTER || '(memberUid={{username}})',
-  usernameAttribute: process.env.LDAP_USERNAME_ATTR || 'uid',
-  emailAttribute: process.env.LDAP_EMAIL_ATTR || 'mail',
-  firstNameAttribute: process.env.LDAP_FIRSTNAME_ATTR || 'givenName',
-  lastNameAttribute: process.env.LDAP_LASTNAME_ATTR || 'sn',
-  groupAttribute: process.env.LDAP_GROUP_ATTR || 'cn',
-  adminGroup: process.env.LDAP_ADMIN_GROUP || 'pdns-admins',
-  operatorGroup: process.env.LDAP_OPERATOR_GROUP || 'pdns-operators',
-};
-
-// Mock LDAP client for development (replace with actual ldapjs in production)
 export class LDAPClient {
   private config: LDAPConfig;
-  private connected: boolean = false;
 
-  constructor(config: LDAPConfig = defaultLDAPConfig) {
+  constructor(config: LDAPConfig) {
     this.config = config;
   }
 
-  async connect(): Promise<void> {
-    // In production, use ldapjs:
-    // const ldap = require('ldapjs');
-    // this.client = ldap.createClient({ url: this.config.url });
-    console.log(`[LDAP] Connecting to ${this.config.url}`);
-    this.connected = true;
-  }
-
-  async bind(dn?: string, password?: string): Promise<boolean> {
-    const bindDN = dn || this.config.bindDN;
-    const bindPass = password || this.config.bindPassword;
-    
-    if (!bindDN || !bindPass) {
-      throw new Error('LDAP bind credentials not provided');
-    }
-
-    console.log(`[LDAP] Binding as ${bindDN}`);
-    // In production: await this.client.bind(bindDN, bindPass);
-    return true;
-  }
-
+  /**
+   * Authenticate a user against the LDAP directory.
+   * 1. Bind with service account (if configured) to search for the user DN
+   * 2. Bind as the user with their password to verify credentials
+   * 3. Search for the user's groups
+   */
   async authenticate(username: string, password: string): Promise<LDAPUser | null> {
+    if (!password) return null;
+
+    const client = ldap.createClient({
+      url: this.config.url,
+      connectTimeout: 5000,
+      timeout: 10000,
+    });
+
     try {
-      await this.connect();
-      
-      // First, bind with service account to search for user
-      if (this.config.bindDN) {
-        await this.bind();
+      // Step 1: Bind with service account to search for user
+      if (this.config.bindDN && this.config.bindPassword) {
+        await this.bind(client, this.config.bindDN, this.config.bindPassword);
       }
 
-      // Search for user
-      const filter = this.config.userSearchFilter.replace('{{username}}', username);
-      console.log(`[LDAP] Searching with filter: ${filter}`);
-      
-      // In production, perform actual LDAP search
-      // const searchResult = await this.search(this.config.baseDN, filter);
-      
-      // Mock user for development
-      const mockUser: LDAPUser = {
-        username,
-        email: `${username}@example.com`,
-        firstName: 'Test',
-        lastName: 'User',
-        groups: ['pdns-admins'],
-        dn: `uid=${username},ou=users,${this.config.baseDN}`,
-      };
+      // Step 2: Search for the user
+      const searchFilter = this.config.userSearchFilter.replace(/\{\{username\}\}/g, username);
+      const entries = await this.search(client, this.config.baseDN, searchFilter);
 
-      // Try to bind as the user to verify password
-      try {
-        await this.bind(mockUser.dn, password);
-        
-        // Get user's groups
-        const groups = await this.getUserGroups(username);
-        mockUser.groups = groups;
-        
-        return mockUser;
-      } catch {
-        console.log(`[LDAP] Authentication failed for ${username}`);
+      if (entries.length === 0) {
         return null;
       }
+
+      const entry = entries[0];
+      const userDN = entry.dn;
+
+      // Step 3: Bind as the user to verify password
+      const userClient = ldap.createClient({
+        url: this.config.url,
+        connectTimeout: 5000,
+        timeout: 10000,
+      });
+
+      try {
+        await this.bind(userClient, userDN, password);
+      } catch {
+        return null;
+      } finally {
+        userClient.unbind(() => {});
+      }
+
+      // Step 4: Get user attributes
+      const attrs = entry.attributes;
+      const ldapUser: LDAPUser = {
+        username: this.getAttr(attrs, 'uid') || this.getAttr(attrs, 'sAMAccountName') || username,
+        email: this.getAttr(attrs, 'mail') || `${username}@localhost`,
+        firstName: this.getAttr(attrs, 'givenName') || '',
+        lastName: this.getAttr(attrs, 'sn') || '',
+        groups: [],
+        dn: userDN,
+      };
+
+      // Step 4b: Extract avatar (jpegPhoto or thumbnailPhoto)
+      // Use raw buffers — ldapjs .values decodes binary as UTF-8 which corrupts image data
+      const photoBuf = this.getAttrBuffer(attrs, 'jpegPhoto') || this.getAttrBuffer(attrs, 'thumbnailPhoto');
+      if (photoBuf && photoBuf.length > 0) {
+        const b64 = photoBuf.toString('base64');
+        ldapUser.avatar = `data:image/jpeg;base64,${b64}`;
+      }
+
+      // Step 5: Get groups (memberOf attribute or group search)
+      const memberOf = this.getAttrArray(attrs, 'memberOf');
+      if (memberOf.length > 0) {
+        // Extract CN from DN: "cn=admins,ou=groups,dc=..." -> "admins"
+        ldapUser.groups = memberOf.map((dn) => {
+          const match = dn.match(/^cn=([^,]+)/i);
+          return match ? match[1] : dn;
+        });
+      }
+
+      return ldapUser;
     } catch (error) {
-      console.error('[LDAP] Error:', error);
+      console.error('[LDAP] Authentication error:', error);
       return null;
     } finally {
-      this.disconnect();
+      client.unbind(() => {});
     }
   }
 
-  async getUserGroups(username: string): Promise<string[]> {
-    if (!this.config.groupSearchFilter) {
-      return [];
-    }
-
-    const filter = this.config.groupSearchFilter.replace('{{username}}', username);
-    console.log(`[LDAP] Searching groups with filter: ${filter}`);
-    
-    // In production, perform actual group search
-    // Return mock groups for development
-    return ['pdns-admins', 'pdns-operators'];
+  private bind(client: ldap.Client, dn: string, password: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      client.bind(dn, password, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 
-  async search(baseDN: string, filter: string, attributes?: string[]): Promise<Record<string, unknown>[]> {
-    console.log(`[LDAP] Search: base=${baseDN}, filter=${filter}`);
-    // In production:
-    // return new Promise((resolve, reject) => {
-    //   const results: any[] = [];
-    //   this.client.search(baseDN, { filter, attributes, scope: 'sub' }, (err, res) => {
-    //     res.on('searchEntry', (entry) => results.push(entry.object));
-    //     res.on('end', () => resolve(results));
-    //     res.on('error', reject);
-    //   });
-    // });
-    return [];
+  private search(
+    client: ldap.Client,
+    baseDN: string,
+    filter: string
+  ): Promise<Array<{ dn: string; attributes: Array<{ type: string; values: string[]; buffers: Buffer[] }> }>> {
+    return new Promise((resolve, reject) => {
+      const results: Array<{ dn: string; attributes: Array<{ type: string; values: string[]; buffers: Buffer[] }> }> = [];
+
+      client.search(baseDN, { filter, scope: 'sub' }, (err, res) => {
+        if (err) return reject(err);
+
+        res.on('searchEntry', (entry) => {
+          results.push({
+            dn: entry.dn.toString(),
+            attributes: (entry.attributes as Array<{ type: string; values: string[]; buffers: Buffer[] }>).map((a) => ({
+              type: a.type,
+              values: a.values,
+              buffers: a.buffers,
+            })),
+          });
+        });
+        res.on('error', (err) => reject(err));
+        res.on('end', () => resolve(results));
+      });
+    });
   }
 
-  disconnect(): void {
-    if (this.connected) {
-      console.log('[LDAP] Disconnecting');
-      // In production: this.client.unbind();
-      this.connected = false;
-    }
+  private getAttr(attrs: Array<{ type: string; values: string[]; buffers: Buffer[] }>, name: string): string {
+    const attr = attrs.find((a) => a.type.toLowerCase() === name.toLowerCase());
+    return attr?.values?.[0] || '';
   }
 
-  getUserRole(groups: string[]): 'Administrator' | 'Operator' | 'User' {
-    if (this.config.adminGroup && groups.includes(this.config.adminGroup)) {
+  private getAttrBuffer(attrs: Array<{ type: string; values: string[]; buffers: Buffer[] }>, name: string): Buffer | null {
+    const attr = attrs.find((a) => a.type.toLowerCase() === name.toLowerCase());
+    return attr?.buffers?.[0] || null;
+  }
+
+  private getAttrArray(attrs: Array<{ type: string; values: string[]; buffers: Buffer[] }>, name: string): string[] {
+    const attr = attrs.find((a) => a.type.toLowerCase() === name.toLowerCase());
+    return attr?.values || [];
+  }
+
+  getUserRole(groups: string[]): UserRole {
+    if (this.config.adminGroup && groups.some((g) => g.toLowerCase() === this.config.adminGroup!.toLowerCase())) {
       return 'Administrator';
     }
-    if (this.config.operatorGroup && groups.includes(this.config.operatorGroup)) {
+    if (this.config.operatorGroup && groups.some((g) => g.toLowerCase() === this.config.operatorGroup!.toLowerCase())) {
       return 'Operator';
     }
     return 'User';
   }
 }
 
-// Singleton instance
-let ldapClient: LDAPClient | null = null;
-
-export function getLDAPClient(): LDAPClient {
-  if (!ldapClient) {
-    ldapClient = new LDAPClient();
-  }
-  return ldapClient;
-}
-
-// Helper to check if LDAP is configured
-export function isLDAPEnabled(): boolean {
-  return !!(process.env.LDAP_URL && process.env.LDAP_BASE_DN);
+/**
+ * Create an LDAP client from config stored in the database.
+ */
+export function createLDAPClientFromConfig(config: LDAPConfig): LDAPClient {
+  return new LDAPClient(config);
 }

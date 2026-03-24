@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Default Theme - Blue */
+  :root, .theme-blue {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark, .theme-blue.dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+
+  /* Green Theme */
+  .theme-green {
+    --primary: 142.1 76.2% 36.3%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --ring: 142.1 76.2% 36.3%;
+  }
+  .theme-green.dark {
+    --primary: 142.1 70.6% 45.3%;
+    --primary-foreground: 144.9 80.4% 10%;
+  }
+
+  /* Purple Theme */
+  .theme-purple {
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --ring: 262.1 83.3% 57.8%;
+  }
+  .theme-purple.dark {
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 40% 98%;
+  }
+
+  /* Orange Theme */
+  .theme-orange {
+    --primary: 24.6 95% 53.1%;
+    --primary-foreground: 60 9.1% 97.8%;
+    --ring: 24.6 95% 53.1%;
+  }
+  .theme-orange.dark {
+    --primary: 20.5 90.2% 48.2%;
+    --primary-foreground: 60 9.1% 97.8%;
+  }
+
+  /* Red Theme */
+  .theme-red {
+    --primary: 0 72.2% 50.6%;
+    --primary-foreground: 0 85.7% 97.3%;
+    --ring: 0 72.2% 50.6%;
+  }
+  .theme-red.dark {
+    --primary: 0 72.2% 50.6%;
+    --primary-foreground: 0 85.7% 97.3%;
+  }
+
+  /* Teal Theme */
+  .theme-teal {
+    --primary: 173 80% 40%;
+    --primary-foreground: 166 76% 97%;
+    --ring: 173 80% 40%;
+  }
+  .theme-teal.dark {
+    --primary: 170 75% 41%;
+    --primary-foreground: 166 76% 97%;
+  }
+
+  /* Slate Theme (Neutral) */
+  .theme-slate {
+    --primary: 215 20.2% 35.1%;
+    --primary-foreground: 210 40% 98%;
+    --ring: 215 20.2% 35.1%;
+  }
+  .theme-slate.dark {
+    --primary: 217.2 32.6% 60%;
+    --primary-foreground: 222.2 84% 4.9%;
+  }
+
+  /* Rose Theme */
+  .theme-rose {
+    --primary: 346.8 77.2% 49.8%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --ring: 346.8 77.2% 49.8%;
+  }
+  .theme-rose.dark {
+    --primary: 346.8 77.2% 49.8%;
+    --primary-foreground: 355.7 100% 97.3%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted));
+    border-radius: 4px;
+  }
+}
+
+/* DNS Record Type Colors */
+.record-type-a { @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200; }
+.record-type-aaaa { @apply bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200; }
+.record-type-cname { @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200; }
+.record-type-mx { @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200; }
+.record-type-txt { @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200; }
+.record-type-ns { @apply bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200; }
+.record-type-soa { @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200; }
+.record-type-srv { @apply bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200; }
+.record-type-ptr { @apply bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200; }
+.record-type-caa { @apply bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200; }
+
+/* Zone Status */
+.zone-native { @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200; }
+.zone-master { @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200; }
+.zone-slave { @apply bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200; }
+
+/* Animation */
+.animate-in {
+  animation: fade-in 0.2s ease-out, slide-in 0.2s ease-out;
+}

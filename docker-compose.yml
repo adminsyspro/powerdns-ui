@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  powerdns-center:
+    build: .
+    container_name: powerdns-center
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  # Optional: PowerDNS server for testing
+  powerdns:
+    image: powerdns/pdns-auth-48:latest
+    container_name: powerdns
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8081:8081"
+    environment:
+      - PDNS_AUTH_API=yes
+      - PDNS_AUTH_API_KEY=changeme
+      - PDNS_AUTH_WEBSERVER=yes
+      - PDNS_AUTH_WEBSERVER_ADDRESS=0.0.0.0
+      - PDNS_AUTH_WEBSERVER_PORT=8081
+      - PDNS_AUTH_WEBSERVER_ALLOW_FROM=0.0.0.0/0
+      - PDNS_AUTH_LAUNCH=gsqlite3
+      - PDNS_AUTH_GSQLITE3_DATABASE=/var/lib/powerdns/pdns.sqlite3
+    volumes:
+      - powerdns-data:/var/lib/powerdns
+    restart: unless-stopped
+
+volumes:
+  powerdns-data:

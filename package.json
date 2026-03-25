@@ -36,6 +36,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "jose": "^5.10.0",
+    "js-yaml": "^4.1.1",
     "ldapjs": "^3.0.7",
     "lucide-react": "^0.441.0",
     "next": "^15.0.0",
@@ -51,6 +52,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "^4.0.9",
     "@types/ldapjs": "^3.0.6",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",

@@ -45,10 +45,117 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 | **LDAP Authentication** | Integrate with Active Directory / LDAP |
 | **Local Authentication** | Built-in user management with bcrypt passwords |
 | **Multi-Server** | Connect to multiple PowerDNS instances |
+| **API Proxy** | Built-in PowerDNS API proxy with granular access control (drop-in replacement for [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy)) |
 | **DNSSEC Status** | View DNSSEC status per zone |
 | **Real-Time Sync** | Background sync with local SQLite cache for fast pagination |
 | **Dark Mode** | Full dark/light theme support |
 | **Responsive** | Works on desktop, tablet, and mobile |
+
+---
+
+## API Proxy
+
+PowerDNS-UI includes a built-in API proxy that provides granular, token-based access control to the PowerDNS API. It is a **drop-in replacement** for [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy) — existing clients (certbot, scripts, automation tools) work without modification.
+
+### How it works
+
+External clients authenticate with an API token via the `X-API-Key` header. Each token (called an **API Access**) defines which zones can be accessed and which records can be modified.
+
+```
+Client (certbot) → Nginx → PowerDNS-UI Proxy → PowerDNS API
+                            ↕
+                    Token validation
+                    Zone filtering
+                    Record-level ACL
+```
+
+### API Access features
+
+- **Token-based authentication** — SHA-512 hashed tokens, generated and displayed once
+- **Per-zone permissions** — restrict which zones a token can read/write
+- **Record-level rules** — allow specific records (exact match) or patterns (regex)
+- **ACME support** — auto-allow `_acme-challenge.*` TXT records for Let's Encrypt
+- **Request logging** — real-time logs with method, status, zone, IP, duration, and errors
+- **Config import** — import existing `config.yml` from powerdns-api-proxy
+
+### Compatible endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/servers/{id}/zones` | List zones (filtered by permissions) |
+| GET | `/api/v1/servers/{id}/zones/{zone}` | Get zone details (records filtered) |
+| PATCH | `/api/v1/servers/{id}/zones/{zone}` | Update records (validated against ACL) |
+| PUT | `/api/v1/servers/{id}/zones/{zone}/notify` | Notify zone |
+| GET | `/health/pdns` | Health check (no auth) |
+| GET | `/info/allowed` | List permissions for the calling token |
+
+### Migration from powerdns-api-proxy
+
+1. In the UI, go to **API Proxy** and click **Import** to paste your existing `config.yml`
+2. Existing `token_sha512` values are preserved — client tokens remain valid
+3. Update your Nginx config to point to PowerDNS-UI (see below)
+
+### Nginx configuration (recommended)
+
+For security, expose only the proxy endpoints on the public-facing domain. The UI should be accessed through a separate vhost.
+
+**Proxy vhost** (e.g., `ssl.example.com` — used by certbot and external clients):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ssl.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/ssl.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ssl.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location /api/v1/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /health/pdns {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+    }
+
+    location /info/allowed {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location / {
+        return 404;
+    }
+}
+```
+
+**UI vhost** (e.g., `dns-admin.example.com` — used by administrators):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name dns-admin.example.com;
+
+    ssl_certificate     /etc/ssl/certs/dns-admin.pem;
+    ssl_certificate_key /etc/ssl/private/dns-admin.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 ---
 

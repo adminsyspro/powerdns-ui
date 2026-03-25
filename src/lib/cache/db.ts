@@ -94,6 +94,57 @@ function initSchema(db: Database.Database) {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- Proxy: environments (API consumers with token-based auth)
+    CREATE TABLE IF NOT EXISTS proxy_environments (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL UNIQUE,
+      description     TEXT DEFAULT '',
+      token_sha512    TEXT NOT NULL,
+      active          INTEGER NOT NULL DEFAULT 1,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_proxy_env_token ON proxy_environments(token_sha512);
+
+    -- Proxy: zone-level permissions per environment
+    CREATE TABLE IF NOT EXISTS proxy_zone_permissions (
+      id              TEXT PRIMARY KEY,
+      environment_id  TEXT NOT NULL REFERENCES proxy_environments(id) ON DELETE CASCADE,
+      zone_name       TEXT NOT NULL,
+      acme_enabled    INTEGER NOT NULL DEFAULT 0,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(environment_id, zone_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_proxy_zone_env ON proxy_zone_permissions(environment_id);
+
+    -- Proxy: record-level filtering rules per zone permission
+    CREATE TABLE IF NOT EXISTS proxy_record_rules (
+      id              TEXT PRIMARY KEY,
+      zone_perm_id    TEXT NOT NULL REFERENCES proxy_zone_permissions(id) ON DELETE CASCADE,
+      rule_type       TEXT NOT NULL CHECK(rule_type IN ('exact', 'regex')),
+      pattern         TEXT NOT NULL,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_proxy_record_zone ON proxy_record_rules(zone_perm_id);
+
+    -- Proxy: request logs
+    CREATE TABLE IF NOT EXISTS proxy_logs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp       INTEGER NOT NULL DEFAULT (unixepoch()),
+      environment_id  TEXT,
+      environment_name TEXT,
+      method          TEXT NOT NULL,
+      path            TEXT NOT NULL,
+      zone            TEXT,
+      status          INTEGER NOT NULL,
+      ip              TEXT DEFAULT '',
+      user_agent      TEXT DEFAULT '',
+      duration_ms     INTEGER DEFAULT 0,
+      error           TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_time ON proxy_logs(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_proxy_logs_env ON proxy_logs(environment_id);
   `);
 
   // Migrations — add columns that may not exist in older databases
@@ -101,6 +152,28 @@ function initSchema(db: Database.Database) {
   const colNames = cols.map((c) => c.name);
   if (!colNames.includes('avatar')) {
     db.exec('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL');
+  }
+
+  // Migration: remove server_id from proxy_environments (now global)
+  const proxyCols = db.prepare("PRAGMA table_info(proxy_environments)").all() as Array<{ name: string }>;
+  const proxyColNames = proxyCols.map((c) => c.name);
+  if (proxyColNames.includes('server_id')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS proxy_environments_new (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE,
+        description     TEXT DEFAULT '',
+        token_sha512    TEXT NOT NULL,
+        active          INTEGER NOT NULL DEFAULT 1,
+        created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT OR IGNORE INTO proxy_environments_new (id, name, description, token_sha512, active, created_at, updated_at)
+        SELECT id, name, description, token_sha512, active, created_at, updated_at FROM proxy_environments;
+      DROP TABLE proxy_environments;
+      ALTER TABLE proxy_environments_new RENAME TO proxy_environments;
+      CREATE INDEX IF NOT EXISTS idx_proxy_env_token ON proxy_environments(token_sha512);
+    `);
   }
 
   seedDefaultAdmin(db);

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Globe, ArrowRight, Shield, Activity, Server, AlertCircle, Loader2 } from 'lucide-react';
+import { Globe, ArrowRight, Shield, Activity, Server, AlertCircle, Loader2, Radio, AlertTriangle, Wifi } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,10 @@ import {
   ServerMetricsChart,
   CachePerformanceChart,
   ActivityChart,
+  StatCard,
 } from '@/components/dashboard/stats';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useServerConnectionStore, useActivityLogStore } from '@/stores';
 import { useCachedZoneStats, useCachedZones, useStatistics, statsToMap } from '@/hooks/use-pdns';
 import { formatRelativeTime, getZoneKindColor } from '@/lib/utils';
@@ -27,6 +30,25 @@ export default function DashboardPage() {
   const serverStats = statsToMap(statistics);
   const recentLogs = getRecentLogs(5);
   const recentZones = recentZonesData?.items || [];
+
+  // Proxy stats
+  interface ProxyStats {
+    requests: { today: number; week: number; month: number };
+    errors: { today: number; week: number };
+    statusBreakdown: { success: number; clientError: number; serverError: number };
+    topIps: Array<{ ip: string; count: number }>;
+    topZones: Array<{ zone: string; count: number }>;
+    topAccesses: Array<{ name: string; count: number }>;
+    daily: Array<{ date: string; requests: number; errors: number }>;
+  }
+  const [proxyStats, setProxyStats] = React.useState<ProxyStats | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/proxy/stats')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data) setProxyStats(data); })
+      .catch(() => {});
+  }, []);
 
   const computedStats = React.useMemo(() => {
     if (!zoneStats) return null;
@@ -161,6 +183,168 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Row 5: API Proxy KPIs */}
+      {proxyStats && (
+        <>
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight">API Proxy</h2>
+            <p className="text-sm text-muted-foreground">Proxy requests overview (last 7 days)</p>
+          </div>
+
+          {/* Stat cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Requests Today"
+              value={proxyStats.requests.today.toLocaleString()}
+              description={`${proxyStats.requests.week.toLocaleString()} this week`}
+              icon={Radio}
+            />
+            <StatCard
+              title="Total Requests"
+              value={proxyStats.requests.month.toLocaleString()}
+              description="Last 30 days"
+              icon={Wifi}
+            />
+            <StatCard
+              title="Errors Today"
+              value={proxyStats.errors.today.toLocaleString()}
+              description={`${proxyStats.errors.week.toLocaleString()} this week`}
+              icon={AlertTriangle}
+              className={proxyStats.errors.today > 0 ? 'border-red-200 dark:border-red-900' : ''}
+            />
+            <StatCard
+              title="Success Rate"
+              value={proxyStats.requests.week > 0
+                ? `${((proxyStats.statusBreakdown.success / proxyStats.requests.week) * 100).toFixed(1)}%`
+                : '—'}
+              description="Last 7 days"
+              icon={Shield}
+            />
+          </div>
+
+          {/* Chart + Tables */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Daily requests chart */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Daily Requests</CardTitle>
+                <CardDescription>Requests and errors per day</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {proxyStats.daily.length > 0 ? (
+                  <div className="h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={proxyStats.daily} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} className="text-muted-foreground" />
+                        <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                        <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="requests" fill="#3b82f6" radius={[3, 3, 0, 0]} name="Requests" />
+                        <Bar dataKey="errors" fill="#ef4444" radius={[3, 3, 0, 0]} name="Errors" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Top IPs */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Top Source IPs</CardTitle>
+                <CardDescription>Most active clients (7 days)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {proxyStats.topIps.length > 0 ? (
+                  <Table className="[&_td]:py-1 [&_th]:py-1">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>IP Address</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {proxyStats.topIps.map((item) => (
+                        <TableRow key={item.ip}>
+                          <TableCell className="font-mono text-xs">{item.ip}</TableCell>
+                          <TableCell className="text-right">{item.count.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top zones + Top API accesses */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Top Zones</CardTitle>
+                <CardDescription>Most requested zones (7 days)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {proxyStats.topZones.length > 0 ? (
+                  <Table className="[&_td]:py-1 [&_th]:py-1">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Zone</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {proxyStats.topZones.map((item) => (
+                        <TableRow key={item.zone}>
+                          <TableCell className="font-mono text-xs">{item.zone}</TableCell>
+                          <TableCell className="text-right">{item.count.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Top API Accesses</CardTitle>
+                <CardDescription>Most active tokens (7 days)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {proxyStats.topAccesses.length > 0 ? (
+                  <Table className="[&_td]:py-1 [&_th]:py-1">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {proxyStats.topAccesses.map((item) => (
+                        <TableRow key={item.name}>
+                          <TableCell>{item.name}</TableCell>
+                          <TableCell className="text-right">{item.count.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }

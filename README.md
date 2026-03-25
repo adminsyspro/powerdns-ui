@@ -55,8 +55,6 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 
 ## API Proxy
 
-PowerDNS-UI includes a built-in API proxy that provides granular, token-based access control to the PowerDNS API. It is a **drop-in replacement** for [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy) — existing clients (certbot, scripts, automation tools) work without modification.
-
 ### How it works
 
 External clients authenticate with an API token via the `X-API-Key` header. Each token (called an **API Access**) defines which zones can be accessed and which records can be modified.

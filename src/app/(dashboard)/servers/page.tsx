@@ -177,16 +177,16 @@ export default function ServersPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4">
           {connections.map((conn) => (
             <Card key={conn.id} className={activeConnection?.id === conn.id ? 'border-primary' : ''}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Server className="h-5 w-5" />
+                    <img src="/powerdns-logo.png" alt="PowerDNS" className="h-8" />
                     {conn.name}
                   </CardTitle>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     {conn.isDefault && <Badge variant="secondary">Default</Badge>}
                     {activeConnection?.id === conn.id && <Badge variant="default">Active</Badge>}
                   </div>

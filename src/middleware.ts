@@ -7,13 +7,20 @@ const JWT_SECRET = new TextEncoder().encode(
 const COOKIE_NAME = 'pdns-session';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers'];
-const ADMIN_PATHS = ['/users', '/settings'];
+const ADMIN_PATHS = ['/users', '/settings', '/proxy'];
+// Proxy paths use X-API-Key auth, not JWT — handled in route handlers
+const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip public paths
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return NextResponse.next();
+  }
+
+  // Proxy API paths — bypass JWT, auth via X-API-Key in route handlers
+  if (PROXY_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 

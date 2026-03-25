@@ -49,6 +49,7 @@ const navigation: NavGroup[] = [
     title: 'DNS Management',
     items: [
       { title: 'Zones', href: '/zones', icon: Globe },
+      { title: 'API Proxy', href: '/proxy', icon: Shield, requiredRole: ['Administrator'] },
       { title: 'Templates', href: '/templates', icon: Layers },
     ],
   },

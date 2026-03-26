@@ -14,9 +14,9 @@
 
 **PowerDNS-UI** is a modern, self-hosted web interface for managing PowerDNS Authoritative servers. Built as a lightweight alternative to PowerDNS-Admin, it provides zone and record management, bulk operations, LDAP/local authentication.
 
-<!-- <p align="center">
+<p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
-</p> -->
+</p>
 
 ---
 

@@ -25,6 +25,8 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { RRSet, RecordType } from '@/types/powerdns';
+import { hasStructuredFields } from '@/lib/record-fields';
+import { StructuredContentFields } from '@/components/records/structured-content-fields';
 
 const RECORD_TYPES: RecordType[] = [
   'A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'PTR', 'CAA',
@@ -223,31 +225,46 @@ export function RecordFormDialog({
             </div>
 
             {/* Content */}
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="content">Content</Label>
-              {recordType === 'TXT' ? (
-                <Textarea
-                  id="content"
-                  placeholder={getPlaceholder(recordType)}
-                  {...form.register('content')}
-                  rows={3}
+            {hasStructuredFields(recordType) ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Content</Label>
+                <StructuredContentFields
+                  key={recordType}
+                  recordType={recordType}
+                  initialContent={record?.records[0]?.content || ''}
+                  onContentChange={(content) => setValue('content', content, { shouldValidate: true })}
                 />
-              ) : (
-                <Input
-                  id="content"
-                  placeholder={getPlaceholder(recordType)}
-                  {...form.register('content')}
-                />
-              )}
-              {getHelperText(recordType) && (
-                <p className="text-sm text-muted-foreground">
-                  {getHelperText(recordType)}
-                </p>
-              )}
-              {errors.content && (
-                <p className="text-sm text-destructive">{errors.content.message}</p>
-              )}
-            </div>
+                {errors.content && (
+                  <p className="text-sm text-destructive">{errors.content.message}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="content">Content</Label>
+                {recordType === 'TXT' ? (
+                  <Textarea
+                    id="content"
+                    placeholder={getPlaceholder(recordType)}
+                    {...form.register('content')}
+                    rows={3}
+                  />
+                ) : (
+                  <Input
+                    id="content"
+                    placeholder={getPlaceholder(recordType)}
+                    {...form.register('content')}
+                  />
+                )}
+                {getHelperText(recordType) && (
+                  <p className="text-sm text-muted-foreground">
+                    {getHelperText(recordType)}
+                  </p>
+                )}
+                {errors.content && (
+                  <p className="text-sm text-destructive">{errors.content.message}</p>
+                )}
+              </div>
+            )}
 
             {/* Comment */}
             <div className="space-y-2 sm:col-span-2">

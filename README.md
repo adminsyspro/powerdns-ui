@@ -45,7 +45,7 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 | **LDAP Authentication** | Integrate with Active Directory / LDAP |
 | **Local Authentication** | Built-in user management with bcrypt passwords |
 | **Multi-Server** | Connect to multiple PowerDNS instances |
-| **API Proxy** | Built-in PowerDNS API proxy with granular access control (drop-in replacement for [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy)) |
+| **API Proxy** | Built-in PowerDNS API proxy with granular access control (inspired by [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy)) |
 | **DNSSEC Status** | View DNSSEC status per zone |
 | **Real-Time Sync** | Background sync with local SQLite cache for fast pagination |
 | **Dark Mode** | Full dark/light theme support |

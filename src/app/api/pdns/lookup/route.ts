@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   // NS lookup
   try {
     const nsRecords = await dns.resolveNs(domain);
-    result.ns = nsRecords.sort();
+    result.ns = nsRecords.sort((a, b) => a.localeCompare(b));
   } catch {
     // Domain might not have public NS records
   }
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       if (match) {
         const dateStr = match[1].trim();
         const parsed = new Date(dateStr);
-        if (!isNaN(parsed.getTime())) {
+        if (!Number.isNaN(parsed.getTime())) {
           result.expiration = parsed.toISOString();
           break;
         }

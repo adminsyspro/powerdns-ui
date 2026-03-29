@@ -242,7 +242,7 @@ export function CreateZoneDialog({
                   placeholder="ns1.example.com"
                   value={nameserverInput}
                   onChange={(e) => setNameserverInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addNameserver())}
+                  onKeyPress={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNameserver() } }}
                 />
                 <Button type="button" variant="outline" onClick={addNameserver}>
                   <Plus className="h-4 w-4" />
@@ -276,7 +276,7 @@ export function CreateZoneDialog({
                     placeholder="192.168.1.1"
                     value={masterInput}
                     onChange={(e) => setMasterInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addMaster())}
+                    onKeyPress={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMaster() } }}
                   />
                   <Button type="button" variant="outline" onClick={addMaster}>
                     <Plus className="h-4 w-4" />

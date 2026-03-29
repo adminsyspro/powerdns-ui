@@ -31,7 +31,7 @@ export default function StatisticsPage() {
     return `${val.toFixed(1)} ${units[i]}`;
   };
 
-  const safeInt = (v: string | undefined) => parseInt(v || '0') || 0;
+  const safeInt = (v: string | undefined) => Number.parseInt(v || '0') || 0;
 
   const packetHits = safeInt(stats['packetcache-hit']);
   const packetMisses = safeInt(stats['packetcache-miss']);
@@ -117,7 +117,7 @@ export default function StatisticsPage() {
               <CardContent className="space-y-4">
                 <div>
                   <div className="flex justify-between text-sm mb-1"><span>Packet Cache</span><span>{cacheHitRate}% hit rate</span></div>
-                  <Progress value={parseFloat(cacheHitRate)} className="h-2" />
+                  <Progress value={Number.parseFloat(cacheHitRate)} className="h-2" />
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Hits: {packetHits.toLocaleString()}</span>
                     <span>Misses: {packetMisses.toLocaleString()}</span>
@@ -125,7 +125,7 @@ export default function StatisticsPage() {
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1"><span>Query Cache</span><span>{queryCacheRate}% hit rate</span></div>
-                  <Progress value={parseFloat(queryCacheRate)} className="h-2" />
+                  <Progress value={Number.parseFloat(queryCacheRate)} className="h-2" />
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Hits: {queryHits.toLocaleString()}</span>
                     <span>Misses: {queryMisses.toLocaleString()}</span>

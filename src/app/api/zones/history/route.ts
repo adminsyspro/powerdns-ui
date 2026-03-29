@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const result = getHistory(conn.url, {
       zoneId: searchParams.get('zoneId') || undefined,
-      page: parseInt(searchParams.get('page') || '1'),
-      pageSize: parseInt(searchParams.get('pageSize') || '20'),
+      page: Number.parseInt(searchParams.get('page') || '1'),
+      pageSize: Number.parseInt(searchParams.get('pageSize') || '20'),
     });
     return NextResponse.json(result);
   } catch (error) {

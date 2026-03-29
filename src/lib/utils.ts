@@ -7,7 +7,7 @@ export function generateId(): string {
     return crypto.randomUUID();
   }
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
+    const r = Math.trunc(Math.random() * 16);
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
@@ -78,7 +78,7 @@ export function generateSerial(): number {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  return parseInt(`${year}${month}${day}01`);
+  return Number.parseInt(`${year}${month}${day}01`);
 }
 
 export function validateDomainName(domain: string): boolean {
@@ -165,11 +165,11 @@ export function parseSOA(content: string): {
     return {
       mname: parts[0],
       rname: parts[1],
-      serial: parseInt(parts[2]),
-      refresh: parseInt(parts[3]),
-      retry: parseInt(parts[4]),
-      expire: parseInt(parts[5]),
-      minimum: parseInt(parts[6]),
+      serial: Number.parseInt(parts[2]),
+      refresh: Number.parseInt(parts[3]),
+      retry: Number.parseInt(parts[4]),
+      expire: Number.parseInt(parts[5]),
+      minimum: Number.parseInt(parts[6]),
     };
   }
   return null;
@@ -191,7 +191,7 @@ export function parseMX(content: string): { priority: number; server: string } |
   const parts = content.split(/\s+/);
   if (parts.length >= 2) {
     return {
-      priority: parseInt(parts[0]),
+      priority: Number.parseInt(parts[0]),
       server: parts[1],
     };
   }
@@ -207,9 +207,9 @@ export function parseSRV(content: string): {
   const parts = content.split(/\s+/);
   if (parts.length >= 4) {
     return {
-      priority: parseInt(parts[0]),
-      weight: parseInt(parts[1]),
-      port: parseInt(parts[2]),
+      priority: Number.parseInt(parts[0]),
+      weight: Number.parseInt(parts[1]),
+      port: Number.parseInt(parts[2]),
       target: parts[3],
     };
   }
@@ -246,7 +246,7 @@ export function exportZoneFile(zoneName: string, records: Array<{ name: string; 
   for (const record of records) {
     const name = record.name === zoneName || record.name === ensureTrailingDot(zoneName)
       ? '@'
-      : record.name.replace(zoneName, '').replace(/\.$/, '') || '@';
+      : record.name.replaceAll(zoneName, '').replace(/\.$/, '') || '@';
     lines.push(`${name}\t${record.ttl}\tIN\t${record.type}\t${record.content}`);
   }
   

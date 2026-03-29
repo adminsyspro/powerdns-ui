@@ -162,7 +162,7 @@ function TemplateEditor({
           </div>
           <div className="space-y-1 w-[90px]">
             <Label className="text-xs">TTL</Label>
-            <Select value={String(newTtl)} onValueChange={(v) => setNewTtl(parseInt(v))}>
+            <Select value={String(newTtl)} onValueChange={(v) => setNewTtl(Number.parseInt(v))}>
               <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="300">5 min</SelectItem>

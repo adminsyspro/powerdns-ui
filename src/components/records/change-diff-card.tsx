@@ -14,7 +14,7 @@ interface ChangeDiffCardProps {
 
 function formatName(name: string, zoneName: string): string {
   if (name === zoneName || name === `${zoneName}.`) return '@';
-  return name.replace(`.${zoneName}`, '').replace(zoneName, '').replace(/\.$/, '') || '@';
+  return name.replaceAll(`.${zoneName}`, '').replaceAll(zoneName, '').replace(/\.$/, '') || '@';
 }
 
 const ACTION_STYLES = {

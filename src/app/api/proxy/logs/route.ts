@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-  const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get('pageSize') || '50')));
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1'));
+  const pageSize = Math.min(200, Math.max(1, Number.parseInt(searchParams.get('pageSize') || '50')));
   const envFilter = searchParams.get('env') || '';
   const statusFilter = searchParams.get('status') || '';
-  const sinceId = parseInt(searchParams.get('sinceId') || '0');
+  const sinceId = Number.parseInt(searchParams.get('sinceId') || '0');
 
   const db = getDb();
 

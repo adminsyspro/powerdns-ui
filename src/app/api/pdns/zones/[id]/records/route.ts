@@ -71,8 +71,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     // Parse query params
     const url = new URL(request.url);
-    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-    const pageSize = Math.max(1, Math.min(500, parseInt(url.searchParams.get('pageSize') || '50', 10)));
+    const page = Math.max(1, Number.parseInt(url.searchParams.get('page') || '1', 10));
+    const pageSize = Math.max(1, Math.min(500, Number.parseInt(url.searchParams.get('pageSize') || '50', 10)));
     const search = (url.searchParams.get('search') || '').toLowerCase();
     const typeFilter = url.searchParams.get('type') || '';
     const sortBy = url.searchParams.get('sortBy') || 'type';

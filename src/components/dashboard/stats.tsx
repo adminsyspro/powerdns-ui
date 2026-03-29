@@ -112,7 +112,7 @@ function useSparklineHistory(value: number): number[] {
 }
 
 export function DashboardStats({ stats, serverStats = {} }: DashboardStatsProps) {
-  const s = (key: string) => parseInt(serverStats[key] || '0') || 0;
+  const s = (key: string) => Number.parseInt(serverStats[key] || '0') || 0;
   const dnssecPercentage = stats.totalZones > 0 ? Math.round((stats.dnssecEnabled / stats.totalZones) * 100) : 0;
   const totalQueries = s('udp-queries') + s('tcp-queries');
   const uptime = s('uptime');
@@ -234,7 +234,7 @@ function MetricRow({ label, value, max, color }: { label: string; value: number;
 }
 
 export function ServerMetricsChart({ serverStats }: ServerMetricsProps) {
-  const s = (key: string) => parseInt(serverStats[key] || '0') || 0;
+  const s = (key: string) => Number.parseInt(serverStats[key] || '0') || 0;
 
   const metrics = [
     { label: 'UDP Queries', value: s('udp-queries'), color: '#3b82f6' },
@@ -317,7 +317,7 @@ function CacheRing({ label, hits, misses }: { label: string; hits: number; misse
 }
 
 export function CachePerformanceChart({ serverStats }: ServerMetricsProps) {
-  const s = (key: string) => parseInt(serverStats[key] || '0') || 0;
+  const s = (key: string) => Number.parseInt(serverStats[key] || '0') || 0;
 
   const packetHits = s('packetcache-hit');
   const packetMisses = s('packetcache-miss');
@@ -431,7 +431,7 @@ interface ServerInfoProps {
 }
 
 export function ServerInfoCard({ serverStats }: ServerInfoProps) {
-  const s = (key: string) => parseInt(serverStats[key] || '0') || 0;
+  const s = (key: string) => Number.parseInt(serverStats[key] || '0') || 0;
   const uptime = s('uptime');
   const memory = s('real-memory-usage');
   const fdUsage = s('fd-usage');

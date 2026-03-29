@@ -422,7 +422,7 @@ export function ZonesTable({
             </span>
             <Select
               value={String(pageSize)}
-              onValueChange={(value) => onPageSizeChange?.(parseInt(value))}
+              onValueChange={(value) => onPageSizeChange?.(Number.parseInt(value))}
             >
               <SelectTrigger className="w-[80px] h-8">
                 <SelectValue />

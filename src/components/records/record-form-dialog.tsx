@@ -83,7 +83,7 @@ export function RecordFormDialog({
     if (record) {
       const name = record.name === zoneName || record.name === `${zoneName}.`
         ? '@'
-        : record.name.replace(`.${zoneName}`, '').replace(zoneName, '').replace(/\.$/, '') || '@';
+        : record.name.replaceAll(`.${zoneName}`, '').replaceAll(zoneName, '').replace(/\.$/, '') || '@';
 
       reset({
         name,
@@ -203,7 +203,7 @@ export function RecordFormDialog({
               <Label htmlFor="ttl">TTL (seconds)</Label>
               <Select
                 value={watch('ttl').toString()}
-                onValueChange={(value) => setValue('ttl', parseInt(value))}
+                onValueChange={(value) => setValue('ttl', Number.parseInt(value))}
               >
                 <SelectTrigger>
                   <SelectValue />

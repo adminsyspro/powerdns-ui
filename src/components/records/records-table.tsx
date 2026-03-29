@@ -218,7 +218,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
 
   const formatRecordName = (name: string) => {
     if (name === zoneName || name === `${zoneName}.`) return '@';
-    return name.replace(`.${zoneName}`, '').replace(zoneName, '').replace(/\.$/, '') || '@';
+    return name.replaceAll(`.${zoneName}`, '').replaceAll(zoneName, '').replace(/\.$/, '') || '@';
   };
 
   const handleOpenCommentDialog = (rrset: RRSet) => {

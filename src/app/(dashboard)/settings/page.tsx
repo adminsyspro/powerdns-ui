@@ -90,7 +90,7 @@ export default function SettingsPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div><Label>Zones per page</Label><p className="text-sm text-muted-foreground">Number of zones to display</p></div>
-                <Select value={zonesPerPage.toString()} onValueChange={(v) => setZonesPerPage(parseInt(v))}>
+                <Select value={zonesPerPage.toString()} onValueChange={(v) => setZonesPerPage(Number.parseInt(v))}>
                   <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10</SelectItem>
@@ -103,7 +103,7 @@ export default function SettingsPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div><Label>Records per page</Label><p className="text-sm text-muted-foreground">Number of records to display</p></div>
-                <Select value={recordsPerPage.toString()} onValueChange={(v) => setRecordsPerPage(parseInt(v))}>
+                <Select value={recordsPerPage.toString()} onValueChange={(v) => setRecordsPerPage(Number.parseInt(v))}>
                   <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10</SelectItem>

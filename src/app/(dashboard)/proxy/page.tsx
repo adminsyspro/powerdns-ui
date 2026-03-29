@@ -136,7 +136,7 @@ export default function ProxyPage() {
       if (res.ok) {
         const data = await res.json();
         const items = (data.items || []) as Array<{ name: string }>;
-        setAvailableZones(items.map((z) => z.name).sort());
+        setAvailableZones(items.map((z) => z.name).sort((a, b) => a.localeCompare(b)));
       }
     } catch {
       // Ignore
@@ -1142,7 +1142,7 @@ export default function ProxyPage() {
               </span>
               <Select
                 value={String(pageSize)}
-                onValueChange={(value) => handlePageSizeChange(parseInt(value))}
+                onValueChange={(value) => handlePageSizeChange(Number.parseInt(value))}
               >
                 <SelectTrigger className="w-[80px] h-8">
                   <SelectValue />
@@ -1273,7 +1273,7 @@ export default function ProxyPage() {
               </span>
               <Select
                 value={String(logsPageSize)}
-                onValueChange={(v) => handleLogsPageSizeChange(parseInt(v))}
+                onValueChange={(v) => handleLogsPageSizeChange(Number.parseInt(v))}
               >
                 <SelectTrigger className="w-[80px] h-8">
                   <SelectValue />

@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     const result = getCachedZones(conn.url, {
-      page: parseInt(searchParams.get('page') || '1'),
-      pageSize: parseInt(searchParams.get('pageSize') || '25'),
+      page: Number.parseInt(searchParams.get('page') || '1'),
+      pageSize: Number.parseInt(searchParams.get('pageSize') || '25'),
       search: searchParams.get('search') || undefined,
       kind: searchParams.get('kind') || undefined,
       dnssec: (searchParams.get('dnssec') as 'enabled' | 'disabled') || undefined,

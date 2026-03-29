@@ -8,6 +8,12 @@
   <strong>Modern web interface for PowerDNS management</strong>
 </p>
 
+<p align="center">
+  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_powerdns-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_powerdns-ui&metric=security_rating" alt="Security Rating"></a>
+  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_powerdns-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_powerdns-ui&metric=reliability_rating" alt="Reliability Rating"></a>
+  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_powerdns-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_powerdns-ui&metric=sqale_rating" alt="Maintainability Rating"></a>
+</p>
+
 ---
 
 ## Overview

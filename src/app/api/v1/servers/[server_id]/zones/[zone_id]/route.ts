@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
 import { isZoneAllowed, filterRRSets, validatePatchPayload } from '@/lib/proxy/access-control';
 
+/** Ensure a DNS name ends with a dot (canonical/FQDN form required by PowerDNS) */
+function canonicalize(name: string): string {
+  return name.endsWith('.') ? name : `${name}.`;
+}
+
 // GET /api/v1/servers/[server_id]/zones/[zone_id]
 export async function GET(
   request: NextRequest,
@@ -15,7 +20,8 @@ export async function GET(
   }
 
   const { environment, connection } = auth;
-  const { zone_id } = await params;
+  const { zone_id: rawZoneId } = await params;
+  const zone_id = canonicalize(rawZoneId);
 
   const zonePerm = isZoneAllowed(environment.id, zone_id);
   if (!zonePerm) {
@@ -67,7 +73,8 @@ export async function PATCH(
   }
 
   const { environment, connection } = auth;
-  const { zone_id } = await params;
+  const { zone_id: rawZoneId } = await params;
+  const zone_id = canonicalize(rawZoneId);
 
   const zonePerm = isZoneAllowed(environment.id, zone_id);
   if (!zonePerm) {
@@ -83,7 +90,12 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const rrsets = body.rrsets || [];
+  // Canonicalize rrset names (add trailing dot) — required by PowerDNS
+  const rrsets = (body.rrsets || []).map((rrset: Record<string, unknown>) =>
+    rrset.name ? { ...rrset, name: canonicalize(rrset.name as string) } : rrset
+  );
+  body.rrsets = rrsets;
+
   const validation = validatePatchPayload(zonePerm, rrsets);
 
   if (!validation.allowed) {

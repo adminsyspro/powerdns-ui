@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
 import { isZoneAllowed } from '@/lib/proxy/access-control';
 
+function canonicalize(name: string): string {
+  return name.endsWith('.') ? name : `${name}.`;
+}
+
 // PUT /api/v1/servers/[server_id]/zones/[zone_id]/notify
 export async function PUT(
   request: NextRequest,
@@ -15,7 +19,8 @@ export async function PUT(
   }
 
   const { environment, connection } = auth;
-  const { zone_id } = await params;
+  const { zone_id: rawZoneId } = await params;
+  const zone_id = canonicalize(rawZoneId);
 
   const zonePerm = isZoneAllowed(environment.id, zone_id);
   if (!zonePerm) {

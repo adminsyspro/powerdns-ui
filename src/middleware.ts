@@ -14,6 +14,20 @@ const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Native PowerDNS API compatibility: rewrite paths for clients (lego/certbot)
+  // that use PDNS_API_URL pointing directly at this server.
+  // GET /api → /api/v1/servers/localhost (version check)
+  // /servers/... → /api/v1/servers/... (zones, records, notify)
+  const hasApiKey = request.headers.has('X-API-Key') || request.headers.has('x-api-key');
+  if (hasApiKey) {
+    if (pathname === '/api') {
+      return NextResponse.rewrite(new URL('/api/v1/servers/localhost', request.url));
+    }
+    if (pathname.startsWith('/servers/')) {
+      return NextResponse.rewrite(new URL(`/api/v1${pathname}`, request.url));
+    }
+  }
+
   // Skip public paths
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();

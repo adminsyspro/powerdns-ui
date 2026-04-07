@@ -448,6 +448,7 @@ export default function ProxyPage() {
     userAgent: string;
     durationMs: number;
     error: string | null;
+    requestBody: string | null;
   }
 
   const [logs, setLogs] = React.useState<LogEntry[]>([]);
@@ -1346,6 +1347,13 @@ export default function ProxyPage() {
                 <span className="text-muted-foreground font-medium">Timestamp</span>
                 <span className="font-mono text-xs">{selectedLog.timestamp}</span>
               </div>
+
+              {selectedLog.requestBody && (
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <span className="text-xs font-medium text-muted-foreground">Request Payload</span>
+                  <pre className="text-xs mt-1 overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all font-mono">{(() => { try { return JSON.stringify(JSON.parse(selectedLog.requestBody), null, 2); } catch { return selectedLog.requestBody; } })()}</pre>
+                </div>
+              )}
 
               {selectedLog.error && (
                 <div className="rounded-lg bg-destructive/10 p-3">

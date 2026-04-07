@@ -14,6 +14,7 @@ interface LogRow {
   user_agent: string;
   duration_ms: number;
   error: string | null;
+  request_body: string | null;
 }
 
 // GET /api/proxy/logs/stream — SSE endpoint for live proxy logs
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
               userAgent: row.user_agent,
               durationMs: row.duration_ms,
               error: row.error,
+              requestBody: row.request_body,
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(entry)}\n\n`));
             lastId = row.id;

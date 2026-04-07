@@ -176,5 +176,12 @@ function initSchema(db: Database.Database) {
     `);
   }
 
+  // Migration: add request_body column to proxy_logs
+  const logCols = db.prepare("PRAGMA table_info(proxy_logs)").all() as Array<{ name: string }>;
+  const logColNames = logCols.map((c) => c.name);
+  if (!logColNames.includes('request_body')) {
+    db.exec('ALTER TABLE proxy_logs ADD COLUMN request_body TEXT DEFAULT NULL');
+  }
+
   seedDefaultAdmin(db);
 }

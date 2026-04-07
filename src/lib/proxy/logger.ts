@@ -15,6 +15,7 @@ export interface ProxyLogEntry {
   userAgent?: string;
   durationMs?: number;
   error?: string | null;
+  requestBody?: string | null;
 }
 
 /**
@@ -25,8 +26,8 @@ export function logProxyRequest(entry: ProxyLogEntry): void {
   try {
     const db = getDb();
     db.prepare(
-      `INSERT INTO proxy_logs (environment_id, environment_name, method, path, zone, status, ip, user_agent, duration_ms, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO proxy_logs (environment_id, environment_name, method, path, zone, status, ip, user_agent, duration_ms, error, request_body)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       entry.environmentId || null,
       entry.environmentName || null,
@@ -37,7 +38,8 @@ export function logProxyRequest(entry: ProxyLogEntry): void {
       entry.ip || '',
       entry.userAgent || '',
       entry.durationMs || 0,
-      entry.error || null
+      entry.error || null,
+      entry.requestBody || null
     );
 
     // Periodic cleanup

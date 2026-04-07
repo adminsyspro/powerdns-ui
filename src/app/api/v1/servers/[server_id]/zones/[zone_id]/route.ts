@@ -99,7 +99,7 @@ export async function PATCH(
   const validation = validatePatchPayload(zonePerm, rrsets);
 
   if (!validation.allowed) {
-    logProxy(request, 403, { environment, zone: zone_id, startTime, error: `Denied records: ${validation.denied.join(', ')}` });
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: `Denied records: ${validation.denied.join(', ')}`, requestBody: JSON.stringify(body) });
     return NextResponse.json(
       { error: 'Some records are not allowed', denied: validation.denied },
       { status: 403 }
@@ -117,7 +117,7 @@ export async function PATCH(
     );
 
     const status = response.status;
-    logProxy(request, status, { environment, zone: zone_id, startTime });
+    logProxy(request, status, { environment, zone: zone_id, startTime, requestBody: JSON.stringify(body) });
 
     if (status === 204) {
       return new NextResponse(null, { status: 204 });
@@ -129,7 +129,7 @@ export async function PATCH(
       headers: { 'Content-Type': response.headers.get('content-type') || 'application/json' },
     });
   } catch (e) {
-    logProxy(request, 502, { environment, zone: zone_id, startTime, error: (e as Error).message });
+    logProxy(request, 502, { environment, zone: zone_id, startTime, error: (e as Error).message, requestBody: JSON.stringify(body) });
     return NextResponse.json(
       { error: `Failed to connect to PowerDNS: ${(e as Error).message}` },
       { status: 502 }

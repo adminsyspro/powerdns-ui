@@ -126,6 +126,7 @@ export function logProxy(
     zone?: string;
     error?: string;
     startTime?: number;
+    requestBody?: string;
   }
 ) {
   const info = getClientInfo(request);
@@ -140,5 +141,6 @@ export function logProxy(
     userAgent: info.userAgent,
     durationMs: opts?.startTime ? Date.now() - opts.startTime : 0,
     error: opts?.error,
+    requestBody: opts?.requestBody,
   });
 }

@@ -14,6 +14,7 @@ interface LogRow {
   user_agent: string;
   duration_ms: number;
   error: string | null;
+  request_body: string | null;
 }
 
 // GET /api/proxy/logs?page=1&pageSize=50&env=&status=&since=
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
     userAgent: row.user_agent,
     durationMs: row.duration_ms,
     error: row.error,
+    requestBody: row.request_body,
   }));
 
   return NextResponse.json({ items, total, page, pageSize, totalPages });

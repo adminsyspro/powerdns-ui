@@ -96,10 +96,15 @@ export default function ProxyPage() {
   const [zoneForm, setZoneForm] = React.useState({ zoneName: '', acmeEnabled: false, records: [''], regexRecords: [''] });
   const [zoneError, setZoneError] = React.useState('');
 
-  // Available zones from PowerDNS
-  const [availableZones, setAvailableZones] = React.useState<string[]>([]);
+  // Available zones from PowerDNS — fetched server-side with search (paginated)
   const [zonePickerOpen, setZonePickerOpen] = React.useState(false);
   const [zonePickerSearch, setZonePickerSearch] = React.useState('');
+  const [zonePickerResults, setZonePickerResults] = React.useState<string[]>([]);
+  const [zonePickerTotal, setZonePickerTotal] = React.useState(0);
+  const [zonePickerLoading, setZonePickerLoading] = React.useState(false);
+  const [zoneSuggestions, setZoneSuggestions] = React.useState<string[]>([]);
+
+  const ZONE_PICKER_PAGE_SIZE = 50;
 
   const fetchEnvironments = async () => {
     const res = await fetch('/api/proxy/environments');
@@ -111,7 +116,6 @@ export default function ProxyPage() {
 
   React.useEffect(() => {
     fetchEnvironments();
-    fetchAvailableZones();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,23 +129,55 @@ export default function ProxyPage() {
 
   const { activeConnection } = useServerConnectionStore();
 
-  const fetchAvailableZones = async () => {
-    try {
+  const fetchZonesPage = React.useCallback(
+    async (search: string, pageSize: number = ZONE_PICKER_PAGE_SIZE): Promise<{ items: string[]; total: number }> => {
       const headers: Record<string, string> = {};
       if (activeConnection) {
         headers['x-pdns-url'] = activeConnection.url;
         headers['x-pdns-api-key'] = activeConnection.apiKey;
       }
-      const res = await fetch('/api/zones/cached?pageSize=200', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        const items = (data.items || []) as Array<{ name: string }>;
-        setAvailableZones(items.map((z) => z.name).sort((a, b) => a.localeCompare(b)));
-      }
-    } catch {
-      // Ignore
-    }
-  };
+      const params = new URLSearchParams({ pageSize: String(pageSize), sortBy: 'name', sortOrder: 'asc' });
+      if (search.trim()) params.set('search', search.trim());
+      const res = await fetch(`/api/zones/cached?${params}`, { headers });
+      if (!res.ok) return { items: [], total: 0 };
+      const data = await res.json();
+      const items = (data.items || []) as Array<{ name: string }>;
+      return { items: items.map((z) => z.name), total: data.total || 0 };
+    },
+    [activeConnection],
+  );
+
+  // Debounced server-side search for the environment-form zone picker
+  React.useEffect(() => {
+    if (!zonePickerOpen) return;
+    let cancelled = false;
+    setZonePickerLoading(true);
+    const timer = setTimeout(async () => {
+      const { items, total } = await fetchZonesPage(zonePickerSearch);
+      if (cancelled) return;
+      setZonePickerResults(items);
+      setZonePickerTotal(total);
+      setZonePickerLoading(false);
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [zonePickerOpen, zonePickerSearch, fetchZonesPage]);
+
+  // Debounced server-side search for the zone-dialog <datalist> suggestions
+  React.useEffect(() => {
+    if (!zoneDialogOpen || editingZone) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { items } = await fetchZonesPage(zoneForm.zoneName);
+      if (!cancelled) setZoneSuggestions(items);
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [zoneDialogOpen, editingZone, zoneForm.zoneName, fetchZonesPage]);
 
   // --- Environment CRUD ---
 
@@ -212,7 +248,6 @@ export default function ProxyPage() {
   const handleEditEnv = async (env: ProxyEnvironment) => {
     setEditingEnv(env);
     setEnvError('');
-    fetchAvailableZones();
 
     // Load existing zones into the form
     const res = await fetch(`/api/proxy/environments/${env.id}`);
@@ -319,7 +354,6 @@ export default function ProxyPage() {
   };
 
   const openAddZone = (envId: string) => {
-    fetchAvailableZones();
     setZoneEnvId(envId);
     setEditingZone(null);
     setZoneForm({ zoneName: '', acmeEnabled: false, records: [''], regexRecords: [''] });
@@ -328,7 +362,6 @@ export default function ProxyPage() {
   };
 
   const openEditZone = (envId: string, zone: ZonePermission) => {
-    fetchAvailableZones();
     setZoneEnvId(envId);
     setEditingZone(zone);
     setZoneForm({
@@ -650,7 +683,7 @@ export default function ProxyPage() {
           {/* Add environment button */}
           <Dialog open={envDialogOpen} onOpenChange={(open) => { setEnvDialogOpen(open); if (!open) { setEditingEnv(null); setEnvError(''); } }}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditingEnv(null); setEnvForm({ name: '', description: '', zones: [] }); fetchAvailableZones(); }}>
+              <Button onClick={() => { setEditingEnv(null); setEnvForm({ name: '', description: '', zones: [] }); }}>
                 <Plus className="mr-2 h-4 w-4" />Add API Access
               </Button>
             </DialogTrigger>
@@ -712,9 +745,14 @@ export default function ProxyPage() {
                           <ScrollArea className="max-h-[250px]">
                             <div className="p-1">
                               {(() => {
-                                const filtered = availableZones
-                                  .filter((z) => !envForm.zones.some((ez) => ez.zoneName === z))
-                                  .filter((z) => !zonePickerSearch || z.toLowerCase().includes(zonePickerSearch.toLowerCase()));
+                                const filtered = zonePickerResults.filter((z) => !envForm.zones.some((ez) => ez.zoneName === z));
+                                if (zonePickerLoading && filtered.length === 0) {
+                                  return (
+                                    <div className="flex items-center justify-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading zones...
+                                    </div>
+                                  );
+                                }
                                 if (filtered.length === 0) {
                                   return <p className="px-3 py-4 text-sm text-center text-muted-foreground">No zones found</p>;
                                 }
@@ -735,6 +773,11 @@ export default function ProxyPage() {
                               })()}
                             </div>
                           </ScrollArea>
+                          {zonePickerTotal > zonePickerResults.length && (
+                            <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
+                              Showing {zonePickerResults.length} of {zonePickerTotal} — refine your search to narrow down.
+                            </div>
+                          )}
                         </PopoverContent>
                       </Popover>
                     </div>
@@ -872,7 +915,7 @@ export default function ProxyPage() {
                     list="zone-suggestions"
                   />
                   <datalist id="zone-suggestions">
-                    {availableZones.map((z) => (
+                    {zoneSuggestions.map((z) => (
                       <option key={z} value={z} />
                     ))}
                   </datalist>

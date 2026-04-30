@@ -3,6 +3,8 @@
 import * as React from 'react';
 import { Plus, Download, Upload, RefreshCw, AlertCircle, Server, Clock, Search, Globe, FileText, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +23,8 @@ export default function ZonesPage() {
   const { addLog } = useActivityLogStore();
   const { sync, isSyncing, syncStatus } = useZoneSync();
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
+  const [importDialogOpen, setImportDialogOpen] = React.useState(false);
+  const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirm();
 
   // Global search state
@@ -165,6 +169,13 @@ export default function ZonesPage() {
     setCreateDialogOpen(false);
     await sync();
     refetch();
+  };
+
+  const handleImportSuccess = async (newZoneId: string) => {
+    addLog({ action: 'Zone Imported', resource: newZoneId, user: 'admin', details: 'BIND import' });
+    await sync();
+    refetch();
+    router.push(`/zones/${encodeURIComponent(newZoneId)}`);
   };
 
   if (!activeConnection) {
@@ -313,7 +324,7 @@ export default function ZonesPage() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Syncing...' : 'Sync'}
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
               <Upload className="mr-2 h-4 w-4" />Import
             </Button>
             <Button variant="outline" size="sm">
@@ -329,6 +340,12 @@ export default function ZonesPage() {
             />
           </>
         }
+      />
+      <ImportZoneDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        mode={{ type: 'create' }}
+        onCreateSuccess={handleImportSuccess}
       />
       <ConfirmDialog />
     </div>

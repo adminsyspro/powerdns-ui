@@ -8,6 +8,7 @@ import type {
   RRSet,
   ServerConnection,
 } from '@/types/powerdns';
+import type { ImportPreview } from '@/lib/bind/types';
 
 /**
  * Frontend API client that calls our Next.js API routes,
@@ -150,6 +151,31 @@ export async function createZone(zone: {
   return apiRequest<Zone>('/api/pdns/zones', {
     method: 'POST',
     body: JSON.stringify(zone),
+  });
+}
+
+// ---- BIND Import ----
+
+export async function parseBindZone(content: string, origin?: string) {
+  return apiRequest<ImportPreview>('/api/pdns/zones/import-bind/parse', {
+    method: 'POST',
+    body: JSON.stringify({ content, origin }),
+  });
+}
+
+export async function createZoneFromBind(input: {
+  content: string;
+  name: string;
+  kind: string;
+  nameservers: string[];
+  masters?: string[];
+  account?: string;
+  dnssec?: boolean;
+  soa_edit_api?: string;
+}) {
+  return apiRequest<Zone>('/api/pdns/zones/import-bind/create', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }
 

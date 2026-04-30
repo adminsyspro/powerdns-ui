@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
-  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server,
+  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload,
 } from 'lucide-react';
+import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -243,6 +244,7 @@ export default function ZoneDetailPage() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyData, setHistoryData] = React.useState<ChangesetSubmission[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [importDialogOpen, setImportDialogOpen] = React.useState(false);
 
   // Paginated records state
   const [recordsPage, setRecordsPage] = React.useState(1);
@@ -577,6 +579,9 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={refetch}>
                 <RefreshCw className="mr-2 h-4 w-4" />Refresh
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />Import
+              </Button>
               <Button variant="outline" size="sm" onClick={handleOpenHistory}>
                 <History className="mr-2 h-4 w-4" />History
               </Button>
@@ -737,6 +742,14 @@ export default function ZoneDetailPage() {
       {/* Bottom padding when pending bar is visible */}
       {pendingChanges.length > 0 && <div className="h-16" />}
       <ConfirmDialog />
+      <ImportZoneDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        mode={{ type: 'merge', zoneId, zoneName: zone.name }}
+        onMergeStaged={() => {
+          addLog({ action: 'Zone Import Staged', resource: zoneName, user: 'admin', details: 'BIND import' });
+        }}
+      />
     </div>
     </TooltipProvider>
   );

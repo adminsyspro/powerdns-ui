@@ -43,7 +43,7 @@ function parseTtl(token: string): number | null {
     total += Number(m[1]) * TTL_UNIT_SECONDS[m[2]];
     matched += m[0].length;
   }
-  if (matched === token.length && total > 0) return total;
+  if (matched === token.length && matched > 0) return total;
   return null;
 }
 
@@ -197,9 +197,10 @@ function parseLine(
   let ttl: number | null = null;
   while (idx < tokens.length) {
     const t = tokens[idx];
-    if (/^\d+$/.test(t) || parseTtl(t) != null) {
+    const candidateTtl = parseTtl(t);
+    if (candidateTtl != null) {
       if (ttl != null) break;
-      ttl = parseTtl(t);
+      ttl = candidateTtl;
       idx++;
       continue;
     }

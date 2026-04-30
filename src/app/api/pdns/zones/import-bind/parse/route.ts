@@ -3,7 +3,14 @@ import { parseBind } from '@/lib/bind/parser';
 
 const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
+  const role = request.headers.get('x-user-role');
+  if (role !== 'Administrator' && role !== 'Operator') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   let body: { content?: unknown; origin?: unknown };
   try {
     body = await request.json();

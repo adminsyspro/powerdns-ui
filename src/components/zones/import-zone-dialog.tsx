@@ -165,7 +165,12 @@ export function ImportZoneDialog({
       soa_edit_api: soaEditApi,
     });
     if (result.error) {
-      setSubmitError(result.error);
+      const canonicalName = zoneName.endsWith('.') ? zoneName : `${zoneName}.`;
+      if (result.status === 409) {
+        setSubmitError(`Zone "${canonicalName.replace(/\.$/, '')}" already exists.`);
+      } else {
+        setSubmitError(result.error);
+      }
       setStep('preview');
       return;
     }

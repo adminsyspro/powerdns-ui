@@ -4,6 +4,8 @@ import { pdnsProxy, getConnectionFromRequest, forwardPdnsResponse } from '@/lib/
 
 const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
+export const maxDuration = 30;
+
 interface CreateBody {
   content?: unknown;
   name?: unknown;

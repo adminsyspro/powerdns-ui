@@ -75,8 +75,8 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Review Changes</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             {zoneName}
@@ -85,7 +85,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
         </DialogHeader>
 
         {/* Changes list */}
-        <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: '400px' }}>
+        <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
           <div className="space-y-2">
             {changes.map((change) => (
               <ChangeDiffCard
@@ -99,7 +99,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
         </ScrollArea>
 
         {/* Reason */}
-        <div className="space-y-2 pt-2 border-t">
+        <div className="shrink-0 space-y-2 pt-2 border-t">
           <Label htmlFor="reason">Reason for changes *</Label>
           <Textarea
             id="reason"
@@ -112,12 +112,12 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
         </div>
 
         {error && (
-          <div className="p-3 rounded-md bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 text-sm">
+          <div className="shrink-0 p-3 rounded-md bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 text-sm">
             {error}
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Cancel
           </Button>

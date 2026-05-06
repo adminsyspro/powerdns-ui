@@ -26,7 +26,6 @@ Use it as:
 
 - A day-to-day web UI for managing zones and records.
 - A secure API gateway in front of PowerDNS for certbot, lego, external services, and internal automation.
-- A migration path from `powerdns-api-proxy`, with config import and preserved token hashes.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">

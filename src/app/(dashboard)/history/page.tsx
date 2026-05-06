@@ -138,10 +138,10 @@ export default function HistoryPage() {
 
       {/* Detail Dialog */}
       <Dialog open={!!selectedEntry} onOpenChange={(open) => { if (!open) setSelectedEntry(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
           {selectedEntry && (
             <>
-              <DialogHeader>
+              <DialogHeader className="shrink-0">
                 <DialogTitle className="flex items-center gap-2">
                   Changeset — {selectedEntry.zoneName.replace(/\.$/, '')}
                   {selectedEntry.status === 'success' ? (
@@ -152,7 +152,7 @@ export default function HistoryPage() {
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-3 text-sm">
+              <div className="shrink-0 space-y-3 text-sm">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-2 rounded bg-muted/30 border">
                     <p className="text-xs text-muted-foreground">Date</p>
@@ -181,7 +181,7 @@ export default function HistoryPage() {
                 )}
               </div>
 
-              <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: '400px' }}>
+              <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
                 <div className="space-y-2 pt-2">
                   {selectedEntry.changes.map((change) => (
                     <ChangeDiffCard key={change.id} change={change} zoneName={selectedEntry.zoneName} />

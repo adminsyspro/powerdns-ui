@@ -700,8 +700,8 @@ export default function ZoneDetailPage() {
 
       {/* Zone History Timeline Modal */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Change History — {zoneName.replace(/\.$/, '')}</DialogTitle>
           </DialogHeader>
           {historyLoading ? (
@@ -714,7 +714,7 @@ export default function ZoneDetailPage() {
               <p className="text-muted-foreground">No change history for this zone</p>
             </div>
           ) : (
-            <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: '65vh' }}>
+            <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
               <div className="relative">
                 {/* Timeline line */}
                 <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />

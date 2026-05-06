@@ -390,6 +390,7 @@ export default function ZoneDetailPage() {
         ? [{ content: data.comment, account: 'admin', modified_at: Math.floor(Date.now() / 1000) }]
         : [],
     };
+    const rrsetKey = `${recordName}::${data.type}`;
 
     if (editingRecord) {
       // Editing: keep other records in the RRSet
@@ -407,7 +408,36 @@ export default function ZoneDetailPage() {
       }
       addChange(zoneId, 'EDIT', editingRecord, rrset);
     } else {
-      addChange(zoneId, 'ADD', null, rrset);
+      const pendingChange = pendingMap.get(rrsetKey);
+      const originalRRSet = zone?.rrsets?.find((r) => r.name === recordName && r.type === data.type);
+      const baseRRSet = pendingChange?.after || originalRRSet;
+
+      if (baseRRSet) {
+        const existingRecords = baseRRSet.records.filter((r) => r.content !== data.content);
+        const comments = data.comment
+          ? [
+              ...(baseRRSet.comments || []),
+              { content: data.comment, account: 'admin', modified_at: Math.floor(Date.now() / 1000) },
+            ]
+          : baseRRSet.comments;
+        const after: RRSet = {
+          ...baseRRSet,
+          records: [
+            ...existingRecords,
+            { content: data.content, disabled: data.disabled || false },
+          ],
+          comments,
+        };
+
+        addChange(
+          zoneId,
+          pendingChange?.action === 'ADD' ? 'ADD' : 'EDIT',
+          pendingChange?.before || originalRRSet || null,
+          after
+        );
+      } else {
+        addChange(zoneId, 'ADD', null, rrset);
+      }
     }
 
     setRecordDialogOpen(false);

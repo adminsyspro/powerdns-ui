@@ -5,7 +5,7 @@
 <h1 align="center">PowerDNS-UI</h1>
 
 <p align="center">
-  <strong>Modern web interface for PowerDNS management</strong>
+  <strong>PowerDNS management UI with a built-in API proxy for controlled automation</strong>
 </p>
 
 <p align="center">
@@ -18,7 +18,15 @@
 
 ## Overview
 
-**PowerDNS-UI** is a modern, self-hosted web interface for managing PowerDNS Authoritative servers. Built as a lightweight alternative to PowerDNS-Admin, it provides zone and record management, bulk operations, LDAP/local authentication.
+**PowerDNS-UI** is a modern, self-hosted control plane for PowerDNS Authoritative servers. It combines a clean web interface for DNS administration with a built-in PowerDNS-compatible API proxy for automation, ACME DNS-01 challenges, and delegated API access.
+
+Built as a lightweight alternative to PowerDNS-Admin, it provides zone and record management, pending-change validation, change history, LDAP/local authentication, multi-server connections, and granular token-based API access without exposing your raw PowerDNS API directly.
+
+Use it as:
+
+- A day-to-day web UI for managing zones and records.
+- A secure API gateway in front of PowerDNS for certbot, lego, external services, and internal automation.
+- A migration path from `powerdns-api-proxy`, with config import and preserved token hashes.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
@@ -40,6 +48,8 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 
 | Feature | Description |
 |---|---|
+| **PowerDNS API Proxy** | Expose a controlled PowerDNS-compatible API without giving clients direct access to the PowerDNS backend |
+| **Granular API Access** | Issue per-client tokens with zone-level permissions, record-level ACLs, regex rules, ACME shortcuts, and request logs |
 | **Zone Management** | Create, edit, delete, and export DNS zones (Native, Master, Slave) |
 | **Record Editing** | Full CRUD for all record types (A, AAAA, CNAME, MX, TXT, SRV, CAA, etc.) |
 | **Multi-Selection** | Bulk delete, enable, and disable records and zones |
@@ -47,11 +57,12 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 | **Change History** | Track all modifications with diff view and timeline |
 | **Global Search** | Search across zones, records, and IPs |
 | **Zone Switcher** | Quickly navigate between zones with instant search |
+| **BIND Zone Import** | Import BIND zone files to create new zones or stage records into existing zones |
+| **Nameserver Pools** | Configure reusable NS pools and apply them during zone creation |
 | **Record Export** | Export records as text, CSV, or PDF |
 | **LDAP Authentication** | Integrate with Active Directory / LDAP |
 | **Local Authentication** | Built-in user management with bcrypt passwords |
 | **Multi-Server** | Connect to multiple PowerDNS instances |
-| **API Proxy** | Built-in PowerDNS API proxy with granular access control (inspired by [powerdns-api-proxy](https://github.com/akquinet/powerdns-api-proxy)) |
 | **DNSSEC Status** | View DNSSEC status per zone |
 | **Real-Time Sync** | Background sync with local SQLite cache for fast pagination |
 | **Dark Mode** | Full dark/light theme support |
@@ -60,6 +71,16 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 ---
 
 ## API Proxy
+
+PowerDNS-UI includes a built-in API proxy compatible with the PowerDNS Authoritative API. Each token can be limited to specific zones and record patterns, making it suitable for scoped automation and delegated DNS access.
+
+This is useful for:
+
+- **ACME DNS-01 automation** — allow certbot, lego, or other ACME clients to update only `_acme-challenge` TXT records.
+- **Delegated DNS management** — give teams or services access to selected zones without full PowerDNS API credentials.
+- **Public/private separation** — expose proxy endpoints publicly while keeping the admin UI and PowerDNS API on private networks.
+- **Auditing** — review API requests, status codes, zones, client IPs, latency, and errors from the UI.
+- **Migration** — import an existing `powerdns-api-proxy` config and keep existing hashed tokens valid.
 
 ### How it works
 

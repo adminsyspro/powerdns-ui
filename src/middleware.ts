@@ -59,11 +59,16 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Forward user info to API routes via headers
-    const response = NextResponse.next();
-    response.headers.set('x-user-id', userId);
-    response.headers.set('x-user-role', userRole);
-    response.headers.set('x-user-name', (payload.username as string) || '');
+    // Forward user info to API routes via request headers.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-user-id', userId);
+    requestHeaders.set('x-user-role', userRole);
+    requestHeaders.set('x-user-name', (payload.username as string) || '');
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
     return response;
   } catch {
     return handleUnauthorized(request);

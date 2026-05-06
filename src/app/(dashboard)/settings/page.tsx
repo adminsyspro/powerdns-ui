@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
+import { Plus, Star, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +13,9 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useUIPreferencesStore } from '@/stores';
+import * as api from '@/lib/api';
+import { normalizeNameserverPools } from '@/lib/ns-pools';
+import type { NameserverPool } from '@/lib/ns-pools';
 
 export default function SettingsPage() {
   const { theme, setTheme, recordsPerPage, setRecordsPerPage, zonesPerPage, setZonesPerPage, showDisabledRecords, setShowDisabledRecords, confirmDeletion, setConfirmDeletion, compactMode, setCompactMode } = useUIPreferencesStore();
@@ -27,11 +32,17 @@ export default function SettingsPage() {
   });
   const [ldapSaving, setLdapSaving] = React.useState(false);
   const [ldapMessage, setLdapMessage] = React.useState('');
+  const [nameserverPools, setNameserverPools] = React.useState<NameserverPool[]>([]);
+  const [nameserverPoolsSaving, setNameserverPoolsSaving] = React.useState(false);
+  const [nameserverPoolsMessage, setNameserverPoolsMessage] = React.useState('');
 
   React.useEffect(() => {
     fetch('/api/settings/ldap')
       .then((res) => res.ok ? res.json() : null)
       .then((data) => { if (data) setLdapConfig(data); });
+    api.fetchNameserverPools().then((result) => {
+      if (!result.error) setNameserverPools(result.data?.pools || []);
+    });
   }, []);
 
   const handleSaveLdap = async () => {
@@ -46,6 +57,57 @@ export default function SettingsPage() {
     setLdapMessage(res.ok ? 'Configuration saved.' : 'Error saving configuration.');
   };
 
+  const addNameserverPool = () => {
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `ns-pool-${Date.now()}`;
+    setNameserverPools((pools) => [
+      ...pools,
+      {
+        id,
+        name: '',
+        nameservers: [''],
+        isDefault: pools.length === 0,
+      },
+    ]);
+    setNameserverPoolsMessage('');
+  };
+
+  const updateNameserverPool = (id: string, patch: Partial<NameserverPool>) => {
+    setNameserverPools((pools) => pools.map((pool) => (pool.id === id ? { ...pool, ...patch } : pool)));
+    setNameserverPoolsMessage('');
+  };
+
+  const setDefaultNameserverPool = (id: string) => {
+    setNameserverPools((pools) => pools.map((pool) => ({ ...pool, isDefault: pool.id === id })));
+    setNameserverPoolsMessage('');
+  };
+
+  const deleteNameserverPool = (id: string) => {
+    setNameserverPools((pools) => {
+      const next = pools.filter((pool) => pool.id !== id);
+      if (next.length > 0 && !next.some((pool) => pool.isDefault)) {
+        return next.map((pool, index) => ({ ...pool, isDefault: index === 0 }));
+      }
+      return next;
+    });
+    setNameserverPoolsMessage('');
+  };
+
+  const handleSaveNameserverPools = async () => {
+    setNameserverPoolsSaving(true);
+    setNameserverPoolsMessage('');
+    const normalizedPools = normalizeNameserverPools(nameserverPools);
+    const result = await api.saveNameserverPools(normalizedPools);
+    setNameserverPoolsSaving(false);
+    if (result.error) {
+      setNameserverPoolsMessage('Error saving nameserver pools.');
+      return;
+    }
+    setNameserverPools(result.data?.pools || []);
+    setNameserverPoolsMessage('Nameserver pools saved.');
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,6 +119,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="display">Display</TabsTrigger>
+          <TabsTrigger value="nameservers">Nameservers</TabsTrigger>
           <TabsTrigger value="ldap">LDAP Authentication</TabsTrigger>
         </TabsList>
 
@@ -122,6 +185,87 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div><Label>Confirm deletions</Label><p className="text-sm text-muted-foreground">Show confirmation before deleting</p></div>
                 <Switch checked={confirmDeletion} onCheckedChange={setConfirmDeletion} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="nameservers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Nameserver Pools</CardTitle>
+                  <CardDescription>Configure reusable NS sets for new zone creation</CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addNameserverPool}>
+                  <Plus className="mr-2 h-4 w-4" />Add pool
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {nameserverPools.length === 0 ? (
+                <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No nameserver pools configured.
+                </div>
+              ) : (
+                nameserverPools.map((pool) => (
+                  <div key={pool.id} className="space-y-3 rounded-md border p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                      <div className="space-y-2 sm:flex-1">
+                        <Label htmlFor={`ns-pool-name-${pool.id}`}>Pool name</Label>
+                        <Input
+                          id={`ns-pool-name-${pool.id}`}
+                          placeholder="Production DNS"
+                          value={pool.name}
+                          onChange={(e) => updateNameserverPool(pool.id, { name: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex gap-2 sm:pt-8">
+                        <Button
+                          type="button"
+                          variant={pool.isDefault ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setDefaultNameserverPool(pool.id)}
+                        >
+                          <Star className="mr-2 h-4 w-4" />Default
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteNameserverPool(pool.id)}
+                          aria-label="Delete nameserver pool"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`ns-pool-values-${pool.id}`}>Nameservers</Label>
+                      <Textarea
+                        id={`ns-pool-values-${pool.id}`}
+                        className="font-mono text-sm"
+                        rows={Math.max(3, pool.nameservers.length)}
+                        placeholder={'ns1.example.net.\nns2.example.net.'}
+                        value={pool.nameservers.join('\n')}
+                        onChange={(e) => updateNameserverPool(pool.id, { nameservers: e.target.value.split(/\r?\n/) })}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {nameserverPoolsMessage && (
+                <div className={`p-3 rounded-lg text-sm ${nameserverPoolsMessage.includes('Error') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                  {nameserverPoolsMessage}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button onClick={handleSaveNameserverPools} disabled={nameserverPoolsSaving}>
+                  {nameserverPoolsSaving ? 'Saving...' : 'Save Nameserver Pools'}
+                </Button>
               </div>
             </CardContent>
           </Card>

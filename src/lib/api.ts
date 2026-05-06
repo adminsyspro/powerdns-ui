@@ -9,6 +9,7 @@ import type {
   ServerConnection,
 } from '@/types/powerdns';
 import type { ImportPreview } from '@/lib/bind/types';
+import type { NameserverPool } from '@/lib/ns-pools';
 
 /**
  * Frontend API client that calls our Next.js API routes,
@@ -127,6 +128,19 @@ export async function testConnection(url: string, apiKey: string) {
       body: JSON.stringify({ url, apiKey }),
     }
   );
+}
+
+// ---- Application Settings ----
+
+export async function fetchNameserverPools() {
+  return apiRequest<{ pools: NameserverPool[] }>('/api/settings/ns-pools');
+}
+
+export async function saveNameserverPools(pools: NameserverPool[]) {
+  return apiRequest<{ pools: NameserverPool[] }>('/api/settings/ns-pools', {
+    method: 'PUT',
+    body: JSON.stringify({ pools }),
+  });
 }
 
 // ---- Zones ----

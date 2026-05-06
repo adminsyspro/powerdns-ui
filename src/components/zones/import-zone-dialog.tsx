@@ -22,6 +22,9 @@ import * as api from '@/lib/api';
 import type { ImportPreview } from '@/lib/bind/types';
 import type { RRSet } from '@/types/powerdns';
 import { usePendingChangesStore } from '@/stores';
+import { getDefaultNameserverPool } from '@/lib/ns-pools';
+import type { NameserverPool } from '@/lib/ns-pools';
+import { NameserverPoolSelect } from './nameserver-pool-select';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -54,6 +57,7 @@ export function ImportZoneDialog({
   const [kind, setKind] = React.useState<'Native' | 'Master' | 'Slave'>('Native');
   const [nameservers, setNameservers] = React.useState<string[]>([]);
   const [nameserverInput, setNameserverInput] = React.useState('');
+  const [nameserverPools, setNameserverPools] = React.useState<NameserverPool[]>([]);
   const [account, setAccount] = React.useState('');
   const [dnssec, setDnssec] = React.useState(false);
   const [soaEditApi, setSoaEditApi] = React.useState('DEFAULT');
@@ -84,6 +88,14 @@ export function ImportZoneDialog({
       setSkipApexNs(true);
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (!open || mode.type !== 'create') return;
+
+    api.fetchNameserverPools().then((result) => {
+      if (!result.error) setNameserverPools(result.data?.pools || []);
+    });
+  }, [open, mode.type]);
 
   const handleFile = async (file: File) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -125,6 +137,13 @@ export function ImportZoneDialog({
           .filter((rs) => rs.type === 'NS' && rs.name === detectedOrigin)
           .flatMap((rs) => rs.records.map((r) => r.content));
         if (apexNs.length > 0) setNameservers(apexNs);
+        else {
+          const defaultPool = getDefaultNameserverPool(nameserverPools);
+          if (defaultPool) setNameservers(defaultPool.nameservers);
+        }
+      } else {
+        const defaultPool = getDefaultNameserverPool(nameserverPools);
+        if (defaultPool) setNameservers(defaultPool.nameservers);
       }
     }
 
@@ -334,6 +353,7 @@ export function ImportZoneDialog({
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label>Nameservers</Label>
+                      <NameserverPoolSelect pools={nameserverPools} onApply={setNameservers} />
                       <div className="flex gap-2">
                         <Input
                           placeholder="ns1.example.com"

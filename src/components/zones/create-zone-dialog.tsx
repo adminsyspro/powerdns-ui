@@ -26,8 +26,11 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import type { ZoneKind } from '@/types/powerdns';
 import { useTemplatesStore } from '@/stores';
+import * as api from '@/lib/api';
+import { getDefaultNameserverPool } from '@/lib/ns-pools';
+import type { NameserverPool } from '@/lib/ns-pools';
+import { NameserverPoolSelect } from './nameserver-pool-select';
 
 const createZoneSchema = z.object({
   name: z
@@ -62,6 +65,8 @@ export function CreateZoneDialog({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [nameserverInput, setNameserverInput] = React.useState('');
   const [masterInput, setMasterInput] = React.useState('');
+  const [nameserverPools, setNameserverPools] = React.useState<NameserverPool[]>([]);
+  const defaultPoolAppliedRef = React.useRef(false);
 
   const form = useForm<CreateZoneFormData>({
     resolver: zodResolver(createZoneSchema),
@@ -81,6 +86,26 @@ export function CreateZoneDialog({
   const kind = watch('kind');
   const nameservers = watch('nameservers');
   const masters = watch('masters') || [];
+
+  React.useEffect(() => {
+    if (!open) {
+      defaultPoolAppliedRef.current = false;
+      return;
+    }
+
+    api.fetchNameserverPools().then((result) => {
+      if (!result.error) setNameserverPools(result.data?.pools || []);
+    });
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open || defaultPoolAppliedRef.current || nameserverPools.length === 0) return;
+    const defaultPool = getDefaultNameserverPool(nameserverPools);
+    if (defaultPool) {
+      setValue('nameservers', defaultPool.nameservers, { shouldValidate: true });
+      defaultPoolAppliedRef.current = true;
+    }
+  }, [open, nameserverPools, setValue]);
 
   const addNameserver = () => {
     if (nameserverInput.trim()) {
@@ -237,6 +262,10 @@ export function CreateZoneDialog({
             {/* Nameservers */}
             <div className="space-y-2 sm:col-span-2">
               <Label>Nameservers</Label>
+              <NameserverPoolSelect
+                pools={nameserverPools}
+                onApply={(poolNameservers) => setValue('nameservers', poolNameservers, { shouldValidate: true })}
+              />
               <div className="flex gap-2">
                 <Input
                   placeholder="ns1.example.com"

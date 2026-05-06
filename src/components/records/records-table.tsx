@@ -54,6 +54,21 @@ interface RecordsTableProps {
 
 const RECORD_TYPES: RecordType[] = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'SRV', 'PTR', 'CAA', 'ALIAS', 'DNSKEY', 'DS', 'NAPTR', 'SSHFP', 'TLSA', 'URI'];
 
+function getRecordPendingAction(
+  change: PendingChange | undefined,
+  record: { content: string; disabled: boolean }
+): ChangeAction | undefined {
+  if (!change) return undefined;
+  if (change.action === 'ADD' || change.action === 'DELETE') return change.action;
+
+  const beforeRecord = change.before?.records.find((item) => item.content === record.content);
+  if (!beforeRecord) return 'ADD';
+  if (beforeRecord.disabled !== record.disabled) return change.action;
+
+  const ttlChanged = change.before?.ttl !== change.after?.ttl;
+  return ttlChanged ? change.action : undefined;
+}
+
 export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle }: RecordsTableProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<RecordType | 'all'>('all');
@@ -144,8 +159,9 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
   const flatRecords = React.useMemo(() => {
     const source = mergedRecords || records.map((rrset) => ({ rrset } as MergedRecord));
     const result: Array<{ rrset: RRSet; record: { content: string; disabled: boolean }; index: number; pendingAction?: ChangeAction; changeId?: string }> = [];
-    source.forEach(({ rrset, pendingAction, changeId }) => {
+    source.forEach(({ rrset, change, changeId }) => {
       rrset.records.forEach((record, index) => {
+        const pendingAction = getRecordPendingAction(change, record);
         result.push({ rrset, record, index, pendingAction, changeId });
       });
     });

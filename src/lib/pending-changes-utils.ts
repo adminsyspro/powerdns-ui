@@ -27,6 +27,7 @@ export interface MergedRecord {
   rrset: RRSet;
   pendingAction?: ChangeAction;
   changeId?: string;
+  change?: PendingChange;
 }
 
 /**
@@ -55,10 +56,10 @@ export function mergeRecordsWithPending(
     if (change) {
       processedKeys.add(key);
       if (change.action === 'DELETE') {
-        result.push({ rrset, pendingAction: 'DELETE', changeId: change.id });
+        result.push({ rrset, pendingAction: 'DELETE', changeId: change.id, change });
       } else {
         // EDIT or TOGGLE: show the "after" state
-        result.push({ rrset: change.after!, pendingAction: change.action, changeId: change.id });
+        result.push({ rrset: change.after!, pendingAction: change.action, changeId: change.id, change });
       }
     } else {
       result.push({ rrset });
@@ -68,7 +69,7 @@ export function mergeRecordsWithPending(
   // Append ADDs that aren't in existing records
   for (const change of changes) {
     if (change.action === 'ADD' && !processedKeys.has(change.rrsetKey)) {
-      result.push({ rrset: change.after!, pendingAction: 'ADD', changeId: change.id });
+      result.push({ rrset: change.after!, pendingAction: 'ADD', changeId: change.id, change });
     }
   }
 

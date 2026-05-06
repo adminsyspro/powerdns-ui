@@ -14,9 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChangeDiffCard } from './change-diff-card';
-import { usePendingChangesStore } from '@/stores';
+import { useAuthStore, usePendingChangesStore } from '@/stores';
 import { changesToRRSets } from '@/lib/pending-changes-utils';
 import * as api from '@/lib/api';
 import { generateId } from '@/lib/utils';
@@ -31,6 +30,7 @@ interface ValidationModalProps {
 }
 
 export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSuccess }: ValidationModalProps) {
+  const { user } = useAuthStore();
   const { getZoneChanges, removeChange, clearZone } = usePendingChangesStore();
   const changes = getZoneChanges(zoneId);
   const [reason, setReason] = React.useState('');
@@ -51,7 +51,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
       zoneName,
       changes,
       reason: reason.trim(),
-      user: 'admin',
+      user: user?.username || 'unknown',
       submittedAt: Date.now(),
       status: result.error ? 'error' : 'success',
       errorMessage: result.error || undefined,
@@ -75,7 +75,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
+      <DialogContent className="max-w-2xl h-[85vh] !flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle>Review Changes</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
@@ -85,7 +85,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
         </DialogHeader>
 
         {/* Changes list */}
-        <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
+        <div className="min-h-0 flex-1 -mx-6 overflow-y-auto px-6 pr-4">
           <div className="space-y-2">
             {changes.map((change) => (
               <ChangeDiffCard
@@ -96,7 +96,7 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
               />
             ))}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Reason */}
         <div className="shrink-0 space-y-2 pt-2 border-t">

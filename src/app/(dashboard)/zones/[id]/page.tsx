@@ -20,14 +20,13 @@ import { PendingChangesBar } from '@/components/records/pending-changes-bar';
 import { ValidationModal } from '@/components/records/validation-modal';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
 import { useZone } from '@/hooks/use-pdns';
 import { useConfirm } from '@/hooks/use-confirm';
-import { useActivityLogStore, usePendingChangesStore } from '@/stores';
+import { useActivityLogStore, useAuthStore, usePendingChangesStore } from '@/stores';
 import * as api from '@/lib/api';
 
 // ---- Zone Switcher ----
@@ -232,8 +231,10 @@ export default function ZoneDetailPage() {
   const params = useParams();
   const router = useRouter();
   const zoneId = decodeURIComponent(params.id as string);
+  const { user } = useAuthStore();
   const { addLog } = useActivityLogStore();
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
+  const auditUser = user?.username || 'unknown';
 
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
   const { confirm, ConfirmDialog } = useConfirm();
@@ -472,7 +473,7 @@ export default function ZoneDetailPage() {
   };
 
   const handleApplySuccess = () => {
-    addLog({ action: 'Records Updated', resource: zoneName, user: 'admin', details: `${pendingChanges.length} changes applied` });
+    addLog({ action: 'Records Updated', resource: zoneName, user: auditUser, details: `${pendingChanges.length} changes applied` });
     refetch();
     fetchRecords();
   };
@@ -491,7 +492,7 @@ export default function ZoneDetailPage() {
     if (result.error) {
       alert(`Error deleting zone: ${result.error}`);
     } else {
-      addLog({ action: 'Zone Deleted', resource: zoneId, user: 'admin', details: '' });
+      addLog({ action: 'Zone Deleted', resource: zoneId, user: auditUser, details: '' });
       router.push('/zones');
     }
   };
@@ -700,7 +701,7 @@ export default function ZoneDetailPage() {
 
       {/* Zone History Timeline Modal */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
+        <DialogContent className="max-w-2xl h-[85vh] !flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle>Change History — {zoneName.replace(/\.$/, '')}</DialogTitle>
           </DialogHeader>
@@ -714,7 +715,7 @@ export default function ZoneDetailPage() {
               <p className="text-muted-foreground">No change history for this zone</p>
             </div>
           ) : (
-            <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
+            <div className="min-h-0 flex-1 -mx-6 overflow-y-auto px-6 pr-4">
               <div className="relative">
                 {/* Timeline line */}
                 <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
@@ -764,7 +765,7 @@ export default function ZoneDetailPage() {
                   })}
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -777,7 +778,7 @@ export default function ZoneDetailPage() {
         onOpenChange={setImportDialogOpen}
         mode={{ type: 'merge', zoneId, zoneName: zone.name }}
         onMergeStaged={() => {
-          addLog({ action: 'Zone Import Staged', resource: zoneName, user: 'admin', details: 'BIND import' });
+          addLog({ action: 'Zone Import Staged', resource: zoneName, user: auditUser, details: 'BIND import' });
         }}
       />
     </div>

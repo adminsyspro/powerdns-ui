@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
 import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
@@ -138,7 +137,7 @@ export default function HistoryPage() {
 
       {/* Detail Dialog */}
       <Dialog open={!!selectedEntry} onOpenChange={(open) => { if (!open) setSelectedEntry(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] !flex flex-col overflow-hidden">
+        <DialogContent className="max-w-2xl h-[85vh] !flex flex-col overflow-hidden">
           {selectedEntry && (
             <>
               <DialogHeader className="shrink-0">
@@ -181,13 +180,13 @@ export default function HistoryPage() {
                 )}
               </div>
 
-              <ScrollArea className="min-h-0 flex-1 -mx-6 px-6">
+              <div className="min-h-0 flex-1 -mx-6 overflow-y-auto px-6 pr-4">
                 <div className="space-y-2 pt-2">
                   {selectedEntry.changes.map((change) => (
                     <ChangeDiffCard key={change.id} change={change} zoneName={selectedEntry.zoneName} />
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </>
           )}
         </DialogContent>

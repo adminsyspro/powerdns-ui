@@ -7,7 +7,10 @@ export async function POST(request: NextRequest) {
   try {
     const conn = getConnectionFromRequest(request);
     const body = await request.json();
-    saveChangeset(conn.url, body);
+    saveChangeset(conn.url, {
+      ...body,
+      user: request.headers.get('x-user-name') || body.user || 'unknown',
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

@@ -8,6 +8,10 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required — run scripts/init-secrets.sh or set it in .env}
+      - APP_SECRET=${APP_SECRET:?APP_SECRET is required — run scripts/init-secrets.sh or set it in .env}
+    volumes:
+      - powerdns-ui-data:/app/data
     restart: unless-stopped
 
   # Optional: PowerDNS server for testing
@@ -33,3 +37,4 @@ services:
 
 volumes:
   powerdns-data:
+  powerdns-ui-data:

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { seedDefaultAdmin } from '@/lib/auth/seed';
+import { cryptoSanityCheck } from '@/lib/crypto';
 
 let db: Database.Database | null = null;
 
@@ -184,4 +185,9 @@ function initSchema(db: Database.Database) {
   }
 
   seedDefaultAdmin(db);
+
+  const sanity = cryptoSanityCheck(db);
+  if (!sanity.ok) {
+    console.warn(`[crypto] ${sanity.message}`);
+  }
 }

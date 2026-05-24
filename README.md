@@ -43,6 +43,69 @@ Then open `http://your-server:3000` — default credentials: **admin** / **admin
 
 ---
 
+## Persistence & Secrets
+
+PowerDNS-UI stores all of its state — users, groups, LDAP / OIDC config,
+PowerDNS connections, audit history, encrypted credentials — in
+`/app/data/cache.db` inside the container. This path **must** be mounted on
+a Docker volume to survive image updates:
+
+```yaml
+services:
+  powerdns-ui:
+    volumes:
+      - powerdns-ui-data:/app/data
+
+volumes:
+  powerdns-ui-data:
+```
+
+The provided `docker-compose.yml` already does this. After it, the standard
+update flow is safe:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+### Required secrets
+
+Two environment variables must be set and **stable** across upgrades:
+
+| Variable | Purpose | Safe to rotate? |
+|---|---|---|
+| `AUTH_SECRET` | Signs session JWTs | ✅ Yes — every active session is invalidated (users re-login) |
+| `APP_SECRET` | Derives the encryption key for stored secrets (LDAP bind password, OIDC client secret, PowerDNS API key, …) | ❌ **No** — rotating this makes every encrypted secret in the DB unreadable until the previous value is restored or the affected settings are re-entered via the UI |
+
+For a fresh deployment, generate both with:
+
+```sh
+./scripts/init-secrets.sh
+```
+
+This writes a `.env` (chmod 600) next to your `docker-compose.yml` with two
+distinct random values. Back this file up — losing `APP_SECRET` is
+equivalent to losing every encrypted credential in the database.
+
+### Upgrading an existing deployment
+
+Until this release, PowerDNS-UI used a single `AUTH_SECRET` for both
+session signing and encryption. On first start after upgrade, `APP_SECRET`
+falls back to `AUTH_SECRET` so nothing breaks — but `docker compose up`
+now refuses to start unless both are explicitly set. The minimal upgrade
+step is:
+
+1. Add `APP_SECRET=<same value as AUTH_SECRET>` to your `.env`.
+2. `docker compose pull && docker compose up -d`.
+3. From that point on, you can rotate `AUTH_SECRET` freely without
+   touching `APP_SECRET`.
+
+A loud warning is logged at startup if the encryption key appears to
+have changed since stored secrets were encrypted (detected by trying to
+decrypt the LDAP bind password row). The app keeps running so you can
+recover via Settings → LDAP Authentication.
+
+---
+
 ## Features
 
 | Feature | Description |

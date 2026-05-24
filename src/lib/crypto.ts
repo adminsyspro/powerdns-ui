@@ -75,12 +75,17 @@ export function decrypt(encoded: string): string {
 
 
 /**
- * Try to decrypt a known-encrypted row to detect a silent encryption-key change.
+ * Try to decrypt known-encrypted rows to detect a silent encryption-key change.
  *
  * `decrypt()` swallows errors and returns the input verbatim on failure (its
  * "legacy plaintext" fallback), so a healthy decrypt yields a different string
  * than the encrypted input. If they match, the GCM auth tag failed and the
  * stored value is unreadable under the current APP_SECRET / AUTH_SECRET.
+ *
+ * Probes two independent sources so a deployment without LDAP (but with saved
+ * PowerDNS connections) is still covered:
+ *   1. `app_settings.ldap_bind_password`
+ *   2. `server_connections.api_key`
  *
  * Run once at startup (after `initSchema` / `seedDefaultAdmin`). If `ok` is
  * false, log the message at warn level — do not crash, the admin needs the app
@@ -89,40 +94,53 @@ export function decrypt(encoded: string): string {
 export function cryptoSanityCheck(
   db: Database.Database
 ): { ok: boolean; message: string } {
-  const row = db
+  const probes: Array<{ source: string; value: string }> = [];
+
+  const ldap = db
     .prepare(
       "SELECT value FROM app_settings WHERE key = 'ldap_bind_password' AND value != ''"
     )
     .get() as { value: string } | undefined;
+  if (ldap?.value) {
+    probes.push({ source: 'LDAP bind password', value: ldap.value });
+  }
 
-  if (!row || !row.value) {
+  const conn = db
+    .prepare(
+      "SELECT api_key AS value FROM server_connections WHERE api_key != '' LIMIT 1"
+    )
+    .get() as { value: string } | undefined;
+  if (conn?.value) {
+    probes.push({ source: 'PowerDNS server connection', value: conn.value });
+  }
+
+  if (probes.length === 0) {
     return {
       ok: true,
       message: 'No encrypted secrets to verify — skipping crypto sanity check.',
     };
   }
 
-  // Heuristic: an encrypted blob is at least 29 bytes (12 IV + 16 TAG + ≥1 CT)
-  // after base64-decoding. Shorter values are pre-encryption legacy plaintext
-  // and decrypt() returns them as-is, which would otherwise look like failure.
-  const buf = Buffer.from(row.value, 'base64');
-  if (buf.length < 29) {
-    return {
-      ok: true,
-      message: 'Stored bind password looks like legacy plaintext — skipping sanity check.',
-    };
-  }
+  for (const probe of probes) {
+    // Heuristic: an encrypted blob is at least 29 bytes (12 IV + 16 TAG + ≥1 CT)
+    // after base64-decoding. Shorter values are pre-encryption legacy plaintext
+    // and decrypt() returns them as-is, which would otherwise look like failure.
+    const buf = Buffer.from(probe.value, 'base64');
+    if (buf.length < 29) {
+      continue; // legacy plaintext — skip silently, try the next probe
+    }
 
-  const decoded = decrypt(row.value);
-  if (decoded === row.value) {
-    return {
-      ok: false,
-      message:
-        'APP_SECRET (or AUTH_SECRET fallback) appears to have changed since the ' +
-        'LDAP bind password was last encrypted. The setting will be unreadable ' +
-        'until the previous secret value is restored, or the password is re-entered ' +
-        'via Settings → LDAP Authentication.',
-    };
+    const decoded = decrypt(probe.value);
+    if (decoded === probe.value) {
+      return {
+        ok: false,
+        message:
+          `APP_SECRET (or AUTH_SECRET fallback) appears to have changed since ` +
+          `the ${probe.source} was last encrypted. The setting will be unreadable ` +
+          `until the previous secret value is restored, or the affected setting ` +
+          `is re-entered via the Settings UI.`,
+      };
+    }
   }
 
   return { ok: true, message: 'Crypto sanity check passed.' };

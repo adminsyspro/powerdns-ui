@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import type Database from 'better-sqlite3';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -70,4 +71,59 @@ export function decrypt(encoded: string): string {
     // Legacy plaintext value — return as-is
     return encoded;
   }
+}
+
+
+/**
+ * Try to decrypt a known-encrypted row to detect a silent encryption-key change.
+ *
+ * `decrypt()` swallows errors and returns the input verbatim on failure (its
+ * "legacy plaintext" fallback), so a healthy decrypt yields a different string
+ * than the encrypted input. If they match, the GCM auth tag failed and the
+ * stored value is unreadable under the current APP_SECRET / AUTH_SECRET.
+ *
+ * Run once at startup (after `initSchema` / `seedDefaultAdmin`). If `ok` is
+ * false, log the message at warn level — do not crash, the admin needs the app
+ * up to recover via the Settings UI.
+ */
+export function cryptoSanityCheck(
+  db: Database.Database
+): { ok: boolean; message: string } {
+  const row = db
+    .prepare(
+      "SELECT value FROM app_settings WHERE key = 'ldap_bind_password' AND value != ''"
+    )
+    .get() as { value: string } | undefined;
+
+  if (!row || !row.value) {
+    return {
+      ok: true,
+      message: 'No encrypted secrets to verify — skipping crypto sanity check.',
+    };
+  }
+
+  // Heuristic: an encrypted blob is at least 29 bytes (12 IV + 16 TAG + ≥1 CT)
+  // after base64-decoding. Shorter values are pre-encryption legacy plaintext
+  // and decrypt() returns them as-is, which would otherwise look like failure.
+  const buf = Buffer.from(row.value, 'base64');
+  if (buf.length < 29) {
+    return {
+      ok: true,
+      message: 'Stored bind password looks like legacy plaintext — skipping sanity check.',
+    };
+  }
+
+  const decoded = decrypt(row.value);
+  if (decoded === row.value) {
+    return {
+      ok: false,
+      message:
+        'APP_SECRET (or AUTH_SECRET fallback) appears to have changed since the ' +
+        'LDAP bind password was last encrypted. The setting will be unreadable ' +
+        'until the previous secret value is restored, or the password is re-entered ' +
+        'via Settings → LDAP Authentication.',
+    };
+  }
+
+  return { ok: true, message: 'Crypto sanity check passed.' };
 }

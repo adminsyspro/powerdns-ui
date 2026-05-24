@@ -5,7 +5,17 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const secret = process.env.AUTH_SECRET || 'powerdns-ui-default-secret-change-me';
+  // APP_SECRET is the dedicated encryption-key derivation secret, separated
+  // from AUTH_SECRET (which signs session JWTs). Falls back to AUTH_SECRET so
+  // existing single-secret deployments keep working unchanged on first start
+  // after upgrade — operators should then set APP_SECRET explicitly (to the
+  // same value as AUTH_SECRET) to lock in the separation.
+  // `||` (not `??`) so that an accidentally-empty env var falls through to the
+  // next option rather than producing a key derived from the empty string.
+  const secret =
+    process.env.APP_SECRET
+    || process.env.AUTH_SECRET
+    || 'powerdns-ui-default-secret-change-me';
   return scryptSync(secret, 'powerdns-ui-connections', 32);
 }
 

@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
-  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload,
+  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings,
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
+import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,10 +22,10 @@ import { ValidationModal } from '@/components/records/validation-modal';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { ChangesetSubmission } from '@/types/powerdns';
-import type { RRSet, ZoneListItem } from '@/types/powerdns';
+import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
-import { useZone } from '@/hooks/use-pdns';
+import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useActivityLogStore, useAuthStore, usePendingChangesStore } from '@/stores';
 import * as api from '@/lib/api';
@@ -237,6 +238,8 @@ export default function ZoneDetailPage() {
   const auditUser = user?.username || 'unknown';
 
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
+  const { sync } = useZoneSync();
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
   const [recordDialogOpen, setRecordDialogOpen] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<RRSet | undefined>();
@@ -480,6 +483,23 @@ export default function ZoneDetailPage() {
 
   const zoneName = zone?.name || zoneId;
 
+  const handleSaveSettings = async (payload: Partial<Zone>) => {
+    const result = await api.updateZoneProperties(zoneId, payload);
+    if (result.error) {
+      // Thrown so ZoneSettingsDialog surfaces it inline and stays open.
+      throw new Error(result.error);
+    }
+    addLog({
+      action: 'Zone Settings Updated',
+      resource: zoneId,
+      user: auditUser,
+      details: `kind=${payload.kind}`,
+    });
+    // Refresh the SQLite cache (list / ZoneSwitcher / dashboard) AND the detail view.
+    await sync();
+    refetch();
+  };
+
   const handleDeleteZone = async () => {
     const ok = await confirm({
       title: 'Delete zone',
@@ -610,6 +630,9 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={refetch}>
                 <RefreshCw className="mr-2 h-4 w-4" />Refresh
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />Settings
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />Import
               </Button>
@@ -677,6 +700,16 @@ export default function ZoneDetailPage() {
         onBulkDelete={handleBulkDelete}
         onBulkToggle={handleBulkToggle}
       />
+
+      {/* Zone Settings Dialog */}
+      {zone && (
+        <ZoneSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          zone={zone}
+          onSubmit={handleSaveSettings}
+        />
+      )}
 
       {/* Record Form Dialog */}
       <RecordFormDialog

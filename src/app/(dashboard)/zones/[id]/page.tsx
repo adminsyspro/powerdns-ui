@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
-  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings,
+  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings, Send,
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
@@ -240,6 +240,9 @@ export default function ZoneDetailPage() {
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
   const { sync } = useZoneSync();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [notifySent, setNotifySent] = React.useState(false);
+  const notifyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => { if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current); }, []);
   const { confirm, ConfirmDialog } = useConfirm();
   const [recordDialogOpen, setRecordDialogOpen] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<RRSet | undefined>();
@@ -483,6 +486,18 @@ export default function ZoneDetailPage() {
 
   const zoneName = zone?.name || zoneId;
 
+  const handleNotify = async () => {
+    const result = await api.notifyZone(zoneId);
+    if (result.error) {
+      alert(`Error sending NOTIFY: ${result.error}`);
+      return;
+    }
+    addLog({ action: 'NOTIFY Sent', resource: zoneId, user: auditUser, details: '' });
+    if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
+    setNotifySent(true);
+    notifyTimerRef.current = setTimeout(() => setNotifySent(false), 2000);
+  };
+
   const handleSaveSettings = async (payload: Partial<Zone>) => {
     const result = await api.updateZoneProperties(zoneId, payload);
     if (result.error) {
@@ -633,6 +648,16 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                 <Settings className="mr-2 h-4 w-4" />Settings
               </Button>
+              {/* NOTIFY targets replicas — only Master/Slave per design. Native and catalog zones (Producer/Consumer) are intentionally excluded. */}
+              {(zone.kind === 'Master' || zone.kind === 'Slave') && (
+                <Button variant="outline" size="sm" onClick={handleNotify}>
+                  {notifySent ? (
+                    <><Check className="mr-2 h-4 w-4" />Sent</>
+                  ) : (
+                    <><Send className="mr-2 h-4 w-4" />NOTIFY</>
+                  )}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />Import
               </Button>

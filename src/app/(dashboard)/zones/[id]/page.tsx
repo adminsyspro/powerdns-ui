@@ -648,8 +648,8 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                 <Settings className="mr-2 h-4 w-4" />Settings
               </Button>
-              {/* NOTIFY targets replicas — only Master/Slave per design. Native and catalog zones (Producer/Consumer) are intentionally excluded. */}
-              {(zone.kind === 'Master' || zone.kind === 'Slave') && (
+              {/* NOTIFY is an outbound primary→secondary action, so it only applies to Master zones. Slave zones pull from their master via AXFR instead; Native and catalog zones (Producer/Consumer) have no replicas to notify. */}
+              {zone.kind === 'Master' && (
                 <Button variant="outline" size="sm" onClick={handleNotify}>
                   {notifySent ? (
                     <><Check className="mr-2 h-4 w-4" />Sent</>

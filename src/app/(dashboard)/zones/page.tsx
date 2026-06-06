@@ -23,11 +23,23 @@ export default function ZonesPage() {
   const { user } = useAuthStore();
   const { addLog } = useActivityLogStore();
   const auditUser = user?.username || 'unknown';
+  const isAdmin = user?.role === 'Administrator';
   const { sync, isSyncing, syncStatus } = useZoneSync();
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [importDialogOpen, setImportDialogOpen] = React.useState(false);
   const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirm();
+
+  // Groups for filter + create-zone picker
+  const [groups, setGroups] = React.useState<api.GroupSummary[]>([]);
+  const [groupFilter, setGroupFilter] = React.useState('all');
+
+  React.useEffect(() => {
+    fetch('/api/groups')
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: api.GroupSummary[]) => setGroups(data))
+      .catch(() => {});
+  }, []);
 
   // Global search state
   const [globalResults, setGlobalResults] = React.useState<SearchResult[]>([]);
@@ -75,6 +87,15 @@ export default function ZonesPage() {
   const handleDnssecChange = (v: string) => { setDnssec(v); setPage(1); };
   const handleSortChange = (col: string, order: 'asc' | 'desc') => { setSortBy(col); setSortOrder(order); setPage(1); };
   const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(1); };
+  const handleGroupFilterChange = (v: string) => { setGroupFilter(v); };
+
+  // Client-side group filter applied on top of the server-fetched page
+  const groupFilteredZones = React.useMemo(() => {
+    const items = data?.items || [];
+    if (groupFilter === 'all') return items;
+    if (groupFilter === '__orphan__') return items.filter((z) => !z.account);
+    return items.filter((z) => z.account === groupFilter);
+  }, [data?.items, groupFilter]);
 
   const handleRefresh = async () => {
     await sync();
@@ -296,16 +317,16 @@ export default function ZonesPage() {
       )}
 
       <ZonesTable
-        zones={data?.items || []}
+        zones={groupFilteredZones}
         isLoading={isLoading}
         onDelete={handleDelete}
         onNotify={handleNotify}
         onExport={handleExport}
         serverPagination
-        total={data?.total}
+        total={groupFilter === 'all' ? data?.total : groupFilteredZones.length}
         page={data?.page || page}
         pageSize={data?.pageSize || pageSize}
-        totalPages={data?.totalPages || 1}
+        totalPages={groupFilter === 'all' ? (data?.totalPages || 1) : 1}
         onPageChange={setPage}
         onPageSizeChange={handlePageSizeChange}
         onSearchChange={handleSearchChange}
@@ -317,6 +338,10 @@ export default function ZonesPage() {
         searchValue={search}
         kindValue={kind || 'all'}
         dnssecValue={dnssec || 'all'}
+        groups={groups}
+        groupValue={groupFilter}
+        onGroupChange={handleGroupFilterChange}
+        isAdmin={isAdmin}
         onGlobalSearch={handleGlobalSearch}
         isGlobalSearching={isGlobalSearching}
         onBulkDelete={handleBulkDelete}
@@ -336,6 +361,8 @@ export default function ZonesPage() {
               open={createDialogOpen}
               onOpenChange={setCreateDialogOpen}
               onSubmit={handleCreateZone}
+              groups={groups}
+              isAdmin={isAdmin}
               trigger={
                 <Button size="sm"><Plus className="mr-2 h-4 w-4" />New Zone</Button>
               }

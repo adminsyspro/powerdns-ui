@@ -359,6 +359,23 @@ export async function fetchDomainLookup(domain: string) {
   return apiRequest<DomainLookup>(`/api/pdns/lookup?domain=${encodeURIComponent(domain)}`);
 }
 
+// ---- Groups ----
+
+export interface GroupSummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  memberCount: number;
+  zoneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchGroups() {
+  return apiRequest<GroupSummary[]>('/api/groups');
+}
+
 // ---- Change History ----
 
 import type { ChangesetSubmission } from '@/types/powerdns';

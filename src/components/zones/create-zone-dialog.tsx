@@ -53,6 +53,8 @@ interface CreateZoneDialogProps {
   onOpenChange?: (open: boolean) => void;
   onSubmit?: (data: CreateZoneFormData) => Promise<void>;
   trigger?: React.ReactNode;
+  groups?: { slug: string; name: string }[];
+  isAdmin?: boolean;
 }
 
 export function CreateZoneDialog({
@@ -60,6 +62,8 @@ export function CreateZoneDialog({
   onOpenChange,
   onSubmit,
   trigger,
+  groups,
+  isAdmin = false,
 }: CreateZoneDialogProps) {
   const { templates } = useTemplatesStore();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -214,15 +218,40 @@ export function CreateZoneDialog({
               </Select>
             </div>
 
-            {/* Account */}
-            <div className="space-y-2">
-              <Label htmlFor="account">Account (Optional)</Label>
-              <Input
-                id="account"
-                placeholder="Account name"
-                {...form.register('account')}
-              />
-            </div>
+            {/* Group / Account */}
+            {groups && groups.length > 0 ? (
+              <div className="space-y-2">
+                <Label htmlFor="account">
+                  Group{!isAdmin && <span className="text-destructive ml-0.5">*</span>}
+                </Label>
+                <Select
+                  value={watch('account') || (isAdmin ? '__orphan__' : '')}
+                  onValueChange={(value) => setValue('account', value === '__orphan__' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isAdmin && <SelectItem value="__orphan__">No group (orphan)</SelectItem>}
+                    {groups.map((g) => (
+                      <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!isAdmin && !watch('account') && (
+                  <p className="text-sm text-destructive">Group is required</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="account">Account (Optional)</Label>
+                <Input
+                  id="account"
+                  placeholder="Account name"
+                  {...form.register('account')}
+                />
+              </div>
+            )}
 
             {/* SOA-EDIT-API */}
             <div className="space-y-2">
@@ -337,7 +366,10 @@ export function CreateZoneDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              disabled={isSubmitting || (!isAdmin && groups && groups.length > 0 && !watch('account'))}
+            >
               {isSubmitting ? 'Creating...' : 'Create Zone'}
             </Button>
           </DialogFooter>

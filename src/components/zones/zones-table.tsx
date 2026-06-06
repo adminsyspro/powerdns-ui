@@ -69,6 +69,11 @@ interface ZonesTableProps {
   // Global search callback
   onGlobalSearch?: (query: string) => void;
   isGlobalSearching?: boolean;
+  // Group filter (client-side)
+  groups?: { slug: string; name: string }[];
+  groupValue?: string;
+  onGroupChange?: (slug: string) => void;
+  isAdmin?: boolean;
   // Action buttons slot
   actions?: React.ReactNode;
   // Selection
@@ -100,6 +105,10 @@ export function ZonesTable({
   serverPagination = false,
   onGlobalSearch,
   isGlobalSearching = false,
+  groups,
+  groupValue = 'all',
+  onGroupChange,
+  isAdmin = false,
   actions,
   onSelectionChange,
   onBulkDelete,
@@ -274,6 +283,20 @@ export function ZonesTable({
             <SelectItem value="disabled">DNSSEC Disabled</SelectItem>
           </SelectContent>
         </Select>
+        {groups && groups.length > 0 && onGroupChange && (
+          <Select value={groupValue} onValueChange={onGroupChange}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="All groups" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All groups</SelectItem>
+              {isAdmin && <SelectItem value="__orphan__">Orphan (no group)</SelectItem>}
+              {groups.map((g) => (
+                <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="text-sm text-muted-foreground whitespace-nowrap">
           {displayTotal.toLocaleString()} zone{displayTotal !== 1 ? 's' : ''}
         </div>

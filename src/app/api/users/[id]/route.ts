@@ -123,7 +123,13 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       }
     }
 
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    // Clean up the user's group memberships too — foreign keys are not enforced
+    // in this DB, so without this the user_groups rows would orphan and inflate
+    // group member counts.
+    db.transaction(() => {
+      db.prepare('DELETE FROM user_groups WHERE user_id = ?').run(id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    })();
     return NextResponse.json({ success: true });
   } catch (e) {
     return authzErrorResponse(e);

@@ -105,16 +105,40 @@ export function deleteGroup(slug: string): { deleted: boolean; zoneCount: number
   if (!row) return { deleted: false, zoneCount: 0 };
   const zoneCount = groupZoneCount(slug);
   const db = getDb();
+  const memberIds = (
+    db.prepare('SELECT DISTINCT user_id FROM user_groups WHERE group_id = ?').all(row.id) as Array<{
+      user_id: string;
+    }>
+  ).map((r) => r.user_id);
   db.transaction(() => {
     db.prepare('DELETE FROM user_groups WHERE group_id = ?').run(row.id);
     db.prepare('DELETE FROM "groups" WHERE id = ?').run(row.id);
+    bumpSessionVersions(db, memberIds); // auto-revoke: members lose this group on next request
   })();
   return { deleted: true, zoneCount };
 }
 
+/** Force-revoke active sessions for the given users by bumping session_version,
+ *  so a group-membership change takes effect on their next request (the user
+ *  must re-login to pick up the new groupSlugs snapshot). No-op for empty list. */
+function bumpSessionVersions(db: ReturnType<typeof getDb>, userIds: string[]): void {
+  if (userIds.length === 0) return;
+  const stmt = db.prepare(
+    'UPDATE users SET session_version = session_version + 1, updated_at = unixepoch() WHERE id = ?'
+  );
+  for (const id of userIds) stmt.run(id);
+}
+
+/** Counts only LIVE users — joins through `users` so orphan user_groups rows
+ *  (left behind if a user is deleted) do not inflate the count vs listMembers. */
 export function groupMemberCount(groupId: string): number {
   const r = getDb()
-    .prepare('SELECT COUNT(DISTINCT user_id) AS c FROM user_groups WHERE group_id = ?')
+    .prepare(
+      `SELECT COUNT(DISTINCT ug.user_id) AS c
+         FROM user_groups ug
+         JOIN users u ON u.id = ug.user_id
+        WHERE ug.group_id = ?`
+    )
     .get(groupId) as { c: number };
   return r.c;
 }
@@ -136,13 +160,15 @@ export function listMembers(groupId: string): GroupMember[] {
     .all(groupId) as GroupMember[];
 }
 
-/** Add a manual membership. Idempotent on the (user, group, 'manual') row. */
+/** Add a manual membership. Idempotent on the (user, group, 'manual') row.
+ *  Bumps the user's session_version only when a row is actually inserted, so
+ *  the new group takes effect on their next request (auto-revoke/grant). */
 export function addManualMember(groupId: string, userId: string): void {
-  getDb()
-    .prepare(
-      `INSERT OR IGNORE INTO user_groups (user_id, group_id, source) VALUES (?, ?, 'manual')`
-    )
+  const db = getDb();
+  const res = db
+    .prepare(`INSERT OR IGNORE INTO user_groups (user_id, group_id, source) VALUES (?, ?, 'manual')`)
     .run(userId, groupId);
+  if (res.changes > 0) bumpSessionVersions(db, [userId]);
 }
 
 /**
@@ -164,10 +190,13 @@ export function removeManualMember(
     const conflictSource = rows[0].source;
     return { removed: false, conflictSource };
   }
-  db.prepare(`DELETE FROM user_groups WHERE group_id = ? AND user_id = ? AND source = 'manual'`).run(
-    groupId,
-    userId
-  );
+  db.transaction(() => {
+    db.prepare(`DELETE FROM user_groups WHERE group_id = ? AND user_id = ? AND source = 'manual'`).run(
+      groupId,
+      userId
+    );
+    bumpSessionVersions(db, [userId]); // auto-revoke: removed access takes effect next request
+  })();
   return { removed: true };
 }
 
@@ -204,6 +233,7 @@ export function replaceManualUserGroups(userId: string, slugs: string[]): string
         applied.push(slug);
       }
     }
+    bumpSessionVersions(db, [userId]); // auto-revoke: membership set changed → re-sync next request
   })();
   return applied;
 }

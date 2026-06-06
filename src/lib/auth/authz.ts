@@ -70,6 +70,17 @@ export function requireRole(ctx: AuthContext | null, ...roles: UserRole[]): Auth
   return c;
 }
 
+/**
+ * One-call admin gate for route handlers: extracts the AuthContext from the
+ * middleware-set headers (which also enforces the session_version force-logout
+ * check against the DB) and requires the Administrator role. Throws AuthzError
+ * (401 if unauthenticated/revoked, 403 if not an Administrator). Use in a
+ * try/catch with authzErrorResponse(e).
+ */
+export function requireAdmin(req: NextRequest): AuthContext {
+  return requireRole(getAuthContextFromHeaders(req), 'Administrator');
+}
+
 /** Administrators see every zone regardless of account; everyone else is group-scoped. */
 export function canSeeAllZones(role: UserRole): boolean {
   return role === 'Administrator';

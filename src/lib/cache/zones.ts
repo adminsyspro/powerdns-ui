@@ -243,6 +243,15 @@ export function getZoneAccountByIdAndServer(serverUrl: string, zoneId: string): 
   return row ? row.account : null;
 }
 
+/** Update the cached `account` for a zone after it is reassigned, so RBAC checks
+ *  (which read the cache) don't use a stale account until the next sync. No-op if
+ *  the zone isn't cached. */
+export function setZoneAccountInCache(serverUrl: string, zoneId: string, account: string): void {
+  getDb()
+    .prepare('UPDATE zones SET account = ? WHERE server_url = ? AND id = ?')
+    .run(account, normalizeUrl(serverUrl), zoneId);
+}
+
 // ---- Sync Meta ----
 
 export function getSyncMeta(serverUrl: string): SyncResult | null {

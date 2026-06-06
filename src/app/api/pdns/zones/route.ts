@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const ctx = getAuthContextFromHeaders(request);
-    requireCreateInGroup(ctx, String(body.account ?? ''));
+    const account = typeof body.account === 'string' ? body.account.trim() : '';
+    requireCreateInGroup(ctx, account);
+    body.account = account; // forward exactly the authorized account (prevents type-confusion)
 
     const conn = getConnectionFromRequest(request);
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones`, {

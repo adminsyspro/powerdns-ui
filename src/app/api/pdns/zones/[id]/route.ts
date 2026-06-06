@@ -4,7 +4,7 @@ import {
   getAuthContextFromHeaders, requireAuth, requireZoneAccess, requireRole,
   isZoneLevelPatch, AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
-import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -95,6 +95,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+    if (response.ok && body.account !== undefined && String(body.account) !== (account ?? '')) {
+      setZoneAccountInCache(conn.url, id, String(body.account));
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

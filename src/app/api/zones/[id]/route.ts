@@ -3,7 +3,7 @@ import {
   getAuthContextFromHeaders, requireAuth, requireZoneAccess, requireRole,
   isZoneLevelPatch, AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
-import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 
 const PDNS_API_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 const PDNS_API_KEY = process.env.PDNS_API_KEY || '';
@@ -129,6 +129,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       method: 'PUT',
       body: JSON.stringify(body),
     });
+
+    if (response.ok && body.account !== undefined && String(body.account) !== (account ?? '')) {
+      setZoneAccountInCache(PDNS_API_URL, zoneId, String(body.account));
+    }
 
     if (response.status === 204) {
       return new NextResponse(null, { status: 204 });

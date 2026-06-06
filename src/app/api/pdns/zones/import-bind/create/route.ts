@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
     }
 
     const ctx = getAuthContextFromHeaders(request);
-    requireCreateInGroup(ctx, String(body.account ?? ''));
+    const account = typeof body.account === 'string' ? body.account.trim() : '';
+    requireCreateInGroup(ctx, account);
+    body.account = account; // forward exactly the authorized account (prevents type-confusion)
 
     if (typeof body.content !== 'string') {
       return NextResponse.json({ error: 'content must be a string' }, { status: 400 });
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
       rrsets: preview.rrsets,
     };
     if (Array.isArray(body.masters)) pdnsBody.masters = body.masters;
-    if (typeof body.account === 'string') pdnsBody.account = body.account;
+    pdnsBody.account = account; // always forward the validated + authorized account
     if (typeof body.dnssec === 'boolean') pdnsBody.dnssec = body.dnssec;
     if (typeof body.soa_edit_api === 'string') pdnsBody.soa_edit_api = body.soa_edit_api;
 

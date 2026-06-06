@@ -6,7 +6,7 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 const COOKIE_NAME = 'pdns-session';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers'];
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers', '/api/auth/oidc/login', '/api/auth/oidc/callback'];
 const ADMIN_PATHS = ['/users', '/settings', '/proxy', '/groups'];
 // Proxy paths use X-API-Key auth, not JWT — handled in route handlers
 const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];

@@ -80,21 +80,44 @@ function initSchema(db: Database.Database) {
       email           TEXT NOT NULL,
       firstname       TEXT DEFAULT '',
       lastname        TEXT DEFAULT '',
-      role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','User')),
+      role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','User','Customer')),
       active          INTEGER NOT NULL DEFAULT 1,
       password_hash   TEXT DEFAULT NULL,
       avatar          TEXT DEFAULT NULL,
-      auth_type       TEXT NOT NULL DEFAULT 'local' CHECK(auth_type IN ('local','ldap')),
+      auth_type       TEXT NOT NULL DEFAULT 'local' CHECK(auth_type IN ('local','ldap','oidc')),
+      oidc_subject    TEXT DEFAULT NULL,
+      session_version INTEGER NOT NULL DEFAULT 0,
       created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS "groups" (
+      id          TEXT PRIMARY KEY,
+      slug        TEXT NOT NULL UNIQUE,
+      name        TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS user_groups (
+      user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      group_id    TEXT NOT NULL REFERENCES "groups"(id) ON DELETE CASCADE,
+      source      TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ldap','oidc')),
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (user_id, group_id, source)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_groups_user  ON user_groups(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_groups_group ON user_groups(group_id);
 
     -- Proxy: environments (API consumers with token-based auth)
     CREATE TABLE IF NOT EXISTS proxy_environments (
@@ -182,6 +205,44 @@ function initSchema(db: Database.Database) {
   const logColNames = logCols.map((c) => c.name);
   if (!logColNames.includes('request_body')) {
     db.exec('ALTER TABLE proxy_logs ADD COLUMN request_body TEXT DEFAULT NULL');
+  }
+
+  // Migration: extend users.role CHECK to include 'Customer', users.auth_type
+  // CHECK to include 'oidc', and add oidc_subject + session_version columns.
+  // SQLite cannot ALTER a CHECK in place, so rebuild the table when the stored
+  // CREATE statement does not yet mention 'Customer'.
+  const usersSql =
+    (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as
+      | { sql: string }
+      | undefined)?.sql ?? '';
+  if (!usersSql.includes("'Customer'")) {
+    db.exec(`
+      DROP TABLE IF EXISTS users_new;
+      CREATE TABLE users_new (
+        id              TEXT PRIMARY KEY,
+        username        TEXT NOT NULL UNIQUE,
+        email           TEXT NOT NULL,
+        firstname       TEXT DEFAULT '',
+        lastname        TEXT DEFAULT '',
+        role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','User','Customer')),
+        active          INTEGER NOT NULL DEFAULT 1,
+        password_hash   TEXT DEFAULT NULL,
+        avatar          TEXT DEFAULT NULL,
+        auth_type       TEXT NOT NULL DEFAULT 'local' CHECK(auth_type IN ('local','ldap','oidc')),
+        oidc_subject    TEXT DEFAULT NULL,
+        session_version INTEGER NOT NULL DEFAULT 0,
+        created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO users_new
+        (id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, oidc_subject, session_version, created_at, updated_at)
+        SELECT id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, NULL, 0, created_at, updated_at
+          FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
+    `);
   }
 
   seedDefaultAdmin(db);

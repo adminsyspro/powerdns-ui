@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isOperatorOrAdmin, isAdmin } from '@/lib/auth/session';
+import {
+  getAuthContextFromHeaders, requireAuth, requireZoneAccess, requireRole,
+  isZoneLevelPatch, AuthzError, authzErrorResponse,
+} from '@/lib/auth/authz';
+import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
 const PDNS_API_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 const PDNS_API_KEY = process.env.PDNS_API_KEY || '';
@@ -9,7 +13,7 @@ async function pdnsRequest(
   options: RequestInit = {}
 ): Promise<Response> {
   const url = `${PDNS_API_URL}/api/v1${endpoint}`;
-  
+
   return fetch(url, {
     ...options,
     headers: {
@@ -20,46 +24,54 @@ async function pdnsRequest(
   });
 }
 
+// SECURITY: authorize against the SAME PowerDNS server the mutation targets. The
+// handlers below mutate via the module-level helper that uses process.env.PDNS_API_URL —
+// NOT getConnectionFromRequest() (which honours a client-supplied x-pdns-url header and
+// could point the authz lookup at a different cached server where the caller has a
+// same-id zone in one of their groups, while the write still lands on PDNS_API_URL).
+function zoneAccount(zoneId: string): string | null {
+  return getZoneAccountByIdAndServer(PDNS_API_URL, zoneId);
+}
+
 // GET /api/zones/[id] - Get zone details with records and comments
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const { id: zoneId } = await params;
 
   try {
     // Fetch zone with RRsets (includes comments)
     const response = await pdnsRequest(`/servers/localhost/zones/${zoneId}?rrsets=true`);
     const data = await response.json();
-    
+
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status });
     }
 
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+    requireZoneAccess(ctx, { account: (data as { account?: string }).account ?? '' }, 'read');
+
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching zone:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch zone' },
-      { status: 500 }
-    );
+    return authzErrorResponse(error);
   }
 }
 
 // PATCH /api/zones/[id] - Update zone records (with comments support)
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!isOperatorOrAdmin(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   const { id: zoneId } = await params;
 
   try {
     const body = await request.json();
-    
+
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+    const account = zoneAccount(zoneId);
+    if (account === null && ctx.role !== 'Administrator') {
+      throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
+    }
+    requireZoneAccess(ctx, { account: account ?? '' }, 'write-records');
+    if (ctx.role === 'Customer' && Array.isArray(body.rrsets) && isZoneLevelPatch(body.rrsets, zoneId)) {
+      throw new AuthzError(403, 'Customers cannot modify zone-level records (SOA / apex NS / DNSSEC)');
+    }
+
     // Body should contain { rrsets: [...] }
     // Each RRset can include comments:
     // {
@@ -83,26 +95,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('Error updating zone:', error);
-    return NextResponse.json(
-      { error: 'Failed to update zone' },
-      { status: 500 }
-    );
+    return authzErrorResponse(error);
   }
 }
 
 // PUT /api/zones/[id] - Update zone properties
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!isOperatorOrAdmin(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   const { id: zoneId } = await params;
 
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+    const account = zoneAccount(zoneId);
+    if (account === null && ctx.role !== 'Administrator') {
+      throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
+    }
+    requireZoneAccess(ctx, { account: account ?? '' }, 'write-zone');
+
     const body = await request.json();
-    
+
     const response = await pdnsRequest(`/servers/localhost/zones/${zoneId}`, {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -115,24 +125,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('Error updating zone:', error);
-    return NextResponse.json(
-      { error: 'Failed to update zone' },
-      { status: 500 }
-    );
+    return authzErrorResponse(error);
   }
 }
 
 // DELETE /api/zones/[id] - Delete zone
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
-  if (!isAdmin(session)) {
-    return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
-  }
-
   const { id: zoneId } = await params;
 
   try {
+    requireRole(getAuthContextFromHeaders(request), 'Administrator');
+
     const response = await pdnsRequest(`/servers/localhost/zones/${zoneId}`, {
       method: 'DELETE',
     });
@@ -144,10 +147,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('Error deleting zone:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete zone' },
-      { status: 500 }
-    );
+    return authzErrorResponse(error);
   }
 }

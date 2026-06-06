@@ -110,13 +110,13 @@ export function getHistory(
   return { items, total, page, pageSize, totalPages };
 }
 
-export function getHistoryEntry(id: string): ChangesetSubmission | null {
+export function getHistoryEntry(id: string): (ChangesetSubmission & { serverUrl: string }) | null {
   const db = getDb();
   const row = db.prepare(`
-    SELECT id, zone_id, zone_name, changes_json, reason, user, submitted_at, status, error_message
+    SELECT id, server_url, zone_id, zone_name, changes_json, reason, user, submitted_at, status, error_message
     FROM change_history WHERE id = ?
   `).get(id) as {
-    id: string; zone_id: string; zone_name: string; changes_json: string;
+    id: string; server_url: string; zone_id: string; zone_name: string; changes_json: string;
     reason: string; user: string; submitted_at: number; status: string; error_message: string | null;
   } | undefined;
 
@@ -124,6 +124,7 @@ export function getHistoryEntry(id: string): ChangesetSubmission | null {
 
   return {
     id: row.id,
+    serverUrl: row.server_url,
     zoneId: row.zone_id,
     zoneName: row.zone_name,
     changes: JSON.parse(row.changes_json),

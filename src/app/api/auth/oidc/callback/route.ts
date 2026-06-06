@@ -97,8 +97,9 @@ export async function GET(request: NextRequest) {
     if (!row) {
       const byEmail = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as UserRow | undefined;
       if (byEmail) {
-        if (byEmail.auth_type !== 'oidc') {
-          // an existing local/ldap account with this email — refuse silent hijack
+        // An existing local/ldap account, OR an existing OIDC account bound to a
+        // DIFFERENT subject, must not be silently taken over by email match.
+        if (byEmail.auth_type !== 'oidc' || (byEmail.oidc_subject && byEmail.oidc_subject !== sub)) {
           return clearFlowCookies(loginError(request, 'email_conflict'));
         }
         row = byEmail;
@@ -113,6 +114,10 @@ export async function GET(request: NextRequest) {
       }
       userId = row.id;
       username = row.username;
+      // Revoke stale sessions when the IdP demotes/promotes the user's role.
+      if (row.role !== role) {
+        db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?').run(userId);
+      }
       // IdP is source of truth for these on each login (active row only)
       db.prepare(
         `UPDATE users SET email = ?, firstname = ?, lastname = ?, role = ?, oidc_subject = ?, auth_type = 'oidc', updated_at = unixepoch() WHERE id = ?`

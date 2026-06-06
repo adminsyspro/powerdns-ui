@@ -61,7 +61,7 @@ function LoginContent() {
             forceSsoRedirect: data.oidc.forceSsoRedirect ?? false,
           };
           setOidcProvider(oidc);
-          if (oidc.forceSsoRedirect && !isLocalOverride) {
+          if (oidc.forceSsoRedirect && !isLocalOverride && !errorParam) {
             window.location.href = '/api/auth/oidc/login';
           }
         }

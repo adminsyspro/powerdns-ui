@@ -177,6 +177,7 @@ export function saveOidcConfig(input: OidcSaveInput): void {
   );
   setSetting('oidc_show_local_login', showLocalLogin ? 'true' : 'false');
   setSetting('oidc_force_sso_redirect', forceSsoRedirect ? 'true' : 'false');
+  cachedConfig = null;
 }
 
 /** Accept either a JSON string or an object for the mapping inputs. */
@@ -196,6 +197,7 @@ export function extractGroupsFromClaim(claim: unknown): string[] {
 /** First IdP group that maps to a valid role wins; else the configured default. */
 export function resolveOidcRole(groups: string[], cfg: OidcConfig): UserRole {
   for (const g of groups) {
+    if (!Object.prototype.hasOwnProperty.call(cfg.groupRoleMapping, g)) continue;
     const mapped = cfg.groupRoleMapping[g];
     if (mapped && VALID_ROLES.includes(mapped as UserRole)) return mapped as UserRole;
   }
@@ -206,8 +208,9 @@ export function resolveOidcRole(groups: string[], cfg: OidcConfig): UserRole {
 export function resolveOidcAppGroups(groups: string[], cfg: OidcConfig): string[] {
   const out = new Set<string>();
   for (const g of groups) {
+    if (!Object.prototype.hasOwnProperty.call(cfg.groupAppGroupsMapping, g)) continue;
     const slugs = cfg.groupAppGroupsMapping[g];
-    if (slugs) for (const s of slugs) out.add(s);
+    if (Array.isArray(slugs)) for (const s of slugs) out.add(s);
   }
   return [...out];
 }

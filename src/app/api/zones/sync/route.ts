@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest, pdnsProxy } from '@/lib/pdns-proxy';
 import { syncZonesToCache, getSyncMeta } from '@/lib/cache/zones';
+import { getAuthContextFromHeaders, requireRole, authzErrorResponse } from '@/lib/auth/authz';
 
 // POST /api/zones/sync - Trigger a full sync from PowerDNS to cache
 export async function POST(request: NextRequest) {
   try {
+    requireRole(getAuthContextFromHeaders(request), 'Administrator');
+
     const conn = getConnectionFromRequest(request);
 
     // Fetch all zones from PowerDNS
@@ -24,15 +27,16 @@ export async function POST(request: NextRequest) {
     const result = syncZonesToCache(conn.url, zones);
 
     return NextResponse.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return authzErrorResponse(e);
   }
 }
 
 // GET /api/zones/sync - Get sync status
 export async function GET(request: NextRequest) {
   try {
+    requireRole(getAuthContextFromHeaders(request), 'Administrator', 'Operator');
+
     const conn = getConnectionFromRequest(request);
     const meta = getSyncMeta(conn.url);
 
@@ -45,8 +49,7 @@ export async function GET(request: NextRequest) {
       needsSync: false,
       age: Date.now() - meta.lastSyncAt,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return authzErrorResponse(e);
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isOperatorOrAdmin } from '@/lib/auth/session';
+import { getAuthContextFromHeaders, requireAuth, requireCreateInGroup, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 
 const PDNS_API_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 const PDNS_API_KEY = process.env.PDNS_API_KEY || '';
@@ -9,7 +9,7 @@ async function pdnsRequest(
   options: RequestInit = {}
 ): Promise<Response> {
   const url = `${PDNS_API_URL}/api/v1${endpoint}`;
-  
+
   return fetch(url, {
     ...options,
     headers: {
@@ -22,56 +22,47 @@ async function pdnsRequest(
 
 // GET /api/zones - List all zones
 export async function GET(request: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+
     const response = await pdnsRequest('/servers/localhost/zones');
     const data = await response.json();
-    
+
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Error fetching zones:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch zones' },
-      { status: 500 }
-    );
+    const visible = canSeeAllZones(ctx.role)
+      ? data
+      : (data as Array<{ account?: string }>).filter((z) => z.account && ctx.groupSlugs.includes(z.account));
+
+    return NextResponse.json(visible);
+  } catch (e) {
+    return authzErrorResponse(e);
   }
 }
 
 // POST /api/zones - Create a new zone
 export async function POST(request: NextRequest) {
-  const session = await getSession();
-  if (!isOperatorOrAdmin(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   try {
     const body = await request.json();
-    
+
+    const ctx = getAuthContextFromHeaders(request);
+    requireCreateInGroup(ctx, String(body.account ?? ''));
+
     const response = await pdnsRequest('/servers/localhost/zones', {
       method: 'POST',
       body: JSON.stringify(body),
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status });
     }
 
     return NextResponse.json(data, { status: 201 });
-  } catch (error) {
-    console.error('Error creating zone:', error);
-    return NextResponse.json(
-      { error: 'Failed to create zone' },
-      { status: 500 }
-    );
+  } catch (e) {
+    return authzErrorResponse(e);
   }
 }

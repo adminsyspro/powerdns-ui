@@ -38,7 +38,11 @@ export interface PaginatedHistory {
   totalPages: number;
 }
 
-export function getHistory(serverUrl: string, params: HistoryQuery = {}): PaginatedHistory {
+export function getHistory(
+  serverUrl: string,
+  params: HistoryQuery = {},
+  allowedAccounts?: string[]
+): PaginatedHistory {
   const db = getDb();
   const key = normalizeUrl(serverUrl);
   const page = Math.max(1, params.page || 1);
@@ -50,6 +54,21 @@ export function getHistory(serverUrl: string, params: HistoryQuery = {}): Pagina
   if (params.zoneId) {
     conditions.push('zone_id = ?');
     values.push(params.zoneId);
+  }
+
+  // RBAC scoping: restrict to history of zones whose account is allowed. Uses an
+  // EXISTS subquery joining the zones cache on (server_url, zone_id) so the
+  // existing SELECT shape is unchanged. undefined = unrestricted (Administrator).
+  if (allowedAccounts) {
+    if (allowedAccounts.length === 0) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+    conditions.push(
+      `EXISTS (SELECT 1 FROM zones z WHERE z.server_url = change_history.server_url
+                AND z.id = change_history.zone_id
+                AND z.account IN (${allowedAccounts.map(() => '?').join(',')}))`
+    );
+    values.push(...allowedAccounts);
   }
 
   const where = conditions.join(' AND ');

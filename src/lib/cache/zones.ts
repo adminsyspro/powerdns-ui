@@ -98,7 +98,11 @@ export interface PaginatedZones {
 
 const ALLOWED_SORT_COLUMNS = new Set(['name', 'kind', 'serial', 'edited_serial', 'account', 'last_check', 'dnssec']);
 
-export function getCachedZones(serverUrl: string, params: CachedZonesParams = {}): PaginatedZones {
+export function getCachedZones(
+  serverUrl: string,
+  params: CachedZonesParams = {},
+  allowedAccounts?: string[]
+): PaginatedZones {
   const db = getDb();
   const key = normalizeUrl(serverUrl);
   const page = Math.max(1, params.page || 1);
@@ -123,6 +127,16 @@ export function getCachedZones(serverUrl: string, params: CachedZonesParams = {}
     conditions.push('dnssec = 1');
   } else if (params.dnssec === 'disabled') {
     conditions.push('dnssec = 0');
+  }
+
+  // RBAC scoping: undefined = unrestricted (Administrator). An empty array means
+  // a non-admin with no groups — they can see nothing.
+  if (allowedAccounts) {
+    if (allowedAccounts.length === 0) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+    conditions.push(`account IN (${allowedAccounts.map(() => '?').join(',')})`);
+    values.push(...allowedAccounts);
   }
 
   const where = conditions.join(' AND ');
@@ -187,9 +201,19 @@ export interface ZoneStats {
   dnssecEnabled: number;
 }
 
-export function getCachedZoneStats(serverUrl: string): ZoneStats {
+export function getCachedZoneStats(serverUrl: string, allowedAccounts?: string[]): ZoneStats {
   const db = getDb();
   const key = normalizeUrl(serverUrl);
+
+  const empty: ZoneStats = { total: 0, native: 0, master: 0, slave: 0, producer: 0, consumer: 0, dnssecEnabled: 0 };
+  if (allowedAccounts && allowedAccounts.length === 0) return empty;
+
+  const values: (string | number)[] = [key];
+  let accountClause = '';
+  if (allowedAccounts) {
+    accountClause = ` AND account IN (${allowedAccounts.map(() => '?').join(',')})`;
+    values.push(...allowedAccounts);
+  }
 
   const row = db.prepare(`
     SELECT
@@ -200,10 +224,23 @@ export function getCachedZoneStats(serverUrl: string): ZoneStats {
       SUM(CASE WHEN kind = 'Producer' THEN 1 ELSE 0 END) as producer,
       SUM(CASE WHEN kind = 'Consumer' THEN 1 ELSE 0 END) as consumer,
       SUM(CASE WHEN dnssec = 1 THEN 1 ELSE 0 END) as dnssecEnabled
-    FROM zones WHERE server_url = ?
-  `).get(key) as ZoneStats;
+    FROM zones WHERE server_url = ?${accountClause}
+  `).get(...values) as ZoneStats;
 
   return row;
+}
+
+/**
+ * Look up a single zone's `account` from the cache by (server_url, id).
+ * Returns the account string ('' for an orphan zone) or null if the zone is
+ * not cached. Callers treat null as "account unknown" — for RBAC that means a
+ * non-admin is denied (safe default) and an admin proceeds.
+ */
+export function getZoneAccountByIdAndServer(serverUrl: string, zoneId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT account FROM zones WHERE server_url = ? AND id = ?')
+    .get(normalizeUrl(serverUrl), zoneId) as { account: string } | undefined;
+  return row ? row.account : null;
 }
 
 // ---- Sync Meta ----

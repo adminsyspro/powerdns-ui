@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getLastChangeForRRSet } from '@/lib/cache/history';
+import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, authzErrorResponse } from '@/lib/auth/authz';
+import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+
+const PDNS_SERVER_URL = process.env.PDNS_API_URL ?? '';
 
 // GET /api/zones/history/rrset?zoneId=example.com.&rrsetKey=www.example.com.::A
 export async function GET(request: NextRequest) {
@@ -14,6 +18,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'zoneId and rrsetKey are required' }, { status: 400 });
     }
 
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+    const account = getZoneAccountByIdAndServer(PDNS_SERVER_URL, zoneId);
+    requireZoneAccess(ctx, { account: account ?? '' }, 'read');
+
     const result = getLastChangeForRRSet(conn.url, zoneId, rrsetKey);
     if (!result) {
       return NextResponse.json({ found: false });
@@ -21,7 +29,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ found: true, ...result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return authzErrorResponse(error);
   }
 }

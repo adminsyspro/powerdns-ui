@@ -17,6 +17,26 @@ import * as api from '@/lib/api';
 import { normalizeNameserverPools } from '@/lib/ns-pools';
 import type { NameserverPool } from '@/lib/ns-pools';
 
+interface OidcConfig {
+  enabled: boolean;
+  providerName: string;
+  issuerUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes: string;
+  claimEmail: string;
+  claimName: string;
+  claimGroups: string;
+  autoProvision: boolean;
+  defaultRole: string;
+  requireAppGroupMatch: boolean;
+  groupRoleMapping: string;
+  groupAppGroupsMapping: string;
+  showLocalLogin: boolean;
+  forceSsoRedirect: boolean;
+  hasClientSecret?: boolean;
+}
+
 export default function SettingsPage() {
   const { theme, setTheme, recordsPerPage, setRecordsPerPage, zonesPerPage, setZonesPerPage, showDisabledRecords, setShowDisabledRecords, confirmDeletion, setConfirmDeletion, compactMode, setCompactMode } = useUIPreferencesStore();
 
@@ -32,6 +52,33 @@ export default function SettingsPage() {
   });
   const [ldapSaving, setLdapSaving] = React.useState(false);
   const [ldapMessage, setLdapMessage] = React.useState('');
+
+  const [oidcConfig, setOidcConfig] = React.useState<OidcConfig>({
+    enabled: false,
+    providerName: '',
+    issuerUrl: '',
+    clientId: '',
+    clientSecret: '',
+    scopes: 'openid profile email groups',
+    claimEmail: 'email',
+    claimName: 'name',
+    claimGroups: 'groups',
+    autoProvision: false,
+    defaultRole: 'User',
+    requireAppGroupMatch: false,
+    groupRoleMapping: '{}',
+    groupAppGroupsMapping: '{}',
+    showLocalLogin: true,
+    forceSsoRedirect: false,
+    hasClientSecret: false,
+  });
+  const [oidcSaving, setOidcSaving] = React.useState(false);
+  const [oidcMessage, setOidcMessage] = React.useState('');
+  const [oidcGroupRoleMappingError, setOidcGroupRoleMappingError] = React.useState('');
+  const [oidcGroupAppGroupsMappingError, setOidcGroupAppGroupsMappingError] = React.useState('');
+  const [oidcTestResult, setOidcTestResult] = React.useState('');
+  const [oidcTesting, setOidcTesting] = React.useState(false);
+
   const [nameserverPools, setNameserverPools] = React.useState<NameserverPool[]>([]);
   const [nameserverPoolsSaving, setNameserverPoolsSaving] = React.useState(false);
   const [nameserverPoolsMessage, setNameserverPoolsMessage] = React.useState('');
@@ -40,10 +87,106 @@ export default function SettingsPage() {
     fetch('/api/settings/ldap')
       .then((res) => res.ok ? res.json() : null)
       .then((data) => { if (data) setLdapConfig(data); });
+    fetch('/api/settings/oidc')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data) {
+          setOidcConfig((prev) => ({
+            ...prev,
+            ...data,
+            clientSecret: '',
+            groupRoleMapping: typeof data.groupRoleMapping === 'object'
+              ? JSON.stringify(data.groupRoleMapping, null, 2)
+              : (data.groupRoleMapping ?? '{}'),
+            groupAppGroupsMapping: typeof data.groupAppGroupsMapping === 'object'
+              ? JSON.stringify(data.groupAppGroupsMapping, null, 2)
+              : (data.groupAppGroupsMapping ?? '{}'),
+          }));
+        }
+      });
     api.fetchNameserverPools().then((result) => {
       if (!result.error) setNameserverPools(result.data?.pools || []);
     });
   }, []);
+
+  const handleSaveOidc = async () => {
+    setOidcMessage('');
+    setOidcGroupRoleMappingError('');
+    setOidcGroupAppGroupsMappingError('');
+
+    let parsedGroupRoleMapping: unknown;
+    let parsedGroupAppGroupsMapping: unknown;
+
+    try {
+      parsedGroupRoleMapping = JSON.parse(oidcConfig.groupRoleMapping || '{}');
+    } catch {
+      setOidcGroupRoleMappingError('Invalid JSON in Group Role Mapping.');
+      return;
+    }
+    try {
+      parsedGroupAppGroupsMapping = JSON.parse(oidcConfig.groupAppGroupsMapping || '{}');
+    } catch {
+      setOidcGroupAppGroupsMappingError('Invalid JSON in Group App-Groups Mapping.');
+      return;
+    }
+
+    setOidcSaving(true);
+    const body: Record<string, unknown> = {
+      enabled: oidcConfig.enabled,
+      providerName: oidcConfig.providerName,
+      issuerUrl: oidcConfig.issuerUrl,
+      clientId: oidcConfig.clientId,
+      scopes: oidcConfig.scopes,
+      claimEmail: oidcConfig.claimEmail,
+      claimName: oidcConfig.claimName,
+      claimGroups: oidcConfig.claimGroups,
+      autoProvision: oidcConfig.autoProvision,
+      defaultRole: oidcConfig.defaultRole,
+      requireAppGroupMatch: oidcConfig.requireAppGroupMatch,
+      groupRoleMapping: parsedGroupRoleMapping,
+      groupAppGroupsMapping: parsedGroupAppGroupsMapping,
+      showLocalLogin: oidcConfig.showLocalLogin,
+      forceSsoRedirect: oidcConfig.forceSsoRedirect,
+    };
+    if (oidcConfig.clientSecret) {
+      body.clientSecret = oidcConfig.clientSecret;
+    }
+    const res = await fetch('/api/settings/oidc', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setOidcSaving(false);
+    if (res.ok) {
+      setOidcMessage('Configuration saved.');
+      setOidcConfig((prev) => ({ ...prev, clientSecret: '', hasClientSecret: prev.hasClientSecret || !!prev.clientSecret }));
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setOidcMessage(data.error ? `Error: ${data.error}` : 'Error saving configuration.');
+    }
+  };
+
+  const handleTestOidcDiscovery = async () => {
+    setOidcTestResult('');
+    setOidcTesting(true);
+    try {
+      const res = await fetch('/api/settings/oidc/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issuerUrl: oidcConfig.issuerUrl, clientId: oidcConfig.clientId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOidcTestResult(`Discovery OK — authorization_endpoint: ${data.authorization_endpoint} | token_endpoint: ${data.token_endpoint}`);
+      } else {
+        setOidcTestResult(`Discovery failed: ${data.error}`);
+      }
+    } catch {
+      setOidcTestResult('Discovery failed: network error');
+    } finally {
+      setOidcTesting(false);
+    }
+  };
 
   const handleSaveLdap = async () => {
     setLdapSaving(true);
@@ -121,6 +264,7 @@ export default function SettingsPage() {
           <TabsTrigger value="display">Display</TabsTrigger>
           <TabsTrigger value="nameservers">Nameservers</TabsTrigger>
           <TabsTrigger value="ldap">LDAP Authentication</TabsTrigger>
+          <TabsTrigger value="oidc">SSO / OIDC</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="space-y-4">
@@ -337,6 +481,175 @@ export default function SettingsPage() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="oidc" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div><CardTitle>SSO / OIDC Configuration</CardTitle><CardDescription>Configure OpenID Connect single sign-on</CardDescription></div>
+                <Badge variant={oidcConfig.enabled ? 'success' : 'secondary'}>{oidcConfig.enabled ? 'Enabled' : 'Disabled'}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div><Label>Enable SSO / OIDC</Label><p className="text-sm text-muted-foreground">Use OIDC for single sign-on</p></div>
+                <Switch checked={oidcConfig.enabled} onCheckedChange={(v) => setOidcConfig({ ...oidcConfig, enabled: v })} />
+              </div>
+
+              {oidcConfig.enabled && (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Provider Name</Label>
+                      <Input placeholder="Keycloak" value={oidcConfig.providerName} onChange={(e) => setOidcConfig({ ...oidcConfig, providerName: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">Shown on the login button: &ldquo;Continue with &hellip;&rdquo;</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Issuer URL</Label>
+                      <Input placeholder="https://keycloak.example.com/realms/myrealm" value={oidcConfig.issuerUrl} onChange={(e) => setOidcConfig({ ...oidcConfig, issuerUrl: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">IdP base URL; discovery via /.well-known/openid-configuration</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Client ID</Label>
+                      <Input placeholder="powerdns-ui" value={oidcConfig.clientId} onChange={(e) => setOidcConfig({ ...oidcConfig, clientId: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Client Secret</Label>
+                      <Input
+                        type="password"
+                        placeholder={oidcConfig.hasClientSecret ? '•••••• (configured)' : ''}
+                        value={oidcConfig.clientSecret}
+                        onChange={(e) => setOidcConfig({ ...oidcConfig, clientSecret: e.target.value })}
+                      />
+                      <p className="text-xs text-muted-foreground">Leave blank to keep the existing secret</p>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Scopes</Label>
+                      <Input placeholder="openid profile email groups" value={oidcConfig.scopes} onChange={(e) => setOidcConfig({ ...oidcConfig, scopes: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-center">
+                    <Button type="button" variant="outline" size="sm" onClick={handleTestOidcDiscovery} disabled={oidcTesting || !oidcConfig.issuerUrl}>
+                      {oidcTesting ? 'Testing...' : 'Test discovery'}
+                    </Button>
+                    {oidcTestResult && (
+                      <span className={`text-xs ${oidcTestResult.includes('failed') ? 'text-destructive' : 'text-green-700 dark:text-green-400'}`}>
+                        {oidcTestResult}
+                      </span>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <h4 className="font-medium mb-3">Token Claims</h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label>Email claim</Label>
+                        <Input placeholder="email" value={oidcConfig.claimEmail} onChange={(e) => setOidcConfig({ ...oidcConfig, claimEmail: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Name claim</Label>
+                        <Input placeholder="name" value={oidcConfig.claimName} onChange={(e) => setOidcConfig({ ...oidcConfig, claimName: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Groups claim</Label>
+                        <Input placeholder="groups" value={oidcConfig.claimGroups} onChange={(e) => setOidcConfig({ ...oidcConfig, claimGroups: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <h4 className="font-medium mb-3">Provisioning</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div><Label>Auto-provision users</Label><p className="text-sm text-muted-foreground">Create accounts for new SSO users automatically</p></div>
+                        <Switch checked={oidcConfig.autoProvision} onCheckedChange={(v) => setOidcConfig({ ...oidcConfig, autoProvision: v })} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div><Label>Default role</Label><p className="text-sm text-muted-foreground">Role assigned to auto-provisioned users with no group match</p></div>
+                        <Select value={oidcConfig.defaultRole} onValueChange={(v) => setOidcConfig({ ...oidcConfig, defaultRole: v })}>
+                          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Administrator">Administrator</SelectItem>
+                            <SelectItem value="Operator">Operator</SelectItem>
+                            <SelectItem value="User">User</SelectItem>
+                            <SelectItem value="Customer">Customer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div><Label>Require app-group match</Label><p className="text-sm text-muted-foreground">Block login if user has no matching app-groups mapping entry</p></div>
+                        <Switch checked={oidcConfig.requireAppGroupMatch} onCheckedChange={(v) => setOidcConfig({ ...oidcConfig, requireAppGroupMatch: v })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <h4 className="font-medium mb-3">Group Mappings</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Group → Role mapping (JSON)</Label>
+                        <Textarea
+                          className="font-mono text-sm"
+                          rows={4}
+                          placeholder={'{\n  "keycloak-admins": "Administrator"\n}'}
+                          value={oidcConfig.groupRoleMapping}
+                          onChange={(e) => { setOidcConfig({ ...oidcConfig, groupRoleMapping: e.target.value }); setOidcGroupRoleMappingError(''); }}
+                        />
+                        {oidcGroupRoleMappingError && <p className="text-xs text-destructive">{oidcGroupRoleMappingError}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Group → App-groups mapping (JSON)</Label>
+                        <Textarea
+                          className="font-mono text-sm"
+                          rows={4}
+                          placeholder={'{\n  "acme-team": ["acme"]\n}'}
+                          value={oidcConfig.groupAppGroupsMapping}
+                          onChange={(e) => { setOidcConfig({ ...oidcConfig, groupAppGroupsMapping: e.target.value }); setOidcGroupAppGroupsMappingError(''); }}
+                        />
+                        {oidcGroupAppGroupsMappingError && <p className="text-xs text-destructive">{oidcGroupAppGroupsMappingError}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <h4 className="font-medium mb-3">Login page behaviour</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div><Label>Show local login form</Label><p className="text-sm text-muted-foreground">Display username/password form alongside the SSO button</p></div>
+                        <Switch checked={oidcConfig.showLocalLogin} onCheckedChange={(v) => setOidcConfig({ ...oidcConfig, showLocalLogin: v })} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div><Label>Force SSO redirect</Label><p className="text-sm text-muted-foreground">Redirect to SSO automatically on login page load (use ?local=1 to bypass)</p></div>
+                        <Switch checked={oidcConfig.forceSsoRedirect} onCheckedChange={(v) => setOidcConfig({ ...oidcConfig, forceSsoRedirect: v })} />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {oidcMessage && (
+                <div className={`p-3 rounded-lg text-sm ${oidcMessage.includes('Error') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                  {oidcMessage}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button onClick={handleSaveOidc} disabled={oidcSaving}>
+                  {oidcSaving ? 'Saving...' : 'Save Configuration'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

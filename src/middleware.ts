@@ -7,7 +7,7 @@ const JWT_SECRET = new TextEncoder().encode(
 const COOKIE_NAME = 'pdns-session';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers'];
-const ADMIN_PATHS = ['/users', '/settings', '/proxy'];
+const ADMIN_PATHS = ['/users', '/settings', '/proxy', '/groups'];
 // Proxy paths use X-API-Key auth, not JWT — handled in route handlers
 const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];
 
@@ -48,6 +48,9 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userId = payload.userId as string;
     const userRole = payload.role as string;
+    const groupSlugs = Array.isArray(payload.groupSlugs) ? (payload.groupSlugs as string[]) : [];
+    const sessionVersion = typeof payload.sv === 'number' ? payload.sv : 0;
+    const email = (payload.email as string) || '';
 
     // Role-based page protection
     if (ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
@@ -64,6 +67,9 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-user-id', userId);
     requestHeaders.set('x-user-role', userRole);
     requestHeaders.set('x-user-name', (payload.username as string) || '');
+    requestHeaders.set('x-user-email', email);
+    requestHeaders.set('x-user-groups', groupSlugs.join(','));
+    requestHeaders.set('x-user-session-version', String(sessionVersion));
     const response = NextResponse.next({
       request: {
         headers: requestHeaders,

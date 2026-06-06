@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContextFromHeaders, requireAuth, requireCreateInGroup, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
+import { getAuthContextFromHeaders, requireAuth, requireCreateInGroup, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 
 const PDNS_API_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 const PDNS_API_KEY = process.env.PDNS_API_KEY || '';
@@ -38,7 +38,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(visible);
   } catch (e) {
-    return authzErrorResponse(e);
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -63,6 +65,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data, { status: 201 });
   } catch (e) {
-    return authzErrorResponse(e);
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

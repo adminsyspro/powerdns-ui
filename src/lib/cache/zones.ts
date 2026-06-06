@@ -218,12 +218,12 @@ export function getCachedZoneStats(serverUrl: string, allowedAccounts?: string[]
   const row = db.prepare(`
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN kind = 'Native' THEN 1 ELSE 0 END) as native,
-      SUM(CASE WHEN kind = 'Master' THEN 1 ELSE 0 END) as master,
-      SUM(CASE WHEN kind = 'Slave' THEN 1 ELSE 0 END) as slave,
-      SUM(CASE WHEN kind = 'Producer' THEN 1 ELSE 0 END) as producer,
-      SUM(CASE WHEN kind = 'Consumer' THEN 1 ELSE 0 END) as consumer,
-      SUM(CASE WHEN dnssec = 1 THEN 1 ELSE 0 END) as dnssecEnabled
+      COALESCE(SUM(CASE WHEN kind = 'Native' THEN 1 ELSE 0 END), 0) as native,
+      COALESCE(SUM(CASE WHEN kind = 'Master' THEN 1 ELSE 0 END), 0) as master,
+      COALESCE(SUM(CASE WHEN kind = 'Slave' THEN 1 ELSE 0 END), 0) as slave,
+      COALESCE(SUM(CASE WHEN kind = 'Producer' THEN 1 ELSE 0 END), 0) as producer,
+      COALESCE(SUM(CASE WHEN kind = 'Consumer' THEN 1 ELSE 0 END), 0) as consumer,
+      COALESCE(SUM(CASE WHEN dnssec = 1 THEN 1 ELSE 0 END), 0) as dnssecEnabled
     FROM zones WHERE server_url = ?${accountClause}
   `).get(...values) as ZoneStats;
 

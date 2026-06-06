@@ -38,6 +38,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id: zoneId } = await params;
 
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+
     // Fetch zone with RRsets (includes comments)
     const response = await pdnsRequest(`/servers/localhost/zones/${zoneId}?rrsets=true`);
     const data = await response.json();
@@ -46,7 +48,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json(data, { status: response.status });
     }
 
-    const ctx = requireAuth(getAuthContextFromHeaders(request));
     requireZoneAccess(ctx, { account: (data as { account?: string }).account ?? '' }, 'read');
 
     return NextResponse.json(data);
@@ -112,6 +113,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-zone');
 
     const body = await request.json();
+
+    // Prevent a non-admin from reassigning the zone to a group outside their access.
+    if (
+      ctx.role !== 'Administrator' &&
+      body.account !== undefined &&
+      String(body.account) !== (account ?? '')
+    ) {
+      if (!body.account || !ctx.groupSlugs.includes(String(body.account))) {
+        throw new AuthzError(403, 'Cannot reassign the zone to a group outside your access');
+      }
+    }
 
     const response = await pdnsRequest(`/servers/localhost/zones/${zoneId}`, {
       method: 'PUT',

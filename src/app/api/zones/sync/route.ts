@@ -6,7 +6,7 @@ import { getAuthContextFromHeaders, requireRole, authzErrorResponse, AuthzError 
 // POST /api/zones/sync - Trigger a full sync from PowerDNS to cache
 export async function POST(request: NextRequest) {
   try {
-    requireRole(getAuthContextFromHeaders(request), 'Administrator');
+    requireRole(getAuthContextFromHeaders(request), 'Administrator', 'Operator');
 
     const conn = getConnectionFromRequest(request);
 

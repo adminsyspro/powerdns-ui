@@ -4,15 +4,13 @@ import { saveChangeset, getHistory } from '@/lib/cache/history';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
-const PDNS_SERVER_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
-
 // POST /api/zones/history - Save a changeset to history
 export async function POST(request: NextRequest) {
   try {
     const conn = getConnectionFromRequest(request);
     const body = await request.json();
     const ctx = requireAuth(getAuthContextFromHeaders(request));
-    const account = getZoneAccountByIdAndServer(PDNS_SERVER_URL, String(body.zoneId ?? ''));
+    const account = getZoneAccountByIdAndServer(conn.url, String(body.zoneId ?? ''));
     if (account === null && ctx.role !== 'Administrator') {
       throw new AuthzError(403, 'Zone not found in cache; cannot record history');
     }

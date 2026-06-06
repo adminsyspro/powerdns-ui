@@ -106,7 +106,7 @@ export default function UsersPage() {
   };
 
   const getRoleBadge = (role: UserRole) => {
-    const variants: Record<UserRole, 'default' | 'secondary' | 'outline'> = { Administrator: 'default', Operator: 'secondary', User: 'outline' };
+    const variants: Record<UserRole, 'default' | 'secondary' | 'outline'> = { Administrator: 'default', Operator: 'secondary', User: 'outline', Customer: 'outline' };
     return <Badge variant={variants[role]}>{role}</Badge>;
   };
 

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 import type { User, UserRole } from '@/types/powerdns';
+import { getDb } from '@/lib/cache/db';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET || 'your-secret-key-change-in-production'
@@ -13,17 +14,38 @@ export interface SessionPayload {
   username: string;
   email: string;
   role: UserRole;
+  groupSlugs: string[]; // snapshot of the user's group slugs at login time
+  sv: number;           // users.session_version at login time (force-logout check)
   exp: number;
+}
+
+function readSessionExtras(userId: string): { groupSlugs: string[]; sv: number } {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT g.slug AS slug
+         FROM user_groups ug
+         JOIN "groups" g ON g.id = ug.group_id
+        WHERE ug.user_id = ?`
+    )
+    .all(userId) as Array<{ slug: string }>;
+  const svRow = db
+    .prepare('SELECT session_version FROM users WHERE id = ?')
+    .get(userId) as { session_version: number } | undefined;
+  return { groupSlugs: rows.map((r) => r.slug), sv: svRow?.session_version ?? 0 };
 }
 
 export async function createSession(user: Omit<User, 'created_at' | 'updated_at' | 'active'>): Promise<string> {
   const exp = Math.floor((Date.now() + SESSION_DURATION) / 1000);
-  
+  const { groupSlugs, sv } = readSessionExtras(user.id);
+
   const token = await new SignJWT({
     userId: user.id,
     username: user.username,
     email: user.email,
     role: user.role,
+    groupSlugs,
+    sv,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()

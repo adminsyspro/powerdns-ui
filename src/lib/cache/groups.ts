@@ -221,6 +221,18 @@ export function replaceManualUserGroups(userId: string, slugs: string[]): string
   const db = getDb();
   const applied: string[] = [];
   db.transaction(() => {
+    // Snapshot the current effective manual set so we only revoke sessions when
+    // the set actually changes (a no-op save must not force an unnecessary logout).
+    const before = new Set(
+      (
+        db
+          .prepare(
+            `SELECT g.slug AS slug FROM user_groups ug JOIN "groups" g ON g.id = ug.group_id
+              WHERE ug.user_id = ? AND ug.source = 'manual'`
+          )
+          .all(userId) as Array<{ slug: string }>
+      ).map((r) => r.slug)
+    );
     db.prepare(`DELETE FROM user_groups WHERE user_id = ? AND source = 'manual'`).run(userId);
     const insert = db.prepare(
       `INSERT OR IGNORE INTO user_groups (user_id, group_id, source) VALUES (?, ?, 'manual')`
@@ -233,7 +245,9 @@ export function replaceManualUserGroups(userId: string, slugs: string[]): string
         applied.push(slug);
       }
     }
-    bumpSessionVersions(db, [userId]); // auto-revoke: membership set changed → re-sync next request
+    const after = new Set(applied);
+    const changed = before.size !== after.size || [...after].some((s) => !before.has(s));
+    if (changed) bumpSessionVersions(db, [userId]); // auto-revoke only on a real change
   })();
   return applied;
 }

@@ -3,7 +3,7 @@ import { getHistoryEntry } from '@/lib/cache/history';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
-const PDNS_SERVER_URL = process.env.PDNS_API_URL ?? '';
+const PDNS_SERVER_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 
 // GET /api/zones/history/[id]
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

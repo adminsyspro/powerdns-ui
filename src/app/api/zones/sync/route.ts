@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest, pdnsProxy } from '@/lib/pdns-proxy';
 import { syncZonesToCache, getSyncMeta } from '@/lib/cache/zones';
-import { getAuthContextFromHeaders, requireRole, authzErrorResponse } from '@/lib/auth/authz';
+import { getAuthContextFromHeaders, requireRole, authzErrorResponse, AuthzError } from '@/lib/auth/authz';
 
 // POST /api/zones/sync - Trigger a full sync from PowerDNS to cache
 export async function POST(request: NextRequest) {
@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (e) {
-    return authzErrorResponse(e);
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -50,6 +52,8 @@ export async function GET(request: NextRequest) {
       age: Date.now() - meta.lastSyncAt,
     });
   } catch (e) {
-    return authzErrorResponse(e);
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

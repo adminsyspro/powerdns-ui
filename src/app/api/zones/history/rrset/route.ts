@@ -4,7 +4,7 @@ import { getLastChangeForRRSet } from '@/lib/cache/history';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
-const PDNS_SERVER_URL = process.env.PDNS_API_URL ?? '';
+const PDNS_SERVER_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 
 // GET /api/zones/history/rrset?zoneId=example.com.&rrsetKey=www.example.com.::A
 export async function GET(request: NextRequest) {

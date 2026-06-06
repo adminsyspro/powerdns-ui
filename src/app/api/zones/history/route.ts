@@ -4,7 +4,7 @@ import { saveChangeset, getHistory } from '@/lib/cache/history';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
-const PDNS_SERVER_URL = process.env.PDNS_API_URL ?? '';
+const PDNS_SERVER_URL = process.env.PDNS_API_URL || 'http://localhost:8081';
 
 // POST /api/zones/history - Save a changeset to history
 export async function POST(request: NextRequest) {
@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ success: true });
   } catch (error) {
-    return authzErrorResponse(error);
+    if (error instanceof AuthzError) return authzErrorResponse(error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -41,6 +43,8 @@ export async function GET(request: NextRequest) {
     }, allowed);
     return NextResponse.json(result);
   } catch (error) {
-    return authzErrorResponse(error);
+    if (error instanceof AuthzError) return authzErrorResponse(error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

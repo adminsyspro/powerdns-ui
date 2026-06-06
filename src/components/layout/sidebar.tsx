@@ -8,6 +8,7 @@ import {
   Server,
   FileText,
   Users,
+  Users2,
   Settings,
   LayoutDashboard,
   Shield,
@@ -65,6 +66,7 @@ const navigation: NavGroup[] = [
     title: 'Administration',
     items: [
       { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
+      { title: 'Groups', href: '/groups', icon: Users2, requiredRole: ['Administrator'] },
       { title: 'Change History', href: '/history', icon: History },
       { title: 'Activity Log', href: '/activity', icon: FileText },
       { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },

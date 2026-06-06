@@ -52,3 +52,7 @@ data/
 
 # WSL artifacts
 *:Zone.Identifier
+
+# Internal design docs (specs / implementation plans) — keep local only.
+# This is a PUBLIC repo; these describe the security model and must not be published.
+docs/superpowers/

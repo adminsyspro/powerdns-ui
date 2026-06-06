@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, getConnectionFromRequest } from '@/lib/pdns-proxy';
+import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
+import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -33,8 +35,15 @@ const TYPE_ORDER: Record<string, number> = {
  */
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
     const { id } = await params;
     const conn = getConnectionFromRequest(request);
+    const account = getZoneAccountByIdAndServer(conn.url, id);
+    if (account === null && ctx.role !== 'Administrator') {
+      throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
+    }
+    requireZoneAccess(ctx, { account: account ?? '' }, 'read');
+
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones/${id}?rrsets=true`);
 
     if (!response.ok) {
@@ -130,8 +139,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       // Return the full rrsets so pending changes can still be merged on the client
       rrsets,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 502 });
+  } catch (e) {
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

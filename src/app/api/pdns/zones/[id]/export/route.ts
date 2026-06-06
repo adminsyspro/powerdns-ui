@@ -1,17 +1,27 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
+import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
+import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // GET /api/pdns/zones/[id]/export - Export zone in AXFR format
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
     const { id } = await params;
     const conn = getConnectionFromRequest(request);
+    const account = getZoneAccountByIdAndServer(conn.url, id);
+    if (account === null && ctx.role !== 'Administrator') {
+      throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
+    }
+    requireZoneAccess(ctx, { account: account ?? '' }, 'read');
+
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones/${id}/export`);
     return forwardPdnsResponse(response);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return Response.json({ error: message }, { status: 502 });
+  } catch (e) {
+    if (e instanceof AuthzError) return authzErrorResponse(e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

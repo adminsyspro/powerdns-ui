@@ -92,7 +92,10 @@ function initSchema(db: Database.Database) {
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
+    -- NOTE: idx_users_oidc_subject is created after the users migration below,
+    -- not here. On an upgrade the oidc_subject column does not exist yet (the
+    -- legacy users table is a no-op for CREATE TABLE IF NOT EXISTS), so creating
+    -- the index in this block would abort initSchema with "no such column".
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
@@ -241,9 +244,17 @@ function initSchema(db: Database.Database) {
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
     `);
   }
+
+  // Create the partial unique index on oidc_subject HERE, after the users
+  // migration. By this point the column is guaranteed to exist on both paths:
+  // fresh installs created it in the CREATE TABLE above, and upgrades added it
+  // via the rebuild. Doing it inside the main schema block would crash existing
+  // deployments with "no such column: oidc_subject".
+  db.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;'
+  );
 
   seedDefaultAdmin(db);
 

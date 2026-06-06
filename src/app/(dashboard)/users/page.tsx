@@ -398,7 +398,7 @@ export default function UsersPage() {
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell><Badge variant="outline" className="text-xs">{user.authType === 'ldap' ? 'LDAP' : 'Local'}</Badge></TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{user.authType === 'ldap' ? 'LDAP' : user.authType === 'oidc' ? 'OIDC' : 'Local'}</Badge></TableCell>
                 <TableCell>
                   {user.active ? (
                     <Badge variant="default">Active</Badge>
@@ -459,7 +459,7 @@ export default function UsersPage() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                    <AlertDialog>
+                    <AlertDialog onOpenChange={(open) => { if (open) { setDeleteError(''); } }}>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>

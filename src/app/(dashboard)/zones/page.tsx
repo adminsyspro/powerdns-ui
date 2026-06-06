@@ -87,7 +87,7 @@ export default function ZonesPage() {
   const handleDnssecChange = (v: string) => { setDnssec(v); setPage(1); };
   const handleSortChange = (col: string, order: 'asc' | 'desc') => { setSortBy(col); setSortOrder(order); setPage(1); };
   const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(1); };
-  const handleGroupFilterChange = (v: string) => { setGroupFilter(v); };
+  const handleGroupFilterChange = (v: string) => { setGroupFilter(v); setPage(1); };
 
   // Client-side group filter applied on top of the server-fetched page
   const groupFilteredZones = React.useMemo(() => {

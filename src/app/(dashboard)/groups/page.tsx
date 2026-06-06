@@ -264,7 +264,7 @@ export default function GroupsPage() {
                           <TooltipContent>Edit</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                      <AlertDialog>
+                      <AlertDialog onOpenChange={(open) => { if (open) { setDeleteError(''); setDeleteNote(''); } }}>
                         <TooltipProvider delayDuration={300}>
                           <Tooltip>
                             <TooltipTrigger asChild>

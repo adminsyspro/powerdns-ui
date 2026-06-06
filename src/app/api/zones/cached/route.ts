@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getCachedZones } from '@/lib/cache/zones';
+import { getAuthContextFromHeaders, requireAuth, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 
 // GET /api/zones/cached?page=1&pageSize=25&search=&kind=&dnssec=&sortBy=name&sortOrder=asc
 export async function GET(request: NextRequest) {
   try {
+    const ctx = requireAuth(getAuthContextFromHeaders(request));
+    const allowed = canSeeAllZones(ctx.role) ? undefined : ctx.groupSlugs;
+
     const conn = getConnectionFromRequest(request);
     const { searchParams } = new URL(request.url);
 
@@ -16,11 +20,10 @@ export async function GET(request: NextRequest) {
       dnssec: (searchParams.get('dnssec') as 'enabled' | 'disabled') || undefined,
       sortBy: searchParams.get('sortBy') || undefined,
       sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || undefined,
-    });
+    }, allowed);
 
     return NextResponse.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (e) {
+    return authzErrorResponse(e);
   }
 }

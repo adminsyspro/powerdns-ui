@@ -236,6 +236,16 @@ export default function ZoneDetailPage() {
   const { addLog } = useActivityLogStore();
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
   const auditUser = user?.username || 'unknown';
+  const isAdmin = user?.role === 'Administrator';
+
+  // Groups the user may assign this zone to (Settings dialog account picker).
+  const [groups, setGroups] = React.useState<api.GroupSummary[]>([]);
+  React.useEffect(() => {
+    fetch('/api/groups')
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: api.GroupSummary[]) => setGroups(data))
+      .catch(() => {});
+  }, []);
 
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
   const { sync } = useZoneSync();
@@ -732,6 +742,8 @@ export default function ZoneDetailPage() {
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           zone={zone}
+          groups={groups}
+          isAdmin={isAdmin}
           onSubmit={handleSaveSettings}
         />
       )}

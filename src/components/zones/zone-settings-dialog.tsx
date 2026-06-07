@@ -48,6 +48,10 @@ interface ZoneSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   zone: Zone;
+  // Groups the caller may assign the zone to (account). Admins get every group
+  // plus an orphan option; non-admins only their own. Omit/empty → free-text.
+  groups?: { slug: string; name: string }[];
+  isAdmin?: boolean;
   // Must throw on failure so the error is shown inside the dialog.
   onSubmit: (payload: Partial<Zone>) => Promise<void>;
 }
@@ -56,6 +60,8 @@ export function ZoneSettingsDialog({
   open,
   onOpenChange,
   zone,
+  groups,
+  isAdmin = false,
   onSubmit,
 }: ZoneSettingsDialogProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -161,11 +167,40 @@ export function ZoneSettingsDialog({
               </Select>
             </div>
 
-            {/* Account */}
-            <div className="space-y-2">
-              <Label htmlFor="account">Account</Label>
-              <Input id="account" placeholder="Account name" {...form.register('account')} />
-            </div>
+            {/* Account / Group */}
+            {groups && groups.length > 0 ? (
+              <div className="space-y-2">
+                <Label htmlFor="account">
+                  Group{!isAdmin && <span className="text-destructive ml-0.5">*</span>}
+                </Label>
+                <Select
+                  value={watch('account') || (isAdmin ? '__orphan__' : '')}
+                  onValueChange={(value) => setValue('account', value === '__orphan__' ? '' : value, { shouldValidate: true })}
+                >
+                  <SelectTrigger id="account">
+                    <SelectValue placeholder="Select a group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isAdmin && <SelectItem value="__orphan__">No group (orphan)</SelectItem>}
+                    {groups.map((g) => (
+                      <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
+                    ))}
+                    {/* Preserve a legacy account not matching any group so it round-trips */}
+                    {watch('account') && !groups.some((g) => g.slug === watch('account')) && (
+                      <SelectItem value={watch('account') as string}>{watch('account')} (current)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {!isAdmin && !watch('account') && (
+                  <p className="text-sm text-destructive">Group is required</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="account">Account</Label>
+                <Input id="account" placeholder="Account name" {...form.register('account')} />
+              </div>
+            )}
 
             {/* SOA-EDIT-API */}
             <div className="space-y-2">

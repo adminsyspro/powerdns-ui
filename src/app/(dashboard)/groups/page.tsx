@@ -40,6 +40,7 @@ export default function GroupsPage() {
   // Delete state
   const [deleteError, setDeleteError] = React.useState('');
   const [deleteNote, setDeleteNote] = React.useState('');
+  const [deleteOpenSlug, setDeleteOpenSlug] = React.useState<string | null>(null);
 
   const fetchGroups = async () => {
     const res = await fetch('/api/groups');
@@ -124,6 +125,7 @@ export default function GroupsPage() {
     if (data.orphanedZoneCount > 0) {
       setDeleteNote(`${data.orphanedZoneCount} zone${data.orphanedZoneCount > 1 ? 's' : ''} kept their account and are now admin-only-visible.`);
     }
+    setDeleteOpenSlug(null);
     fetchGroups();
   };
 
@@ -264,7 +266,7 @@ export default function GroupsPage() {
                           <TooltipContent>Edit</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                      <AlertDialog onOpenChange={(open) => { if (open) { setDeleteError(''); setDeleteNote(''); } }}>
+                      <AlertDialog open={deleteOpenSlug === group.slug} onOpenChange={(open) => { setDeleteOpenSlug(open ? group.slug : null); if (open) { setDeleteError(''); setDeleteNote(''); } }}>
                         <TooltipProvider delayDuration={300}>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -292,7 +294,7 @@ export default function GroupsPage() {
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              onClick={() => handleDelete(group)}
+                              onClick={(e) => { e.preventDefault(); handleDelete(group); }}
                             >
                               Delete
                             </AlertDialogAction>

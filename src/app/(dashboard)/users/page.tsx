@@ -198,6 +198,7 @@ export default function UsersPage() {
   };
 
   const [deleteError, setDeleteError] = React.useState('');
+  const [deleteOpenId, setDeleteOpenId] = React.useState<string | null>(null);
 
   const handleDelete = async (user: UserData) => {
     setDeleteError('');
@@ -207,6 +208,7 @@ export default function UsersPage() {
       setDeleteError(data.error || 'Failed to delete user');
       return;
     }
+    setDeleteOpenId(null);
     fetchUsersAndGroups();
   };
 
@@ -459,7 +461,7 @@ export default function UsersPage() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                    <AlertDialog onOpenChange={(open) => { if (open) { setDeleteError(''); } }}>
+                    <AlertDialog open={deleteOpenId === user.id} onOpenChange={(open) => { setDeleteOpenId(open ? user.id : null); if (open) { setDeleteError(''); } }}>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -484,7 +486,7 @@ export default function UsersPage() {
                         )}
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(user)}>
+                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={(e) => { e.preventDefault(); handleDelete(user); }}>
                             Delete
                           </AlertDialogAction>
                         </AlertDialogFooter>

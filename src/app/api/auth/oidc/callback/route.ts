@@ -5,6 +5,7 @@ import { createSession } from '@/lib/auth/session';
 import {
   getOidcConfig,
   getOidcConfiguration,
+  getPublicBaseUrl,
   extractGroupsFromClaim,
   resolveOidcRole,
   resolveOidcAppGroups,
@@ -26,12 +27,13 @@ interface UserRow {
   oidc_subject: string | null;
 }
 
-function loginError(request: NextRequest, code: string) {
-  return NextResponse.redirect(new URL(`/login?error=${code}`, request.url));
+function loginError(base: string, code: string) {
+  return NextResponse.redirect(new URL(`/login?error=${code}`, base));
 }
 
 // GET /api/auth/oidc/callback?code&state
 export async function GET(request: NextRequest) {
+  const base = getPublicBaseUrl(request.url);
   const verifier = request.cookies.get('pdns-oidc-verifier')?.value;
   const state = request.cookies.get('pdns-oidc-state')?.value;
   const nonce = request.cookies.get('pdns-oidc-nonce')?.value;
@@ -46,15 +48,21 @@ export async function GET(request: NextRequest) {
 
   try {
     if (!verifier || !state) {
-      return clearFlowCookies(loginError(request, 'oidc_state'));
+      return clearFlowCookies(loginError(base, 'oidc_state'));
     }
     const cfg = getOidcConfig();
     const config = await getOidcConfiguration(cfg);
     if (!config) {
-      return clearFlowCookies(loginError(request, 'oidc_unavailable'));
+      return clearFlowCookies(loginError(base, 'oidc_unavailable'));
     }
 
-    const tokens = await client.authorizationCodeGrant(config, new URL(request.url), {
+    // Rebuild the callback URL on the canonical public origin so the
+    // redirect_uri sent in the token exchange matches the one used at /login
+    // (OAuth requires them to be byte-identical), while preserving the
+    // ?code&state query that openid-client reads from it.
+    const reqUrl = new URL(request.url);
+    const currentUrl = new URL(reqUrl.pathname + reqUrl.search, base);
+    const tokens = await client.authorizationCodeGrant(config, currentUrl, {
       pkceCodeVerifier: verifier,
       expectedState: state,
       expectedNonce: nonce,
@@ -62,7 +70,7 @@ export async function GET(request: NextRequest) {
     });
     const claims = tokens.claims();
     if (!claims || !claims.sub) {
-      return clearFlowCookies(loginError(request, 'oidc_no_subject'));
+      return clearFlowCookies(loginError(base, 'oidc_no_subject'));
     }
     const sub = String(claims.sub);
 
@@ -84,10 +92,10 @@ export async function GET(request: NextRequest) {
     const appGroups = resolveOidcAppGroups(groups, cfg);
 
     if (cfg.requireAppGroupMatch && appGroups.length === 0 && role !== 'Administrator') {
-      return clearFlowCookies(loginError(request, 'no_group_match'));
+      return clearFlowCookies(loginError(base, 'no_group_match'));
     }
     if (!email) {
-      return clearFlowCookies(loginError(request, 'oidc_no_email'));
+      return clearFlowCookies(loginError(base, 'oidc_no_email'));
     }
 
     const db = getDb();
@@ -100,7 +108,7 @@ export async function GET(request: NextRequest) {
         // An existing local/ldap account, OR an existing OIDC account bound to a
         // DIFFERENT subject, must not be silently taken over by email match.
         if (byEmail.auth_type !== 'oidc' || (byEmail.oidc_subject && byEmail.oidc_subject !== sub)) {
-          return clearFlowCookies(loginError(request, 'email_conflict'));
+          return clearFlowCookies(loginError(base, 'email_conflict'));
         }
         row = byEmail;
       }
@@ -110,7 +118,7 @@ export async function GET(request: NextRequest) {
     let username: string;
     if (row) {
       if (row.active !== 1) {
-        return clearFlowCookies(loginError(request, 'account_disabled'));
+        return clearFlowCookies(loginError(base, 'account_disabled'));
       }
       userId = row.id;
       username = row.username;
@@ -124,7 +132,7 @@ export async function GET(request: NextRequest) {
       ).run(email, firstname || '', lastname || '', role, sub, userId);
     } else {
       if (!cfg.autoProvision) {
-        return clearFlowCookies(loginError(request, 'user_not_provisioned'));
+        return clearFlowCookies(loginError(base, 'user_not_provisioned'));
       }
       userId = crypto.randomUUID();
       username = String((info['preferred_username'] as string) || email).trim();
@@ -152,7 +160,7 @@ export async function GET(request: NextRequest) {
     // Set session cookie directly on the redirect response.
     // (setSessionCookie uses next/headers cookies() which writes to the current
     //  request context and may not attach to a separately constructed NextResponse redirect.)
-    const redirectRes = clearFlowCookies(NextResponse.redirect(new URL('/dashboard', request.url)));
+    const redirectRes = clearFlowCookies(NextResponse.redirect(new URL('/dashboard', base)));
     redirectRes.cookies.set('pdns-session', token, {
       httpOnly: true,
       secure: process.env.FORCE_HTTPS === 'true',
@@ -162,6 +170,6 @@ export async function GET(request: NextRequest) {
     });
     return redirectRes;
   } catch {
-    return clearFlowCookies(loginError(request, 'oidc_error'));
+    return clearFlowCookies(loginError(base, 'oidc_error'));
   }
 }

@@ -10,6 +10,13 @@ services:
       - NODE_ENV=production
       - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required — run scripts/init-secrets.sh or set it in .env}
       - APP_SECRET=${APP_SECRET:?APP_SECRET is required — run scripts/init-secrets.sh or set it in .env}
+      # Public URL the browser/IdP reach back to. REQUIRED behind a reverse
+      # proxy so OIDC redirect_uri isn't built from the internal bind address
+      # (HOSTNAME=0.0.0.0). Read at runtime — set APP_URL in your .env.
+      - APP_URL=${APP_URL:-}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
+      # Set FORCE_HTTPS=true in .env when served over HTTPS (Secure cookies).
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
     volumes:
       - powerdns-ui-data:/app/data
     restart: unless-stopped

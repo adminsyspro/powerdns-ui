@@ -15,6 +15,38 @@ const DEFAULTS = {
   defaultRole: 'User' as UserRole,
 };
 
+/**
+ * Canonical, externally-reachable base origin for OIDC redirect URIs and
+ * post-login redirects.
+ *
+ * Behind a reverse proxy the Node server only sees its internal bind address
+ * (e.g. http://0.0.0.0:3000), so `request.url` cannot be trusted for anything
+ * the browser or the IdP must reach back to. Honor an explicit public URL from
+ * the environment (APP_URL, or NEXT_PUBLIC_APP_URL); fall back to the request
+ * origin for local dev where they are unset.
+ *
+ * The env is read through a dynamic key on purpose: a literal
+ * `process.env.NEXT_PUBLIC_APP_URL` is inlined by Next.js at BUILD time and
+ * frozen into the server bundle, so an image built once could not be deployed
+ * under a different public URL. A computed lookup is left untouched by the
+ * compiler and therefore resolves against the live process.env at request time.
+ *
+ * Only the origin (scheme + host + port) is used — any path/query in the
+ * configured value is discarded so a trailing slash can't corrupt the callback.
+ */
+export function getPublicBaseUrl(requestUrl: string): string {
+  const env = (k: string): string | undefined => process.env[k];
+  const configured = env('APP_URL') || env('NEXT_PUBLIC_APP_URL');
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      // malformed env value — ignore and fall back to the request origin
+    }
+  }
+  return new URL(requestUrl).origin;
+}
+
 export interface OidcConfig {
   enabled: boolean;
   providerName: string;

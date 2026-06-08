@@ -81,26 +81,31 @@ export function requireAdmin(req: NextRequest): AuthContext {
   return requireRole(getAuthContextFromHeaders(req), 'Administrator');
 }
 
-/** Administrators see every zone regardless of account; everyone else is group-scoped. */
+/**
+ * Administrators and Operators have access to every zone on the server
+ * regardless of account; Users and Customers are scoped to their own groups.
+ */
 export function canSeeAllZones(role: UserRole): boolean {
-  return role === 'Administrator';
+  return role === 'Administrator' || role === 'Operator';
 }
 
 /**
  * Core decision: may this context perform `action` on a zone owned by `account`?
- * Non-admins are scoped to their group slugs; orphan zones (account === '') are
- * Administrator-only. Mirrors the permission matrix in spec §5.
+ * Administrators and Operators have full, server-wide access to every zone
+ * (read + write, any account, including orphans). Customers and Users are scoped
+ * to their own groups — Customer is the role for granting specific-zone access.
+ * Mirrors the permission matrix in spec §5.
  */
 export function canAccessZone(ctx: AuthContext, account: string, action: ZoneAction): boolean {
-  if (ctx.role === 'Administrator') return true;
+  if (ctx.role === 'Administrator' || ctx.role === 'Operator') return true;
   if (!account || !ctx.groupSlugs.includes(account)) return false;
   switch (action) {
     case 'read':
-      return true; // Operator / User / Customer may all read within their groups
+      return true; // Customer / User may read within their groups
     case 'write-records':
-      return ctx.role === 'Operator' || ctx.role === 'Customer';
+      return ctx.role === 'Customer'; // Customers may edit ordinary records
     case 'write-zone':
-      return ctx.role === 'Operator';
+      return false; // zone-level changes are Operator / Administrator only
     default:
       return false;
   }
@@ -117,17 +122,11 @@ export function requireZoneAccess(
 }
 
 /**
- * Gate for zone creation, where there is no existing zone to scope against.
- * Administrators may target any account (including '' / orphan). Operators may
- * only create within one of their own groups. Everyone else is rejected.
+ * Gate for zone creation. Administrators and Operators may create a zone in any
+ * account (including '' / orphan); Customers and Users cannot create zones.
  */
-export function requireCreateInGroup(ctx: AuthContext | null, account: string): AuthContext {
-  const c = requireRole(ctx, 'Administrator', 'Operator');
-  if (c.role === 'Administrator') return c;
-  if (!account || !c.groupSlugs.includes(account)) {
-    throw new AuthzError(403, 'Operators can only create zones in their own groups');
-  }
-  return c;
+export function requireCreateInGroup(ctx: AuthContext | null, _account: string): AuthContext {
+  return requireRole(ctx, 'Administrator', 'Operator');
 }
 
 const ZONE_LEVEL_TYPES = new Set([

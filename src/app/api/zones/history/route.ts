@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const account = getZoneAccountByIdAndServer(conn.url, String(body.zoneId ?? ''));
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; cannot record history');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-records');

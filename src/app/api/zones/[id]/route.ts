@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getAuthContextFromHeaders, requireAuth, requireZoneAccess, requireRole,
-  isZoneLevelPatch, AuthzError, authzErrorResponse,
+  isZoneLevelPatch, canSeeAllZones, AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const account = zoneAccount(zoneId);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-records');
@@ -107,16 +107,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const account = zoneAccount(zoneId);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-zone');
 
     const body = await request.json();
 
-    // Prevent a non-admin from reassigning the zone to a group outside their access.
+    // Prevent a group-scoped role from reassigning the zone outside their access.
+    // Administrators and Operators (canSeeAllZones) may reassign to any account.
     if (
-      ctx.role !== 'Administrator' &&
+      !canSeeAllZones(ctx.role) &&
       body.account !== undefined &&
       String(body.account) !== (account ?? '')
     ) {

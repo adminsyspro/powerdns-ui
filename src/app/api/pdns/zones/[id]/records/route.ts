@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, getConnectionFromRequest } from '@/lib/pdns-proxy';
-import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
+import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const conn = getConnectionFromRequest(request);
     const account = getZoneAccountByIdAndServer(conn.url, id);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'read');

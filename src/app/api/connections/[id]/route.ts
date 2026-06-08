@@ -1,11 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    requireAdmin(request);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
   const { id } = await params;
   const body = await request.json();
   const { name, url, apiKey, version, isDefault } = body;
@@ -54,9 +60,14 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    requireAdmin(request);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
   const { id } = await params;
   const db = getDb();
 

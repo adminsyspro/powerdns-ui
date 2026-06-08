@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
 import {
   getAuthContextFromHeaders, requireAuth, requireZoneAccess, requireRole,
-  isZoneLevelPatch, AuthzError, authzErrorResponse,
+  isZoneLevelPatch, canSeeAllZones, AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const { id } = await params;
     const account = zoneAccountFor(request, id);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'read');
@@ -47,7 +47,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const account = zoneAccountFor(request, id);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-records');
@@ -76,12 +76,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const ctx = requireAuth(getAuthContextFromHeaders(request));
     const account = zoneAccountFor(request, id);
-    if (account === null && ctx.role !== 'Administrator') {
+    if (account === null && !canSeeAllZones(ctx.role)) {
       throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
     }
     requireZoneAccess(ctx, { account: account ?? '' }, 'write-zone');
     if (
-      ctx.role !== 'Administrator' &&
+      !canSeeAllZones(ctx.role) &&
       body.account !== undefined &&
       String(body.account) !== (account ?? '')
     ) {

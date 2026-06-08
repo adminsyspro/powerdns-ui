@@ -7,7 +7,11 @@ const JWT_SECRET = new TextEncoder().encode(
 const COOKIE_NAME = 'pdns-session';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers', '/api/auth/oidc/login', '/api/auth/oidc/callback'];
-const ADMIN_PATHS = ['/users', '/settings', '/proxy', '/groups'];
+// Pages a non-Administrator may open. Everything else (admin pages, server
+// pages, statistics, history, …) redirects them to /dashboard. API routes are
+// NOT gated here — each handler enforces its own authorization (requireAdmin /
+// zone scoping), so data the allowed pages need still loads.
+const NON_ADMIN_PAGES = ['/dashboard', '/zones', '/profile'];
 // Proxy paths use X-API-Key auth, not JWT — handled in route handlers
 const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];
 
@@ -52,12 +56,11 @@ export async function middleware(request: NextRequest) {
     const sessionVersion = typeof payload.sv === 'number' ? payload.sv : 0;
     const email = (payload.email as string) || '';
 
-    // Role-based page protection
-    if (ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
-      if (userRole !== 'Administrator') {
-        if (pathname.startsWith('/api/')) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+    // Role-based PAGE protection: non-Administrators may only open the
+    // whitelisted pages. (API routes authorize themselves in their handlers.)
+    if (userRole !== 'Administrator' && !pathname.startsWith('/api/')) {
+      const allowed = NON_ADMIN_PAGES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+      if (!allowed) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }
     }

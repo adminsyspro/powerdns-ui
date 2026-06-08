@@ -51,15 +51,15 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Zones', href: '/zones', icon: Globe },
       { title: 'API Proxy', href: '/proxy', icon: Shield, requiredRole: ['Administrator'] },
-      { title: 'Templates', href: '/templates', icon: Layers },
+      { title: 'Templates', href: '/templates', icon: Layers, requiredRole: ['Administrator'] },
     ],
   },
   {
     title: 'Server',
     items: [
-      { title: 'Servers', href: '/servers', icon: Server },
-      { title: 'Statistics', href: '/statistics', icon: Activity },
-      { title: 'Configuration', href: '/configuration', icon: Database },
+      { title: 'Servers', href: '/servers', icon: Server, requiredRole: ['Administrator'] },
+      { title: 'Statistics', href: '/statistics', icon: Activity, requiredRole: ['Administrator'] },
+      { title: 'Configuration', href: '/configuration', icon: Database, requiredRole: ['Administrator'] },
     ],
   },
   {
@@ -67,8 +67,8 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
       { title: 'Groups', href: '/groups', icon: Users2, requiredRole: ['Administrator'] },
-      { title: 'Change History', href: '/history', icon: History },
-      { title: 'Activity Log', href: '/activity', icon: FileText },
+      { title: 'Change History', href: '/history', icon: History, requiredRole: ['Administrator'] },
+      { title: 'Activity Log', href: '/activity', icon: FileText, requiredRole: ['Administrator'] },
       { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },
     ],
   },

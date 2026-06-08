@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 
 export async function GET() {
   const db = getDb();
@@ -29,7 +30,13 @@ export async function GET() {
   return NextResponse.json(connections);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  try {
+    requireAdmin(request);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
+
   const body = await request.json();
   const { name, url, apiKey, version, isDefault } = body;
 

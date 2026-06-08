@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContextFromHeaders, requireAdmin, requireAuth, authzErrorResponse } from '@/lib/auth/authz';
+import { getAuthContextFromHeaders, requireAdmin, requireAuth, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 import { listGroups, listGroupsBySlugs, getGroupRowBySlug, createGroup, isValidSlug } from '@/lib/cache/groups';
 
-// GET /api/groups — Administrators see all groups; others see only their own.
+// GET /api/groups — Administrators and Operators see all groups (they manage all
+// zones, so they need every account for the zone group picker/filter); Users and
+// Customers see only their own.
 export async function GET(request: NextRequest) {
   try {
     const ctx = requireAuth(getAuthContextFromHeaders(request));
-    const groups = ctx.role === 'Administrator' ? listGroups() : listGroupsBySlugs(ctx.groupSlugs);
+    const groups = canSeeAllZones(ctx.role) ? listGroups() : listGroupsBySlugs(ctx.groupSlugs);
     return NextResponse.json(groups);
   } catch (e) {
     return authzErrorResponse(e);

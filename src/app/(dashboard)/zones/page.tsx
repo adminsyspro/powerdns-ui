@@ -24,6 +24,9 @@ export default function ZonesPage() {
   const { addLog } = useActivityLogStore();
   const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
+  // Administrators and Operators manage all zones (orphan option, full group
+  // picker, create anywhere); only Administrators may delete zones.
+  const canManageAllZones = isAdmin || user?.role === 'Operator';
   const { sync, isSyncing, syncStatus } = useZoneSync();
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [importDialogOpen, setImportDialogOpen] = React.useState(false);
@@ -341,7 +344,8 @@ export default function ZonesPage() {
         groups={groups}
         groupValue={groupFilter}
         onGroupChange={handleGroupFilterChange}
-        isAdmin={isAdmin}
+        isAdmin={canManageAllZones}
+        canDelete={isAdmin}
         onGlobalSearch={handleGlobalSearch}
         isGlobalSearching={isGlobalSearching}
         onBulkDelete={handleBulkDelete}
@@ -362,7 +366,7 @@ export default function ZonesPage() {
               onOpenChange={setCreateDialogOpen}
               onSubmit={handleCreateZone}
               groups={groups}
-              isAdmin={isAdmin}
+              isAdmin={canManageAllZones}
               trigger={
                 <Button size="sm"><Plus className="mr-2 h-4 w-4" />New Zone</Button>
               }

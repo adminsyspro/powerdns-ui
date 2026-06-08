@@ -73,7 +73,11 @@ interface ZonesTableProps {
   groups?: { slug: string; name: string }[];
   groupValue?: string;
   onGroupChange?: (slug: string) => void;
+  // True for roles that manage all zones (Administrator / Operator): unlocks the
+  // orphan group option and full group picker.
   isAdmin?: boolean;
+  // Strictly Administrator: gates zone deletion (Operators manage but don't delete).
+  canDelete?: boolean;
   // Action buttons slot
   actions?: React.ReactNode;
   // Selection
@@ -109,6 +113,7 @@ export function ZonesTable({
   groupValue = 'all',
   onGroupChange,
   isAdmin = false,
+  canDelete = false,
   actions,
   onSelectionChange,
   onBulkDelete,
@@ -308,7 +313,7 @@ export function ZonesTable({
         <div className="flex items-center gap-3 rounded-md border bg-muted/50 px-4 py-2">
           <span className="text-sm font-medium">{selectedIds.size} zone{selectedIds.size !== 1 ? 's' : ''} selected</span>
           <div className="flex items-center gap-1.5 ml-auto">
-            {onBulkDelete && (
+            {canDelete && onBulkDelete && (
               <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => onBulkDelete(Array.from(selectedIds))}>
                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete
               </Button>
@@ -419,14 +424,16 @@ export function ZonesTable({
                         </TooltipTrigger>
                         <TooltipContent>Export</TooltipContent>
                       </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete?.(zone.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete</TooltipContent>
-                      </Tooltip>
+                      {canDelete && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete?.(zone.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

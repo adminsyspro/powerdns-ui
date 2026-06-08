@@ -237,6 +237,9 @@ export default function ZoneDetailPage() {
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
   const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
+  // Administrators and Operators manage all zones (edit records + settings,
+  // orphan option, reassign to any group); only Administrators may delete.
+  const canManageAllZones = isAdmin || user?.role === 'Operator';
 
   // Groups the user may assign this zone to (Settings dialog account picker).
   const [groups, setGroups] = React.useState<api.GroupSummary[]>([]);
@@ -674,9 +677,11 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={handleOpenHistory}>
                 <History className="mr-2 h-4 w-4" />History
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteZone}>
-                <Trash2 className="mr-2 h-4 w-4" />Delete
-              </Button>
+              {isAdmin && (
+                <Button variant="destructive" size="sm" onClick={handleDeleteZone}>
+                  <Trash2 className="mr-2 h-4 w-4" />Delete
+                </Button>
+              )}
             </div>
           </div>
           {/* Line 2: Zone metadata */}
@@ -743,7 +748,7 @@ export default function ZoneDetailPage() {
           onOpenChange={setSettingsOpen}
           zone={zone}
           groups={groups}
-          isAdmin={isAdmin}
+          isAdmin={canManageAllZones}
           onSubmit={handleSaveSettings}
         />
       )}

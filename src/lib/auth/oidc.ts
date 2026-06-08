@@ -21,9 +21,11 @@ const DEFAULTS = {
  *
  * Behind a reverse proxy the Node server only sees its internal bind address
  * (e.g. http://0.0.0.0:3000), so `request.url` cannot be trusted for anything
- * the browser or the IdP must reach back to. Honor an explicit public URL from
- * the environment (APP_URL, or NEXT_PUBLIC_APP_URL); fall back to the request
- * origin for local dev where they are unset.
+ * the browser or the IdP must reach back to. Resolution order:
+ *   1. the explicit override saved in the OIDC settings UI (app_settings) —
+ *      takes effect immediately, no rebuild/redeploy;
+ *   2. the runtime environment (APP_URL, then NEXT_PUBLIC_APP_URL);
+ *   3. the request origin (local dev / direct access).
  *
  * The env is read through a dynamic key on purpose: a literal
  * `process.env.NEXT_PUBLIC_APP_URL` is inlined by Next.js at BUILD time and
@@ -35,6 +37,14 @@ const DEFAULTS = {
  * configured value is discarded so a trailing slash can't corrupt the callback.
  */
 export function getPublicBaseUrl(requestUrl: string): string {
+  // 1) Explicit override from the OIDC settings UI.
+  try {
+    const fromDb = getSetting('oidc_app_base_url');
+    if (fromDb) return new URL(fromDb).origin;
+  } catch {
+    // DB not ready (e.g. at build time) — fall through to env/request.
+  }
+  // 2) Runtime environment (dynamic key avoids build-time inlining).
   const env = (k: string): string | undefined => process.env[k];
   const configured = env('APP_URL') || env('NEXT_PUBLIC_APP_URL');
   if (configured) {
@@ -44,6 +54,7 @@ export function getPublicBaseUrl(requestUrl: string): string {
       // malformed env value — ignore and fall back to the request origin
     }
   }
+  // 3) Request origin.
   return new URL(requestUrl).origin;
 }
 
@@ -64,6 +75,8 @@ export interface OidcConfig {
   groupAppGroupsMapping: Record<string, string[]>;
   showLocalLogin: boolean;
   forceSsoRedirect: boolean;
+  /** Public origin override for the redirect_uri; '' = fall back to env/request. */
+  appBaseUrl: string;
 }
 
 function getSetting(key: string): string | undefined {
@@ -134,6 +147,7 @@ export function getOidcConfig(): OidcConfig {
     groupAppGroupsMapping: normalizeGroupsMap(safeJsonObject(getSetting('oidc_group_app_groups_mapping'))),
     showLocalLogin: (getSetting('oidc_show_local_login') ?? 'true') === 'true',
     forceSsoRedirect: getSetting('oidc_force_sso_redirect') === 'true',
+    appBaseUrl: getSetting('oidc_app_base_url') || '',
   };
 }
 
@@ -172,6 +186,7 @@ export interface OidcSaveInput {
   groupAppGroupsMapping?: unknown;
   showLocalLogin?: boolean;
   forceSsoRedirect?: boolean;
+  appBaseUrl?: string;
 }
 
 /** Persist OIDC config. Encrypts the client secret only when a new one is provided
@@ -209,7 +224,22 @@ export function saveOidcConfig(input: OidcSaveInput): void {
   );
   setSetting('oidc_show_local_login', showLocalLogin ? 'true' : 'false');
   setSetting('oidc_force_sso_redirect', forceSsoRedirect ? 'true' : 'false');
+  setSetting('oidc_app_base_url', normalizeBaseUrl(input.appBaseUrl));
   cachedConfig = null;
+}
+
+/** Normalize a user-supplied base URL to its http(s) origin; '' when blank or
+ *  not a usable web origin (e.g. mailto:/urn: parse fine but have a null origin). */
+function normalizeBaseUrl(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.origin;
+  } catch {
+    return '';
+  }
 }
 
 /** Accept either a JSON string or an object for the mapping inputs. */

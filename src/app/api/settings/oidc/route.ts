@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
-import { getOidcConfig, saveOidcConfig } from '@/lib/auth/oidc';
+import { getOidcConfig, saveOidcConfig, getPublicBaseUrl } from '@/lib/auth/oidc';
 
 // GET /api/settings/oidc — current config (client secret never returned).
 export async function GET(request: NextRequest) {
@@ -8,7 +8,11 @@ export async function GET(request: NextRequest) {
     requireAdmin(request);
     const c = getOidcConfig();
     const { clientSecret, ...rest } = c;
-    return NextResponse.json({ ...rest, hasClientSecret: clientSecret.length > 0 });
+    // Effective redirect URI the server would actually use right now (given the
+    // configured override, env, or request host) — shown read-only in the UI so
+    // the admin knows exactly what to register in the IdP.
+    const callbackUrl = new URL('/api/auth/oidc/callback', getPublicBaseUrl(request.url)).toString();
+    return NextResponse.json({ ...rest, hasClientSecret: clientSecret.length > 0, callbackUrl });
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);
     const message = e instanceof Error ? e.message : 'Unknown error';
@@ -27,6 +31,22 @@ export async function PUT(request: NextRequest) {
       if (!issuer || !clientId) {
         return NextResponse.json(
           { error: 'issuerUrl and clientId are required when OIDC is enabled' },
+          { status: 400 }
+        );
+      }
+    }
+    const appBaseUrl = String(body.appBaseUrl ?? '').trim();
+    if (appBaseUrl) {
+      let ok = false;
+      try {
+        const u = new URL(appBaseUrl);
+        ok = u.protocol === 'http:' || u.protocol === 'https:';
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'Application URL must be a valid http(s) URL (e.g. https://dns.example.com)' },
           { status: 400 }
         );
       }

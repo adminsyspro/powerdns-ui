@@ -34,7 +34,9 @@ interface OidcConfig {
   groupAppGroupsMapping: string;
   showLocalLogin: boolean;
   forceSsoRedirect: boolean;
+  appBaseUrl: string;
   hasClientSecret?: boolean;
+  callbackUrl?: string;
 }
 
 export default function SettingsPage() {
@@ -70,6 +72,7 @@ export default function SettingsPage() {
     groupAppGroupsMapping: '{}',
     showLocalLogin: true,
     forceSsoRedirect: false,
+    appBaseUrl: '',
     hasClientSecret: false,
   });
   const [oidcSaving, setOidcSaving] = React.useState(false);
@@ -78,6 +81,22 @@ export default function SettingsPage() {
   const [oidcGroupAppGroupsMappingError, setOidcGroupAppGroupsMappingError] = React.useState('');
   const [oidcTestResult, setOidcTestResult] = React.useState('');
   const [oidcTesting, setOidcTesting] = React.useState(false);
+  const [oidcCallbackCopied, setOidcCallbackCopied] = React.useState(false);
+
+  // Redirect URI to register in the IdP. Previews the typed override live;
+  // otherwise shows the server-effective value (env/host), then this browser's
+  // origin as a last resort.
+  const oidcCallbackUrl = React.useMemo(() => {
+    const override = oidcConfig.appBaseUrl?.trim();
+    if (override) {
+      // Mirror the server: it stores only the origin (drops userinfo/path), so
+      // preview from the origin to keep the copied URI identical to redirect_uri.
+      try { return new URL('/api/auth/oidc/callback', new URL(override).origin).toString(); } catch { /* keep typing */ }
+    }
+    if (oidcConfig.callbackUrl) return oidcConfig.callbackUrl;
+    if (typeof window !== 'undefined') return `${window.location.origin}/api/auth/oidc/callback`;
+    return '';
+  }, [oidcConfig.appBaseUrl, oidcConfig.callbackUrl]);
 
   const [nameserverPools, setNameserverPools] = React.useState<NameserverPool[]>([]);
   const [nameserverPoolsSaving, setNameserverPoolsSaving] = React.useState(false);
@@ -147,6 +166,7 @@ export default function SettingsPage() {
       groupAppGroupsMapping: parsedGroupAppGroupsMapping,
       showLocalLogin: oidcConfig.showLocalLogin,
       forceSsoRedirect: oidcConfig.forceSsoRedirect,
+      appBaseUrl: oidcConfig.appBaseUrl,
     };
     if (oidcConfig.clientSecret) {
       body.clientSecret = oidcConfig.clientSecret;
@@ -159,7 +179,14 @@ export default function SettingsPage() {
     setOidcSaving(false);
     if (res.ok) {
       setOidcMessage('Configuration saved.');
-      setOidcConfig((prev) => ({ ...prev, clientSecret: '', hasClientSecret: prev.hasClientSecret || !!prev.clientSecret }));
+      // Refresh the server-effective callback URL (reflects the just-saved override).
+      const refreshed = await fetch('/api/settings/oidc').then((r) => r.ok ? r.json() : null).catch(() => null);
+      setOidcConfig((prev) => ({
+        ...prev,
+        clientSecret: '',
+        hasClientSecret: prev.hasClientSecret || !!prev.clientSecret,
+        callbackUrl: refreshed?.callbackUrl ?? prev.callbackUrl,
+      }));
     } else {
       const data = await res.json().catch(() => ({}));
       setOidcMessage(data.error ? `Error: ${data.error}` : 'Error saving configuration.');
@@ -529,6 +556,33 @@ export default function SettingsPage() {
                     <div className="space-y-2 md:col-span-2">
                       <Label>Scopes</Label>
                       <Input placeholder="openid profile email groups" value={oidcConfig.scopes} onChange={(e) => setOidcConfig({ ...oidcConfig, scopes: e.target.value })} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Application URL</Label>
+                      <Input placeholder="https://dns.example.com" value={oidcConfig.appBaseUrl} onChange={(e) => setOidcConfig({ ...oidcConfig, appBaseUrl: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">Public URL users reach this app on. Required behind a reverse proxy so the redirect URI isn&apos;t built from the internal address. Leave blank to use the APP_URL env var or the request host.</p>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Redirect URI</Label>
+                      <div className="flex gap-2">
+                        <Input readOnly className="font-mono text-sm" value={oidcCallbackUrl} onFocus={(e) => e.target.select()} />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!oidcCallbackUrl}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(oidcCallbackUrl);
+                              setOidcCallbackCopied(true);
+                              setTimeout(() => setOidcCallbackCopied(false), 1500);
+                            } catch { /* clipboard unavailable */ }
+                          }}
+                        >
+                          {oidcCallbackCopied ? 'Copied' : 'Copy'}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Register this exact URI in your IdP&apos;s allowed redirect URIs.</p>
                     </div>
                   </div>
 

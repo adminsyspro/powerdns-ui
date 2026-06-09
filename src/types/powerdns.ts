@@ -215,7 +215,10 @@ export interface ServerConnection {
   id: string;
   name: string;
   url: string;
-  apiKey: string;
+  // Write-only: supplied by the admin form on create/update, but NEVER returned
+  // by the API (the key stays server-side — see pdns-proxy.ts). Optional so the
+  // client can hold a connection it can't read the key for.
+  apiKey?: string;
   version?: string;
   isDefault: boolean;
   lastConnected?: Date;

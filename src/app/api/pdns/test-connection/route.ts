@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 
-// POST /api/pdns/test-connection - Test a PowerDNS server connection
+// POST /api/pdns/test-connection - Test a PowerDNS server connection.
+// Admin-only: it dials a caller-supplied url+key, so restricting it to
+// administrators avoids turning the app into an SSRF probe for any user.
 export async function POST(request: NextRequest) {
+  try {
+    requireAdmin(request);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
+
   try {
     const { url, apiKey } = await request.json();
 

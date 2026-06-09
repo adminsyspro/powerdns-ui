@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
-import { encrypt, decrypt } from '@/lib/crypto';
+import { encrypt } from '@/lib/crypto';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 
+// SECURITY: the decrypted PowerDNS API key MUST NOT leave the server. The proxy
+// resolves it server-side from the stored connection (see pdns-proxy.ts), so
+// these endpoints only ever expose connection metadata (id/name/url/…).
 export async function GET() {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM server_connections ORDER BY created_at ASC').all() as Array<{
@@ -21,7 +24,6 @@ export async function GET() {
     id: row.id,
     name: row.name,
     url: row.url,
-    apiKey: decrypt(row.api_key),
     version: row.version ?? undefined,
     isDefault: row.is_default === 1,
     lastConnected: row.last_connected ? new Date(row.last_connected * 1000) : undefined,
@@ -62,7 +64,6 @@ export async function POST(request: NextRequest) {
     id,
     name,
     url,
-    apiKey,
     version: version ?? undefined,
     isDefault: !!isDefault,
   }, { status: 201 });

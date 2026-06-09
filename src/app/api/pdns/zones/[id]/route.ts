@@ -9,10 +9,10 @@ import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/
 type RouteContext = { params: Promise<{ id: string }> };
 
 // SECURITY: resolve the zone account against the SAME PowerDNS server that
-// the proxy operation targets (conn.url from x-pdns-url / env fallback).
-// This prevents a cross-server mismatch where a caller could supply an
-// x-pdns-url pointing at a server where they have access to a same-id zone
-// while the authz lookup was done against a different server's cache.
+// the proxy operation targets. conn.url is resolved server-side from the
+// stored connection (x-pdns-connection-id → DB, else default/env), so the
+// caller can no longer point the authz lookup at a different server's cache
+// than the one the write lands on.
 function zoneAccountFor(request: NextRequest, zoneId: string): string | null {
   const conn = getConnectionFromRequest(request);
   return getZoneAccountByIdAndServer(conn.url, zoneId);

@@ -12,8 +12,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     const ctx = requireAuth(getAuthContextFromHeaders(_request));
-    // Authorize against the entry's ORIGINATING server (stored on the row), NOT a
-    // client-supplied x-pdns-url: otherwise a caller could authorize a foreign-server
+    // Authorize against the entry's ORIGINATING server (stored on the row), NOT the
+    // request's active connection: otherwise a caller could authorize a foreign-server
     // entry against a same-zone-id zone on a server where they happen to have access (IDOR).
     const account = getZoneAccountByIdAndServer(entry.serverUrl, entry.zoneId ?? '');
     requireZoneAccess(ctx, { account: account ?? '' }, 'read');

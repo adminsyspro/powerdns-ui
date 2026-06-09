@@ -1,14 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/cache/db';
+import { decrypt } from '@/lib/crypto';
 
 /**
- * Extracts PowerDNS connection info from the request headers,
- * falling back to environment variables.
+ * Resolves a stored PowerDNS connection (url + decrypted API key) entirely
+ * server-side. The client only tells us *which* connection to use via the
+ * `x-pdns-connection-id` header — it never sees or supplies the API key/url.
+ * When the id is missing/unknown we fall back to the default connection
+ * (is_default, else oldest). Returns null when no connections are stored.
+ */
+function resolveStoredConnection(connectionId: string | null): { url: string; apiKey: string } | null {
+  const db = getDb();
+  let row: { url: string; api_key: string } | undefined;
+  if (connectionId) {
+    row = db
+      .prepare('SELECT url, api_key FROM server_connections WHERE id = ?')
+      .get(connectionId) as { url: string; api_key: string } | undefined;
+  }
+  if (!row) {
+    row = db
+      .prepare('SELECT url, api_key FROM server_connections ORDER BY is_default DESC, created_at ASC LIMIT 1')
+      .get() as { url: string; api_key: string } | undefined;
+  }
+  if (!row) return null;
+  return { url: row.url, apiKey: decrypt(row.api_key) };
+}
+
+/**
+ * Resolves the PowerDNS connection info for a request.
+ *
+ * SECURITY: the API key and target url are resolved on the server from the
+ * stored connection identified by `x-pdns-connection-id`. We deliberately do
+ * NOT trust a client-supplied url or API key — that previously let any
+ * authenticated user point the proxy at an arbitrary server (or read the
+ * master key) and bypass zone-level RBAC. `x-pdns-server-id` is only the
+ * PowerDNS *server name* used in API paths (not a secret), defaulting to
+ * "localhost". Env vars are used only when no connection is stored.
  */
 export function getConnectionFromRequest(request: NextRequest) {
-  const url = request.headers.get('x-pdns-url') || process.env.PDNS_API_URL || 'http://localhost:8081';
-  const apiKey = request.headers.get('x-pdns-api-key') || process.env.PDNS_API_KEY || '';
   const serverId = request.headers.get('x-pdns-server-id') || 'localhost';
-  return { url: url.replace(/\/$/, ''), apiKey, serverId };
+  const connectionId = request.headers.get('x-pdns-connection-id');
+
+  const stored = resolveStoredConnection(connectionId);
+  if (stored) {
+    return { url: stored.url.replace(/\/$/, ''), apiKey: stored.apiKey, serverId };
+  }
+
+  const url = (process.env.PDNS_API_URL || 'http://localhost:8081').replace(/\/$/, '');
+  return { url, apiKey: process.env.PDNS_API_KEY || '', serverId };
 }
 
 /**

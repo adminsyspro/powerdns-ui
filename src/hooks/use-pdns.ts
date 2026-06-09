@@ -21,10 +21,7 @@ function useConnectionSync() {
   useEffect(() => {
     setConnectionGetter(() => {
       if (!activeConnection) return null;
-      return {
-        url: activeConnection.url,
-        apiKey: activeConnection.apiKey,
-      };
+      return { connectionId: activeConnection.id };
     });
   }, [activeConnection]);
 

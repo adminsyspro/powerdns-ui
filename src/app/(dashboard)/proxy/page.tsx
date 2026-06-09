@@ -133,8 +133,7 @@ export default function ProxyPage() {
     async (search: string, pageSize: number = ZONE_PICKER_PAGE_SIZE): Promise<{ items: string[]; total: number }> => {
       const headers: Record<string, string> = {};
       if (activeConnection) {
-        headers['x-pdns-url'] = activeConnection.url;
-        headers['x-pdns-api-key'] = activeConnection.apiKey;
+        headers['x-pdns-connection-id'] = activeConnection.id;
       }
       const params = new URLSearchParams({ pageSize: String(pageSize), sortBy: 'name', sortOrder: 'asc' });
       if (search.trim()) params.set('search', search.trim());

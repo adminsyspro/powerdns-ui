@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
-import { encrypt, decrypt } from '@/lib/crypto';
+import { encrypt } from '@/lib/crypto';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 
 export async function PUT(
@@ -52,7 +52,6 @@ export async function PUT(
     id: row.id,
     name: row.name,
     url: row.url,
-    apiKey: decrypt(row.api_key),
     version: row.version ?? undefined,
     isDefault: row.is_default === 1,
     lastConnected: row.last_connected ? new Date(row.last_connected * 1000) : undefined,

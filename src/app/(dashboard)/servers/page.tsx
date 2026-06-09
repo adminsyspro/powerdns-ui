@@ -25,16 +25,19 @@ export default function ServersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const version = testResult?.success ? testResult.message.match(/v([\d.]+)/)?.[1] : undefined;
     if (editingId) {
+      // The API never returns the stored key, so the field is blank on edit.
+      // Only send a new key when the admin actually typed one — otherwise the
+      // existing key is preserved server-side.
+      const { apiKey, ...rest } = formData;
       await updateConnection(editingId, {
-        ...formData,
-        version: testResult?.success ? testResult.message.match(/v([\d.]+)/)?.[1] : undefined,
+        ...rest,
+        ...(apiKey ? { apiKey } : {}),
+        version,
       });
     } else {
-      await addConnection({
-        ...formData,
-        version: testResult?.success ? testResult.message.match(/v([\d.]+)/)?.[1] : undefined,
-      });
+      await addConnection({ ...formData, version });
     }
     setDialogOpen(false);
     resetForm();
@@ -42,7 +45,8 @@ export default function ServersPage() {
 
   const handleEdit = (conn: ServerConnection) => {
     setEditingId(conn.id);
-    setFormData({ name: conn.name, url: conn.url, apiKey: conn.apiKey, isDefault: conn.isDefault });
+    // The API does not expose the stored key; leave it blank (= keep current).
+    setFormData({ name: conn.name, url: conn.url, apiKey: '', isDefault: conn.isDefault });
     setDialogOpen(true);
   };
 
@@ -123,10 +127,10 @@ export default function ServersPage() {
                 <Input
                   id="apiKey"
                   type="password"
-                  placeholder="Your API key"
+                  placeholder={editingId ? 'Leave blank to keep the current key' : 'Your API key'}
                   value={formData.apiKey}
                   onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  required
+                  required={!editingId}
                 />
               </div>
               <div className="flex items-center justify-between p-4 border rounded-lg">

@@ -25,10 +25,10 @@ async function pdnsRequest(
 }
 
 // SECURITY: authorize against the SAME PowerDNS server the mutation targets. The
-// handlers below mutate via the module-level helper that uses process.env.PDNS_API_URL —
-// NOT getConnectionFromRequest() (which honours a client-supplied x-pdns-url header and
-// could point the authz lookup at a different cached server where the caller has a
-// same-id zone in one of their groups, while the write still lands on PDNS_API_URL).
+// handlers below mutate via the module-level helper that uses process.env.PDNS_API_URL,
+// so the authz lookup is keyed on PDNS_API_URL too — keeping read-authz and write on
+// the same server. (This is a legacy env-based route; the active UI path is
+// /api/pdns/zones/[id], which resolves the connection server-side.)
 function zoneAccount(zoneId: string): string | null {
   return getZoneAccountByIdAndServer(PDNS_API_URL, zoneId);
 }

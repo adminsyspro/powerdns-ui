@@ -53,7 +53,7 @@ export default function DashboardLayout({
     setConnectionGetter(() => {
       const conn = useServerConnectionStore.getState().activeConnection;
       if (!conn) return null;
-      return { url: conn.url, apiKey: conn.apiKey };
+      return { connectionId: conn.id };
     });
   }, []);
 

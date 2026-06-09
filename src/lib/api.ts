@@ -17,8 +17,9 @@ import type { NameserverPool } from '@/lib/ns-pools';
  */
 
 interface ConnectionInfo {
-  url: string;
-  apiKey: string;
+  // Which stored connection to use. The server resolves the url + API key from
+  // this id (see pdns-proxy.ts); the key never travels to/through the client.
+  connectionId?: string;
   serverId?: string;
 }
 
@@ -32,8 +33,7 @@ function getHeaders(): HeadersInit {
   const conn = activeConnectionGetter?.();
   if (!conn) return {};
   return {
-    'x-pdns-url': conn.url,
-    'x-pdns-api-key': conn.apiKey,
+    ...(conn.connectionId ? { 'x-pdns-connection-id': conn.connectionId } : {}),
     ...(conn.serverId ? { 'x-pdns-server-id': conn.serverId } : {}),
   };
 }

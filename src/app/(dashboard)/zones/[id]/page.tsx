@@ -25,6 +25,7 @@ import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
+import { normalizeRecordContent } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useActivityLogStore, useAuthStore, usePendingChangesStore } from '@/stores';
@@ -259,6 +260,9 @@ export default function ZoneDetailPage() {
   const { confirm, ConfirmDialog } = useConfirm();
   const [recordDialogOpen, setRecordDialogOpen] = React.useState(false);
   const [editingRecord, setEditingRecord] = React.useState<RRSet | undefined>();
+  // Content of the specific record (within the RRSet) being edited. Each value
+  // in an RRSet is a distinct row, so we must track which one was opened.
+  const [editingOriginalContent, setEditingOriginalContent] = React.useState<string | undefined>();
   const [validationOpen, setValidationOpen] = React.useState(false);
   const [lookup, setLookup] = React.useState<api.DomainLookup | null>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -363,8 +367,9 @@ export default function ZoneDetailPage() {
   const soaRecord = zone?.rrsets?.find((r) => r.type === 'SOA');
   const soaData = soaRecord ? parseSOA(soaRecord.records[0]?.content || '') : null;
 
-  const handleEditRecord = (record: RRSet) => {
+  const handleEditRecord = (record: RRSet, recordContent?: string) => {
     setEditingRecord(record);
+    setEditingOriginalContent(recordContent ?? record.records[0]?.content);
     setRecordDialogOpen(true);
   };
 
@@ -395,6 +400,10 @@ export default function ZoneDetailPage() {
     disabled?: boolean;
     comment?: string;
   }) => {
+    // Auto-add DNS boilerplate the user shouldn't have to type:
+    // TXT quoting, and the trailing dot on hostname targets (CNAME/NS/MX/...).
+    data.content = normalizeRecordContent(data.type, data.content);
+
     const recordName = data.name === '@' || data.name === ''
       ? zone!.name
       : data.name.endsWith('.')
@@ -413,19 +422,17 @@ export default function ZoneDetailPage() {
     const rrsetKey = `${recordName}::${data.type}`;
 
     if (editingRecord) {
-      // Editing: keep other records in the RRSet
-      const existingRecords = editingRecord.records.map((r) => ({
-        content: r.content === data.content ? data.content : r.content,
-        disabled: r.content === data.content ? (data.disabled || false) : r.disabled,
-      }));
-      if (!editingRecord.records.find((r) => r.content === data.content)) {
-        rrset.records = [
-          ...editingRecord.records.filter((r) => r.content !== editingRecord.records[0]?.content),
-          { content: data.content, disabled: data.disabled || false },
-        ];
-      } else {
-        rrset.records = existingRecords;
-      }
+      // Replace exactly the record that was opened (matched by its original
+      // content — unique within an RRSet), leaving every other value untouched.
+      // Drop both the original value and any sibling already equal to the new
+      // content so a content collision can't produce duplicate records.
+      const originalContent = editingOriginalContent ?? editingRecord.records[0]?.content;
+      rrset.records = [
+        ...editingRecord.records.filter(
+          (r) => r.content !== originalContent && r.content !== data.content
+        ),
+        { content: data.content, disabled: data.disabled || false },
+      ];
       addChange(zoneId, 'EDIT', editingRecord, rrset);
     } else {
       const pendingChange = pendingMap.get(rrsetKey);
@@ -462,6 +469,7 @@ export default function ZoneDetailPage() {
 
     setRecordDialogOpen(false);
     setEditingRecord(undefined);
+    setEditingOriginalContent(undefined);
   };
 
   const handleBulkDelete = async (records: RRSet[]) => {
@@ -718,7 +726,7 @@ export default function ZoneDetailPage() {
         onEdit={handleEditRecord}
         onDelete={handleDeleteRecord}
         onToggle={handleToggleRecord}
-        onAdd={() => { setEditingRecord(undefined); setRecordDialogOpen(true); }}
+        onAdd={() => { setEditingRecord(undefined); setEditingOriginalContent(undefined); setRecordDialogOpen(true); }}
         onCopyAll={handleCopyRecords}
         onExportText={handleExportText}
         onExportCsv={handleExportCsv}
@@ -759,6 +767,7 @@ export default function ZoneDetailPage() {
         onOpenChange={setRecordDialogOpen}
         zoneName={zone.name}
         record={editingRecord}
+        recordContent={editingOriginalContent}
         onSubmit={handleSaveRecord}
       />
 

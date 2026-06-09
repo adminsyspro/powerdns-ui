@@ -22,7 +22,7 @@ interface RecordsTableProps {
   records: RRSet[];
   zoneName: string;
   isLoading?: boolean;
-  onEdit?: (record: RRSet) => void;
+  onEdit?: (record: RRSet, recordContent?: string) => void;
   onDelete?: (record: RRSet) => void;
   onToggle?: (record: RRSet, disabled: boolean) => void;
   onUpdateComment?: (record: RRSet, comment: string) => void;
@@ -445,7 +445,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
                         <Tooltip><TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit?.(rrset)}><Edit className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit?.(rrset, record.content)}><Edit className="h-3.5 w-3.5" /></Button>
                         </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(record.content)}><Copy className="h-3.5 w-3.5" /></Button>
@@ -562,11 +562,18 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     <p className="text-sm font-medium text-muted-foreground">Values</p>
                     <div className="space-y-1.5">
                       {detailRecord.records.map((rec, i) => (
-                        <div key={i} className={`flex items-center justify-between p-2.5 rounded-md border ${rec.disabled ? 'opacity-50 bg-muted' : 'bg-muted/30'}`}>
+                        <div key={i} className={`flex items-center justify-between gap-2 p-2.5 rounded-md border ${rec.disabled ? 'opacity-50 bg-muted' : 'bg-muted/30'}`}>
                           <span className="font-mono text-sm break-all">{rec.content}</span>
-                          <Badge variant={rec.disabled ? 'secondary' : 'default'} className={rec.disabled ? '' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}>
-                            {rec.disabled ? 'Disabled' : 'Active'}
-                          </Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant={rec.disabled ? 'secondary' : 'default'} className={rec.disabled ? '' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}>
+                              {rec.disabled ? 'Disabled' : 'Active'}
+                            </Badge>
+                            {onEdit && (
+                              <Tooltip><TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { onEdit(detailRecord, rec.content); setDetailRecord(null); }}><Edit className="h-3.5 w-3.5" /></Button>
+                              </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -609,7 +616,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setDetailRecord(null)}>Close</Button>
-                  <Button onClick={() => { onEdit?.(detailRecord); setDetailRecord(null); }}>Edit</Button>
+                  <Button onClick={() => { onEdit?.(detailRecord, detailRecord.records[0]?.content); setDetailRecord(null); }}>Edit</Button>
                 </DialogFooter>
               </>
             )}

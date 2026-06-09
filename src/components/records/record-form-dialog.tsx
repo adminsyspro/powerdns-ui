@@ -50,6 +50,8 @@ interface RecordFormDialogProps {
   onOpenChange: (open: boolean) => void;
   zoneName: string;
   record?: RRSet;
+  /** Content of the specific record within the RRSet being edited. */
+  recordContent?: string;
   onSubmit: (data: RecordFormData) => Promise<void>;
 }
 
@@ -58,6 +60,7 @@ export function RecordFormDialog({
   onOpenChange,
   zoneName,
   record,
+  recordContent,
   onSubmit,
 }: RecordFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -85,12 +88,15 @@ export function RecordFormDialog({
         ? '@'
         : record.name.replaceAll(`.${zoneName}`, '').replaceAll(zoneName, '').replace(/\.$/, '') || '@';
 
+      // Edit the specific value that was opened, not just the first one.
+      const editingRec = record.records.find((r) => r.content === recordContent) ?? record.records[0];
+
       reset({
         name,
         type: record.type,
         ttl: record.ttl,
-        content: record.records[0]?.content || '',
-        disabled: record.records[0]?.disabled || false,
+        content: editingRec?.content || '',
+        disabled: editingRec?.disabled || false,
         comment: record.comments?.[0]?.content || '',
       });
     } else {
@@ -103,7 +109,7 @@ export function RecordFormDialog({
         comment: '',
       });
     }
-  }, [record, zoneName, reset]);
+  }, [record, recordContent, zoneName, reset]);
 
   const onFormSubmit = async (data: RecordFormData) => {
     setIsSubmitting(true);
@@ -122,12 +128,12 @@ export function RecordFormDialog({
     const placeholders: Record<string, string> = {
       A: '192.168.1.1',
       AAAA: '2001:db8::1',
-      CNAME: 'target.example.com.',
-      MX: '10 mail.example.com.',
-      TXT: '"v=spf1 mx ~all"',
-      NS: 'ns1.example.com.',
-      SRV: '10 5 5060 sipserver.example.com.',
-      PTR: 'host.example.com.',
+      CNAME: 'target.example.com',
+      MX: '10 mail.example.com',
+      TXT: 'v=spf1 mx ~all',
+      NS: 'ns1.example.com',
+      SRV: '10 5 5060 sipserver.example.com',
+      PTR: 'host.example.com',
       CAA: '0 issue "letsencrypt.org"',
     };
     return placeholders[type] || 'Record content';
@@ -137,12 +143,12 @@ export function RecordFormDialog({
     const helpers: Record<string, string> = {
       A: 'IPv4 address',
       AAAA: 'IPv6 address',
-      CNAME: 'Canonical name (must end with a dot)',
-      MX: 'Priority and mail server (e.g., "10 mail.example.com.")',
-      TXT: 'Text record (must be quoted)',
-      NS: 'Nameserver (must end with a dot)',
+      CNAME: 'Canonical name — the trailing dot is added automatically',
+      MX: 'Priority and mail server (e.g., "10 mail.example.com") — trailing dot added automatically',
+      TXT: 'Text record — surrounding quotes are added automatically',
+      NS: 'Nameserver — the trailing dot is added automatically',
       SRV: 'Priority Weight Port Target',
-      PTR: 'Pointer record (must end with a dot)',
+      PTR: 'Pointer record — the trailing dot is added automatically',
       CAA: 'Flags Tag Value',
     };
     return helpers[type] || null;
@@ -231,7 +237,7 @@ export function RecordFormDialog({
                 <StructuredContentFields
                   key={recordType}
                   recordType={recordType}
-                  initialContent={record?.records[0]?.content || ''}
+                  initialContent={recordContent ?? record?.records[0]?.content ?? ''}
                   onContentChange={(content) => setValue('content', content, { shouldValidate: true })}
                 />
                 {errors.content && (

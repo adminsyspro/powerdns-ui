@@ -33,8 +33,8 @@ const RECORD_FIELD_CONFIGS: Record<string, RecordFieldConfig> = {
         name: 'server',
         label: 'Mail Server',
         type: 'string',
-        placeholder: 'mail.example.com.',
-        helperText: 'Must end with a dot',
+        placeholder: 'mail.example.com',
+        helperText: 'Trailing dot added automatically',
         width: 'half',
       },
     ],
@@ -78,8 +78,8 @@ const RECORD_FIELD_CONFIGS: Record<string, RecordFieldConfig> = {
         name: 'target',
         label: 'Target',
         type: 'string',
-        placeholder: 'sipserver.example.com.',
-        helperText: 'Must end with a dot',
+        placeholder: 'sipserver.example.com',
+        helperText: 'Trailing dot added automatically',
         width: 'half',
       },
     ],
@@ -443,4 +443,55 @@ export function getRecordFieldConfig(type: string): RecordFieldConfig | null {
 
 export function hasStructuredFields(type: string): boolean {
   return type in RECORD_FIELD_CONFIGS;
+}
+
+// Record types whose whole content is a single hostname that PowerDNS expects
+// to be fully-qualified (trailing dot).
+const HOSTNAME_TYPES = new Set(['CNAME', 'NS', 'PTR', 'DNAME', 'ALIAS']);
+// Record types where the hostname is the last whitespace-separated token.
+const HOSTNAME_TAIL_TYPES = new Set(['MX', 'SRV']);
+
+function ensureTrailingDot(host: string): string {
+  // Only a real hostname (contains a letter) gets a dot — never a bare number
+  // or an empty token, and not the root label ".".
+  if (!/[a-zA-Z]/.test(host)) return host;
+  return host.endsWith('.') ? host : `${host}.`;
+}
+
+function normalizeTxtContent(content: string): string {
+  // Already wrapped (single "..." or multi-string "..." "...") — trust the user.
+  if (content.startsWith('"') && content.endsWith('"') && content.length >= 2) {
+    return content;
+  }
+  // Escape backslashes and quotes, then wrap the whole value in quotes.
+  const escaped = content.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/**
+ * Normalize record content so the user doesn't have to type DNS boilerplate:
+ * - TXT values are auto-quoted (and inner quotes/backslashes escaped).
+ * - Hostname targets (CNAME/NS/PTR/DNAME/ALIAS, and the MX/SRV target) get the
+ *   required trailing dot added automatically.
+ * Idempotent: re-normalizing already-correct content is a no-op.
+ */
+export function normalizeRecordContent(type: string, content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) return trimmed;
+
+  if (type === 'TXT') {
+    return normalizeTxtContent(trimmed);
+  }
+
+  if (HOSTNAME_TYPES.has(type)) {
+    return ensureTrailingDot(trimmed);
+  }
+
+  if (HOSTNAME_TAIL_TYPES.has(type)) {
+    const parts = trimmed.split(/\s+/);
+    parts[parts.length - 1] = ensureTrailingDot(parts[parts.length - 1]);
+    return parts.join(' ');
+  }
+
+  return trimmed;
 }

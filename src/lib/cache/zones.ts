@@ -142,9 +142,11 @@ export function getCachedZones(
     values.push(...allowedAccounts);
   }
 
-  // Zone names are stored in PowerDNS canonical form (trailing dot), so this
-  // also matches the apex zones `in-addr.arpa.` / `ip6.arpa.` themselves.
-  const REVERSE_CONDITION = "(name LIKE '%in-addr.arpa.' OR name LIKE '%ip6.arpa.')";
+  // Zone names are stored in PowerDNS canonical form (trailing dot). Match the
+  // apex zones explicitly plus dot-prefixed suffixes so forward zones whose last
+  // label merely ends in "in-addr"/"ip6" (e.g. `notin-addr.arpa.`) don't match.
+  const REVERSE_CONDITION =
+    "(name = 'in-addr.arpa.' OR name LIKE '%.in-addr.arpa.' OR name = 'ip6.arpa.' OR name LIKE '%.ip6.arpa.')";
 
   const baseWhere = conditions.join(' AND ');
   const scopeClause =

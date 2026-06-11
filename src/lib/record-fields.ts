@@ -452,9 +452,10 @@ const HOSTNAME_TYPES = new Set(['CNAME', 'NS', 'PTR', 'DNAME', 'ALIAS']);
 const HOSTNAME_TAIL_TYPES = new Set(['MX', 'SRV']);
 
 function ensureTrailingDot(host: string): string {
-  // Only a real hostname (contains a letter) gets a dot — never a bare number
-  // or an empty token, and not the root label ".".
-  if (!/[a-zA-Z]/.test(host)) return host;
+  // Never dot an empty token, the root label ".", or a bare number — but
+  // numeric-only multi-label names like `123.456` are valid DNS names and do
+  // get the trailing dot.
+  if (!host || host === '.' || /^\d+$/.test(host)) return host;
   return host.endsWith('.') ? host : `${host}.`;
 }
 

@@ -84,6 +84,7 @@ export interface CachedZonesParams {
   search?: string;
   kind?: string;
   dnssec?: 'enabled' | 'disabled';
+  scope?: 'forward' | 'reverse';
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -94,6 +95,8 @@ export interface PaginatedZones {
   page: number;
   pageSize: number;
   totalPages: number;
+  forwardTotal: number;
+  reverseTotal: number;
 }
 
 const ALLOWED_SORT_COLUMNS = new Set(['name', 'kind', 'serial', 'edited_serial', 'account', 'last_check', 'dnssec']);
@@ -133,13 +136,22 @@ export function getCachedZones(
   // a non-admin with no groups — they can see nothing.
   if (allowedAccounts) {
     if (allowedAccounts.length === 0) {
-      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      return { items: [], total: 0, page, pageSize, totalPages: 0, forwardTotal: 0, reverseTotal: 0 };
     }
     conditions.push(`account IN (${allowedAccounts.map(() => '?').join(',')})`);
     values.push(...allowedAccounts);
   }
 
-  const where = conditions.join(' AND ');
+  // Zone names are stored in PowerDNS canonical form (trailing dot), so this
+  // also matches the apex zones `in-addr.arpa.` / `ip6.arpa.` themselves.
+  const REVERSE_CONDITION = "(name LIKE '%in-addr.arpa.' OR name LIKE '%ip6.arpa.')";
+
+  const baseWhere = conditions.join(' AND ');
+  const scopeClause =
+    params.scope === 'reverse' ? ` AND ${REVERSE_CONDITION}`
+    : params.scope === 'forward' ? ` AND NOT ${REVERSE_CONDITION}`
+    : '';
+  const where = baseWhere + scopeClause;
 
   // Sort
   let sortColumn = 'name';
@@ -148,9 +160,13 @@ export function getCachedZones(
   }
   const sortOrder = params.sortOrder === 'desc' ? 'DESC' : 'ASC';
 
-  // Count
-  const countRow = db.prepare(`SELECT COUNT(*) as total FROM zones WHERE ${where}`).get(...values) as { total: number };
-  const total = countRow.total;
+  // Per-scope counts under the same filters; total derives from them.
+  const reverseTotal = (db.prepare(`SELECT COUNT(*) as total FROM zones WHERE ${baseWhere} AND ${REVERSE_CONDITION}`).get(...values) as { total: number }).total;
+  const forwardTotal = (db.prepare(`SELECT COUNT(*) as total FROM zones WHERE ${baseWhere} AND NOT ${REVERSE_CONDITION}`).get(...values) as { total: number }).total;
+  const total =
+    params.scope === 'reverse' ? reverseTotal
+    : params.scope === 'forward' ? forwardTotal
+    : forwardTotal + reverseTotal;
   const totalPages = Math.ceil(total / pageSize);
 
   // Fetch page
@@ -186,7 +202,7 @@ export function getCachedZones(
     last_check: row.last_check,
   }));
 
-  return { items, total, page, pageSize, totalPages };
+  return { items, total, page, pageSize, totalPages, forwardTotal, reverseTotal };
 }
 
 // ---- Stats ----

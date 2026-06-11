@@ -12,12 +12,14 @@ export async function GET(request: NextRequest) {
     const conn = getConnectionFromRequest(request);
     const { searchParams } = new URL(request.url);
 
+    const scopeParam = searchParams.get('scope');
     const result = getCachedZones(conn.url, {
       page: Number.parseInt(searchParams.get('page') || '1'),
       pageSize: Number.parseInt(searchParams.get('pageSize') || '25'),
       search: searchParams.get('search') || undefined,
       kind: searchParams.get('kind') || undefined,
       dnssec: (searchParams.get('dnssec') as 'enabled' | 'disabled') || undefined,
+      scope: scopeParam === 'forward' || scopeParam === 'reverse' ? scopeParam : undefined,
       sortBy: searchParams.get('sortBy') || undefined,
       sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || undefined,
     }, allowed);

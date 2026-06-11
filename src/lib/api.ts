@@ -296,6 +296,8 @@ export interface PaginatedZonesResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+  forwardTotal: number;
+  reverseTotal: number;
 }
 
 export interface CachedZonesParams {
@@ -304,6 +306,7 @@ export interface CachedZonesParams {
   search?: string;
   kind?: string;
   dnssec?: string;
+  scope?: 'forward' | 'reverse';
   sortBy?: string;
   sortOrder?: string;
 }

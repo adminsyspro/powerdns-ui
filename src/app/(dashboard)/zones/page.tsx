@@ -71,6 +71,7 @@ export default function ZonesPage() {
   const [search, setSearch] = React.useState('');
   const [kind, setKind] = React.useState('');
   const [dnssec, setDnssec] = React.useState('');
+  const [scope, setScope] = React.useState<'forward' | 'reverse'>('forward');
   const [sortBy, setSortBy] = React.useState('serial');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
 
@@ -80,6 +81,7 @@ export default function ZonesPage() {
     search: search || undefined,
     kind: kind || undefined,
     dnssec: dnssec || undefined,
+    scope,
     sortBy,
     sortOrder,
   });
@@ -91,6 +93,7 @@ export default function ZonesPage() {
   const handleSortChange = (col: string, order: 'asc' | 'desc') => { setSortBy(col); setSortOrder(order); setPage(1); };
   const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(1); };
   const handleGroupFilterChange = (v: string) => { setGroupFilter(v); setPage(1); };
+  const handleScopeChange = (v: string) => { setScope(v as 'forward' | 'reverse'); setPage(1); };
 
   // Client-side group filter applied on top of the server-fetched page
   const groupFilteredZones = React.useMemo(() => {
@@ -318,6 +321,17 @@ export default function ZonesPage() {
           </CardContent>
         </Card>
       )}
+
+      <Tabs value={scope} onValueChange={handleScopeChange}>
+        <TabsList>
+          <TabsTrigger value="forward">
+            Domains{data ? ` (${data.forwardTotal.toLocaleString()})` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="reverse">
+            Reverse{data ? ` (${data.reverseTotal.toLocaleString()})` : ''}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <ZonesTable
         zones={groupFilteredZones}

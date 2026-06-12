@@ -79,11 +79,21 @@ export async function listZones(creds: IntegrationCredentials, accountId: string
   return zones;
 }
 
+interface CfPeer {
+  id: string;
+  name: string;
+  ip?: string;
+  port?: number;
+  tsig_id?: string;
+}
+
 /**
  * Ensures the account-level transfer prerequisites exist (TSIG key + peer
- * pointing at the PowerDNS primary) and returns their ids. Both are created
- * once and reused for every zone; ids are persisted back into the
- * integration config by the caller.
+ * pointing at the PowerDNS primary) and returns their ids. An existing peer
+ * with the same IP/port (and matching TSIG expectation) is reused so manual
+ * setups that predate the integration are adopted instead of duplicated —
+ * relinking a zone already attached to that peer is then a no-op. Ids are
+ * persisted back into the integration config by the caller.
  */
 export async function ensurePeer(
   creds: IntegrationCredentials,
@@ -104,12 +114,26 @@ export async function ensurePeer(
 
   if (config.peerId) return { peerId: config.peerId, tsigId };
 
+  // Reuse an existing matching peer. Without a configured TSIG we can only
+  // adopt a peer that has none; with one we can't verify the remote secret,
+  // so we only adopt the peer when it references the TSIG we just created
+  // (never the case) — i.e. TSIG setups always get their own peer.
+  const existing = await cf<CfPeer[]>(creds.apiToken, `/accounts/${config.accountId}/secondary_dns/peers`);
+  const wantPort = config.primaryPort || 53;
+  const match = existing.find(
+    (peer) =>
+      peer.ip === config.primaryIp &&
+      (peer.port ?? 53) === wantPort &&
+      (tsigId ? peer.tsig_id === tsigId : !peer.tsig_id)
+  );
+  if (match) return { peerId: match.id, tsigId };
+
   const peer = await cf<{ id: string }>(creds.apiToken, `/accounts/${config.accountId}/secondary_dns/peers`, {
     method: 'POST',
     body: {
       name: `powerdns-ui ${config.primaryIp}`,
       ip: config.primaryIp,
-      port: config.primaryPort || 53,
+      port: wantPort,
       ...(tsigId ? { tsig_id: tsigId } : {}),
     },
   });

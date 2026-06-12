@@ -18,6 +18,7 @@ import {
   Database,
   Layers,
   History,
+  Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ const navigation: NavGroup[] = [
     title: 'DNS Management',
     items: [
       { title: 'Zones', href: '/zones', icon: Globe },
+      { title: 'NS Audit', href: '/compliance', icon: Radar, requiredRole: ['Administrator', 'Operator'] },
       { title: 'API Proxy', href: '/proxy', icon: Shield, requiredRole: ['Administrator'] },
       { title: 'Templates', href: '/templates', icon: Layers, requiredRole: ['Administrator'] },
     ],

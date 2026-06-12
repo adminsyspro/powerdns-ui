@@ -11,6 +11,9 @@ import type {
 } from '@/types/powerdns';
 import type { ImportPreview } from '@/lib/bind/types';
 import type { NameserverPool } from '@/lib/ns-pools';
+import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
+
+export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
 /**
  * Frontend API client that calls our Next.js API routes,
@@ -298,6 +301,16 @@ export async function deleteCryptokey(zoneId: string, keyId: number) {
     `/api/pdns/zones/${encodeURIComponent(zoneId)}/cryptokeys/${keyId}`,
     { method: 'DELETE' }
   );
+}
+
+// ---- NS compliance audit ----
+
+export async function fetchNsAudit() {
+  return apiRequest<NsAuditResponse>('/api/zones/ns-audit');
+}
+
+export async function startNsAuditScan() {
+  return apiRequest<{ scan: NsAuditScanState }>('/api/zones/ns-audit/scan', { method: 'POST' });
 }
 
 // ---- Search ----

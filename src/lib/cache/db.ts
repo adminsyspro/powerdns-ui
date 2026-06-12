@@ -172,6 +172,23 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_proxy_logs_time ON proxy_logs(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_proxy_logs_env ON proxy_logs(environment_id);
+
+    -- NS compliance audit: public delegation of each forward zone compared to
+    -- the default nameserver pool (see src/lib/ns-audit.ts).
+    CREATE TABLE IF NOT EXISTS ns_audit (
+      server_url  TEXT NOT NULL,
+      zone_id     TEXT NOT NULL,
+      zone_name   TEXT NOT NULL,
+      status      TEXT NOT NULL,
+      delegated   TEXT NOT NULL DEFAULT '[]',
+      in_pool     TEXT NOT NULL DEFAULT '[]',
+      extra       TEXT NOT NULL DEFAULT '[]',
+      missing     TEXT NOT NULL DEFAULT '[]',
+      error       TEXT DEFAULT NULL,
+      checked_at  INTEGER NOT NULL,
+      PRIMARY KEY (server_url, zone_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ns_audit_status ON ns_audit(server_url, status);
   `);
 
   // Migrations — add columns that may not exist in older databases

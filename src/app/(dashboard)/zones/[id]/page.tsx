@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
+import { DnssecDialog } from '@/components/zones/dnssec-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -254,6 +255,7 @@ export default function ZoneDetailPage() {
   const { data: zone, error, isLoading, refetch } = useZone(zoneId);
   const { sync } = useZoneSync();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [dnssecOpen, setDnssecOpen] = React.useState(false);
   const [notifySent, setNotifySent] = React.useState(false);
   const notifyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => () => { if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current); }, []);
@@ -669,6 +671,9 @@ export default function ZoneDetailPage() {
               <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                 <Settings className="mr-2 h-4 w-4" />Settings
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setDnssecOpen(true)}>
+                <Shield className="mr-2 h-4 w-4" />DNSSEC
+              </Button>
               {/* NOTIFY is an outbound primary→secondary action, so it only applies to Master zones. Slave zones pull from their master via AXFR instead; Native and catalog zones (Producer/Consumer) have no replicas to notify. */}
               {zone.kind === 'Master' && (
                 <Button variant="outline" size="sm" onClick={handleNotify}>
@@ -758,6 +763,17 @@ export default function ZoneDetailPage() {
           groups={groups}
           isAdmin={canManageAllZones}
           onSubmit={handleSaveSettings}
+        />
+      )}
+
+      {/* DNSSEC Dialog */}
+      {zone && (
+        <DnssecDialog
+          open={dnssecOpen}
+          onOpenChange={setDnssecOpen}
+          zone={zone}
+          canManage={canManageAllZones}
+          onZoneChanged={refetch}
         />
       )}
 

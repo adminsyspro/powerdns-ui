@@ -7,6 +7,7 @@ import type {
   SearchResult,
   RRSet,
   ServerConnection,
+  CryptoKey,
 } from '@/types/powerdns';
 import type { ImportPreview } from '@/lib/bind/types';
 import type { NameserverPool } from '@/lib/ns-pools';
@@ -267,6 +268,36 @@ export async function rectifyZone(zoneId: string) {
   return apiRequest<{ result: string }>(`/api/pdns/zones/${encodeURIComponent(zoneId)}/rectify`, {
     method: 'PUT',
   });
+}
+
+// ---- DNSSEC / Cryptokeys ----
+
+export async function fetchCryptokeys(zoneId: string) {
+  return apiRequest<CryptoKey[]>(`/api/pdns/zones/${encodeURIComponent(zoneId)}/cryptokeys`);
+}
+
+export async function createCryptokey(
+  zoneId: string,
+  key: { keytype: 'csk' | 'ksk' | 'zsk'; active: boolean; algorithm?: string; bits?: number }
+) {
+  return apiRequest<CryptoKey>(`/api/pdns/zones/${encodeURIComponent(zoneId)}/cryptokeys`, {
+    method: 'POST',
+    body: JSON.stringify(key),
+  });
+}
+
+export async function updateCryptokey(zoneId: string, keyId: number, key: Partial<CryptoKey>) {
+  return apiRequest<void>(
+    `/api/pdns/zones/${encodeURIComponent(zoneId)}/cryptokeys/${keyId}`,
+    { method: 'PUT', body: JSON.stringify(key) }
+  );
+}
+
+export async function deleteCryptokey(zoneId: string, keyId: number) {
+  return apiRequest<void>(
+    `/api/pdns/zones/${encodeURIComponent(zoneId)}/cryptokeys/${keyId}`,
+    { method: 'DELETE' }
+  );
 }
 
 // ---- Search ----

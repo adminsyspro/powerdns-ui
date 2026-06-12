@@ -38,12 +38,15 @@ interface ImportZoneDialogProps {
   mode: ImportMode;
   onCreateSuccess?: (newZoneId: string) => void;
   onMergeStaged?: () => void;
+  // Groups the caller may assign the new zone to (create mode account picker).
+  groups?: { slug: string; name: string }[];
+  isAdmin?: boolean;
 }
 
 type Step = 'source' | 'preview' | 'submitting';
 
 export function ImportZoneDialog({
-  open, onOpenChange, mode, onCreateSuccess, onMergeStaged,
+  open, onOpenChange, mode, onCreateSuccess, onMergeStaged, groups, isAdmin = false,
 }: ImportZoneDialogProps) {
   const [step, setStep] = React.useState<Step>('source');
   const [content, setContent] = React.useState('');
@@ -376,9 +379,31 @@ export function ImportZoneDialog({
                         ))}
                       </div>
                     </div>
+                    {/* Group / Account — select sourced from the admin-managed
+                        group list (no free text, so technicians can't introduce typos). */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="im-account">Account (optional)</Label>
-                      <Input id="im-account" value={account} onChange={(e) => setAccount(e.target.value)} />
+                      <Label htmlFor="im-account">
+                        Group{!isAdmin && <span className="text-destructive ml-0.5">*</span>}
+                      </Label>
+                      <Select
+                        value={account || (isAdmin ? '__orphan__' : '')}
+                        onValueChange={(value) => setAccount(value === '__orphan__' ? '' : value)}
+                      >
+                        <SelectTrigger id="im-account">
+                          <SelectValue placeholder="Select a group" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {isAdmin && <SelectItem value="__orphan__">No group (orphan)</SelectItem>}
+                          {(groups || []).map((g) => (
+                            <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {(!groups || groups.length === 0) && (
+                        <p className="text-xs text-muted-foreground">
+                          No groups defined — manage the list in Administration &rarr; Groups
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center justify-between border rounded-md px-3 py-2">
                       <Label htmlFor="im-dnssec" className="text-sm">DNSSEC</Label>

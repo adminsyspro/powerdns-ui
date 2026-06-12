@@ -393,6 +393,8 @@ export default function ZonesPage() {
         onOpenChange={setImportDialogOpen}
         mode={{ type: 'create' }}
         onCreateSuccess={handleImportSuccess}
+        groups={groups}
+        isAdmin={canManageAllZones}
       />
       <ConfirmDialog />
     </div>

@@ -218,40 +218,35 @@ export function CreateZoneDialog({
               </Select>
             </div>
 
-            {/* Group / Account */}
-            {groups && groups.length > 0 ? (
-              <div className="space-y-2">
-                <Label htmlFor="account">
-                  Group{!isAdmin && <span className="text-destructive ml-0.5">*</span>}
-                </Label>
-                <Select
-                  value={watch('account') || (isAdmin ? '__orphan__' : '')}
-                  onValueChange={(value) => setValue('account', value === '__orphan__' ? '' : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a group" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isAdmin && <SelectItem value="__orphan__">No group (orphan)</SelectItem>}
-                    {groups.map((g) => (
-                      <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!isAdmin && !watch('account') && (
-                  <p className="text-sm text-destructive">Group is required</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="account">Account (Optional)</Label>
-                <Input
-                  id="account"
-                  placeholder="Account name"
-                  {...form.register('account')}
-                />
-              </div>
-            )}
+            {/* Group / Account — always a select sourced from the admin-managed
+                group list (no free text, so technicians can't introduce typos). */}
+            <div className="space-y-2">
+              <Label htmlFor="account">
+                Group{!isAdmin && <span className="text-destructive ml-0.5">*</span>}
+              </Label>
+              <Select
+                value={watch('account') || (isAdmin ? '__orphan__' : '')}
+                onValueChange={(value) => setValue('account', value === '__orphan__' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a group" />
+                </SelectTrigger>
+                <SelectContent>
+                  {isAdmin && <SelectItem value="__orphan__">No group (orphan)</SelectItem>}
+                  {(groups || []).map((g) => (
+                    <SelectItem key={g.slug} value={g.slug}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(!groups || groups.length === 0) && (
+                <p className="text-xs text-muted-foreground">
+                  No groups defined — manage the list in Administration &rarr; Groups
+                </p>
+              )}
+              {!isAdmin && !watch('account') && (
+                <p className="text-sm text-destructive">Group is required</p>
+              )}
+            </div>
 
             {/* SOA-EDIT-API */}
             <div className="space-y-2">
@@ -368,7 +363,7 @@ export function CreateZoneDialog({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || (!isAdmin && groups && groups.length > 0 && !watch('account'))}
+              disabled={isSubmitting || (!isAdmin && !watch('account'))}
             >
               {isSubmitting ? 'Creating...' : 'Create Zone'}
             </Button>

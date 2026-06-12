@@ -26,9 +26,12 @@ export interface IntegrationConfig {
   // Provider-side ids created lazily by the provider (peer/tsig reuse).
   peerId?: string;
   tsigId?: string;
-  // Zone scope: every Master zone, or only zones owned by these groups.
-  scope: 'all-master' | 'groups';
+  // Zone scope: every Master zone, only zones owned by these groups, or an
+  // explicit list of zones.
+  scope: 'all-master' | 'groups' | 'zones';
   groups: string[];
+  // Canonical zone names (trailing dot) when scope === 'zones'.
+  zones: string[];
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;
   // What to do remotely when the PowerDNS zone disappears.

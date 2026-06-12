@@ -17,9 +17,17 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   primaryPort: 53,
   scope: 'all-master',
   groups: [],
+  zones: [],
   autoProvision: true,
   deleteMode: 'never',
 };
+
+// Zone names are stored canonical (trailing dot), matching the zones cache.
+function canonZoneName(name: string): string {
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed) return '';
+  return trimmed.endsWith('.') ? trimmed : `${trimmed}.`;
+}
 
 // Builds a safe config from untrusted client input. peerId/tsigId are
 // provider-managed and never accepted from the client.
@@ -34,8 +42,11 @@ export function sanitizeConfig(input: Partial<IntegrationConfig> | undefined): I
       : 53,
     tsigName: config.tsigName ? String(config.tsigName).trim() : undefined,
     tsigAlgo: config.tsigAlgo ? String(config.tsigAlgo).trim() : undefined,
-    scope: config.scope === 'groups' ? 'groups' : 'all-master',
+    scope: config.scope === 'groups' ? 'groups' : config.scope === 'zones' ? 'zones' : 'all-master',
     groups: Array.isArray(config.groups) ? config.groups.map(String) : [],
+    zones: Array.isArray(config.zones)
+      ? Array.from(new Set(config.zones.map((z) => canonZoneName(String(z))).filter(Boolean)))
+      : [],
     autoProvision: config.autoProvision !== false,
     deleteMode: config.deleteMode === 'delete' ? 'delete' : 'never',
   };

@@ -57,6 +57,18 @@ function bareName(zoneName: string): string {
 
 function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name: string; account: string }> {
   const db = getDb();
+  // Explicit zone selection: the admin picked them, so the kind filter does
+  // not apply (Cloudflare polls via auto_refresh even without NOTIFY).
+  if (config.scope === 'zones') {
+    if (config.zones.length === 0) return [];
+    const placeholders = config.zones.map(() => '?').join(',');
+    return db
+      .prepare(
+        `SELECT name, account FROM zones
+          WHERE server_url = ? AND name IN (${placeholders}) ORDER BY name`
+      )
+      .all(normalizeUrl(serverUrl), ...config.zones) as Array<{ name: string; account: string }>;
+  }
   const base = `SELECT name, account FROM zones
                  WHERE server_url = ? AND kind = 'Master'
                    AND NOT (name = 'in-addr.arpa.' OR name LIKE '%.in-addr.arpa.' OR name = 'ip6.arpa.' OR name LIKE '%.ip6.arpa.')`;
@@ -70,7 +82,8 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
   return db.prepare(`${base} ORDER BY name`).all(normalizeUrl(serverUrl)) as Array<{ name: string; account: string }>;
 }
 
-function zoneInScope(config: IntegrationConfig, kind: string, account: string): boolean {
+function zoneInScope(config: IntegrationConfig, kind: string, account: string, zoneName: string): boolean {
+  if (config.scope === 'zones') return config.zones.includes(zoneName.toLowerCase());
   if (kind !== 'Master') return false;
   if (config.scope === 'groups') return config.groups.includes(account);
   return true;
@@ -228,7 +241,7 @@ export function autoProvisionZone(serverUrl: string, zoneName: string, kind: str
   const normalizedUrl = normalizeUrl(serverUrl);
   for (const integration of listIntegrations()) {
     if (!integration.active || !integration.config.autoProvision) continue;
-    if (!zoneInScope(integration.config, kind, account)) continue;
+    if (!zoneInScope(integration.config, kind, account, zoneName)) continue;
     const creds = getIntegrationCredentials(integration.id);
     if (!creds) continue;
     void provisionZone(integration, creds, normalizedUrl, zoneName);

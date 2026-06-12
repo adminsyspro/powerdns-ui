@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -38,8 +39,9 @@ interface FormState {
   tsigName: string;
   tsigAlgo: string;
   tsigSecret: string;
-  scope: 'all-master' | 'groups';
-  groups: string;
+  scope: 'all-master' | 'groups' | 'zones';
+  groups: string[];
+  zones: string[];
   autoProvision: boolean;
   deleteMode: 'never' | 'delete';
 }
@@ -47,8 +49,89 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   name: '', apiToken: '', accountId: '', primaryIp: '', primaryPort: '53',
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
-  scope: 'all-master', groups: '', autoProvision: true, deleteMode: 'never',
+  scope: 'all-master', groups: [], zones: [], autoProvision: true, deleteMode: 'never',
 };
+
+// Searchable multi-picker over the cached zones (the scope may target a few
+// domains out of thousands, so a plain select doesn't work).
+function ZonePicker({ selected, onChange }: { selected: string[]; onChange: (zones: string[]) => void }) {
+  const [search, setSearch] = React.useState('');
+  const [results, setResults] = React.useState<{ id: string; name: string }[]>([]);
+  const [isSearching, setIsSearching] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!search.trim()) {
+      setResults([]);
+      return;
+    }
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      const result = await api.fetchCachedZones({
+        page: 1, pageSize: 8, search: search.trim(), sortBy: 'name', sortOrder: 'asc',
+      });
+      setResults(result.data?.items.map((z) => ({ id: z.id, name: z.name })) ?? []);
+      setIsSearching(false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const add = (name: string) => {
+    if (!selected.includes(name)) onChange([...selected, name]);
+    setSearch('');
+    setResults([]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Input
+          placeholder="Search a zone to add..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search.trim() && (
+          <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-y-auto">
+            {isSearching ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>
+            ) : results.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">No matching zone</p>
+            ) : (
+              results.map((zone) => (
+                <button
+                  key={zone.id}
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
+                  disabled={selected.includes(zone.name)}
+                  onClick={() => add(zone.name)}
+                >
+                  {zone.name.replace(/\.$/, '')}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {selected.map((zone) => (
+          <Badge key={zone} variant="secondary" className="gap-1">
+            {zone.replace(/\.$/, '')}
+            <button
+              type="button"
+              onClick={() => onChange(selected.filter((z) => z !== zone))}
+              aria-label={`Remove ${zone}`}
+              className="ml-1 hover:text-destructive"
+            >
+              ×
+            </button>
+          </Badge>
+        ))}
+        {selected.length === 0 && (
+          <p className="text-xs text-muted-foreground">No zone selected yet</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = React.useState<IntegrationRow[]>([]);
@@ -61,6 +144,13 @@ export default function IntegrationsPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<IntegrationRow | null>(null);
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
+  // Groups available for the scope selector.
+  const [allGroups, setAllGroups] = React.useState<{ slug: string; name: string }[]>([]);
+  React.useEffect(() => {
+    api.fetchGroups().then((result) => {
+      if (result.data) setAllGroups(result.data.map((g) => ({ slug: g.slug, name: g.name })));
+    });
+  }, []);
   const [isSaving, setIsSaving] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const { confirm, ConfirmDialog } = useConfirm();
@@ -115,7 +205,8 @@ export default function IntegrationsPage() {
       tsigAlgo: integration.config.tsigAlgo || 'hmac-sha256.',
       tsigSecret: '',
       scope: integration.config.scope,
-      groups: integration.config.groups.join(', '),
+      groups: integration.config.groups,
+      zones: integration.config.zones,
       autoProvision: integration.config.autoProvision,
       deleteMode: integration.config.deleteMode,
     });
@@ -131,7 +222,8 @@ export default function IntegrationsPage() {
     tsigName: form.tsigName.trim() || undefined,
     tsigAlgo: form.tsigAlgo.trim() || undefined,
     scope: form.scope,
-    groups: form.groups.split(',').map((g) => g.trim()).filter(Boolean),
+    groups: form.groups,
+    zones: form.zones,
     autoProvision: form.autoProvision,
     deleteMode: form.deleteMode,
   });
@@ -256,7 +348,11 @@ export default function IntegrationsPage() {
                   {!integration.active && <Badge variant="secondary">Inactive</Badge>}
                 </CardTitle>
                 <CardDescription>
-                  Cloudflare · {integration.config.mode.toUpperCase()} · {integration.config.scope === 'all-master' ? 'all Master zones' : `groups: ${integration.config.groups.join(', ') || '—'}`}
+                  Cloudflare · {integration.config.mode.toUpperCase()} · {
+                    integration.config.scope === 'all-master' ? 'all Master zones'
+                    : integration.config.scope === 'groups' ? `groups: ${integration.config.groups.join(', ') || '—'}`
+                    : `${integration.config.zones.length} selected zone(s)`
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center gap-2 pt-0" onClick={(e) => e.stopPropagation()}>
@@ -411,14 +507,41 @@ export default function IntegrationsPage() {
                 <SelectContent>
                   <SelectItem value="all-master">All Master zones</SelectItem>
                   <SelectItem value="groups">Only selected groups</SelectItem>
+                  <SelectItem value="zones">Only selected zones</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {form.scope === 'groups' && (
               <div className="space-y-2">
-                <Label htmlFor="int-groups">Group slugs (comma-separated)</Label>
-                <Input id="int-groups" placeholder="clients, internal" value={form.groups}
-                  onChange={(e) => setForm({ ...form, groups: e.target.value })} />
+                <Label>Groups</Label>
+                {allGroups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No groups defined — manage the list in Administration &rarr; Groups
+                  </p>
+                ) : (
+                  <div className="rounded-md border p-2 max-h-40 overflow-y-auto space-y-1">
+                    {allGroups.map((group) => (
+                      <label key={group.slug} className="flex items-center gap-2 text-sm cursor-pointer px-1 py-0.5 rounded hover:bg-muted">
+                        <Checkbox
+                          checked={form.groups.includes(group.slug)}
+                          onCheckedChange={(checked) => setForm({
+                            ...form,
+                            groups: checked
+                              ? [...form.groups, group.slug]
+                              : form.groups.filter((g) => g !== group.slug),
+                          })}
+                        />
+                        {group.name} <span className="text-muted-foreground font-mono text-xs">({group.slug})</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {form.scope === 'zones' && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Zones to replicate</Label>
+                <ZonePicker selected={form.zones} onChange={(zones) => setForm({ ...form, zones })} />
               </div>
             )}
 

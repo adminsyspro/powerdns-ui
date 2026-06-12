@@ -120,7 +120,11 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
     setError(null);
     const result = await api.updateCryptokey(zone.id, key.id, { active: !key.active });
     if (result.error) setError(result.error);
-    else await loadKeys();
+    else {
+      // (De)activating a key can flip the zone's effective DNSSEC status.
+      onZoneChanged();
+      await loadKeys();
+    }
     setBusy(false);
   };
 

@@ -773,7 +773,12 @@ export default function ZoneDetailPage() {
           onOpenChange={setDnssecOpen}
           zone={zone}
           canManage={canManageAllZones}
-          onZoneChanged={refetch}
+          onZoneChanged={async () => {
+            // Refresh the SQLite cache (list / ZoneSwitcher / dashboard dnssec
+            // badge) AND the detail view, same as handleSaveSettings.
+            await sync();
+            refetch();
+          }}
         />
       )}
 

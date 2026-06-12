@@ -118,7 +118,22 @@ export async function ensurePeer(
   // adopt a peer that has none; with one we can't verify the remote secret,
   // so we only adopt the peer when it references the TSIG we just created
   // (never the case) — i.e. TSIG setups always get their own peer.
-  const existing = await cf<CfPeer[]>(creds.apiToken, `/accounts/${config.accountId}/secondary_dns/peers`);
+  // Paginated like the other list helpers: a match on a later page must not
+  // fall through to creating a duplicate.
+  const existing: CfPeer[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const response = await fetch(
+      `${CF_API}/accounts/${encodeURIComponent(config.accountId)}/secondary_dns/peers?per_page=100&page=${page}`,
+      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    );
+    const envelope = (await response.json()) as CfEnvelope<CfPeer[]>;
+    if (!response.ok || !envelope.success) {
+      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
+      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
+    }
+    existing.push(...envelope.result);
+    if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
+  }
   const wantPort = config.primaryPort || 53;
   const match = existing.find(
     (peer) =>
@@ -195,7 +210,7 @@ export async function setZoneCustomNs(
 ): Promise<void> {
   await cf(creds.apiToken, `/zones/${cfZoneId}/custom_ns`, {
     method: 'PUT',
-    body: { enabled, ns_set: nsSet },
+    body: enabled ? { enabled: true, ns_set: nsSet } : { enabled: false },
   });
 }
 

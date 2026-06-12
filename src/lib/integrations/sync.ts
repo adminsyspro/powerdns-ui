@@ -157,8 +157,8 @@ async function provisionZone(
     }
 
     await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
-    if (config.customNsEnabled) {
-      await cloudflare.setZoneCustomNs(creds, zone.id, true, config.customNsSet || 1);
+    if (config.customNsMode !== 'ignore') {
+      await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
     }
     await cloudflare.forceAxfr(creds, zone.id);
     upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });

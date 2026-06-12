@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
     // Custom-NS changes also need a reprovision pass (keeping peer ids).
     const provisioningChanged =
-      config.customNsEnabled !== existing.config.customNsEnabled ||
+      config.customNsMode !== existing.config.customNsMode ||
       config.customNsSet !== existing.config.customNsSet;
 
     // Merge secrets so the token and the TSIG secret rotate independently.

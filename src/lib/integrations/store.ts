@@ -18,7 +18,7 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   scope: 'all-master',
   groups: [],
   zones: [],
-  customNsEnabled: false,
+  customNsMode: 'ignore',
   customNsSet: 1,
   autoProvision: true,
   deleteMode: 'never',
@@ -49,7 +49,9 @@ export function sanitizeConfig(input: Partial<IntegrationConfig> | undefined): I
     zones: Array.isArray(config.zones)
       ? Array.from(new Set(config.zones.map((z) => canonZoneName(String(z))).filter(Boolean)))
       : [],
-    customNsEnabled: config.customNsEnabled === true,
+    customNsMode: config.customNsMode === 'enable' || config.customNsMode === 'disable'
+      ? config.customNsMode
+      : 'ignore',
     customNsSet: Number.isInteger(config.customNsSet) && (config.customNsSet as number) > 0
       ? (config.customNsSet as number)
       : 1,

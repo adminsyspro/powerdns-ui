@@ -59,7 +59,7 @@ interface FormState {
   scope: 'all-master' | 'groups' | 'zones';
   groups: string[];
   zones: string[];
-  customNsEnabled: boolean;
+  customNsMode: 'ignore' | 'enable' | 'disable';
   customNsSet: string;
   autoProvision: boolean;
   deleteMode: 'never' | 'delete';
@@ -70,7 +70,7 @@ const EMPTY_FORM: FormState = {
   name: '', apiToken: '', accountId: '', primaryIp: '', primaryPort: '53',
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
   scope: 'all-master', groups: [], zones: [],
-  customNsEnabled: false, customNsSet: '1',
+  customNsMode: 'ignore', customNsSet: '1',
   autoProvision: true, deleteMode: 'never',
 };
 
@@ -230,7 +230,7 @@ export default function IntegrationsPage() {
       scope: integration.config.scope,
       groups: integration.config.groups,
       zones: integration.config.zones,
-      customNsEnabled: integration.config.customNsEnabled,
+      customNsMode: integration.config.customNsMode,
       customNsSet: String(integration.config.customNsSet || 1),
       autoProvision: integration.config.autoProvision,
       deleteMode: integration.config.deleteMode,
@@ -249,7 +249,7 @@ export default function IntegrationsPage() {
     scope: form.scope,
     groups: form.groups,
     zones: form.zones,
-    customNsEnabled: form.customNsEnabled,
+    customNsMode: form.customNsMode,
     customNsSet: parseInt(form.customNsSet, 10) || 1,
     autoProvision: form.autoProvision,
     deleteMode: form.deleteMode,
@@ -611,24 +611,31 @@ export default function IntegrationsPage() {
             </div>
             {/* Account custom nameservers */}
             <div className="sm:col-span-2 p-4 border rounded-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="int-custom-ns">Use account custom nameservers</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Serve provisioned zones on your account&apos;s custom nameservers (e.g. ns1.your-domain.com)
-                    instead of Cloudflare-branded ones. The set must already exist on the Cloudflare account.
-                  </p>
-                </div>
-                <Switch id="int-custom-ns" checked={form.customNsEnabled}
-                  onCheckedChange={(checked) => setForm({ ...form, customNsEnabled: checked })} />
+              <div className="space-y-0.5">
+                <Label htmlFor="int-custom-ns">Account custom nameservers</Label>
+                <p className="text-sm text-muted-foreground">
+                  Serve provisioned zones on your account&apos;s custom nameservers (e.g. ns1.your-domain.com)
+                  instead of Cloudflare-branded ones. &ldquo;Don&apos;t manage&rdquo; never touches the
+                  zone setting, so manually configured zones stay as they are.
+                </p>
               </div>
-              {form.customNsEnabled && (
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="int-ns-set" className="text-sm font-normal whitespace-nowrap">Nameserver set</Label>
-                  <Input id="int-ns-set" className="w-20" value={form.customNsSet}
-                    onChange={(e) => setForm({ ...form, customNsSet: e.target.value })} />
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <Select value={form.customNsMode} onValueChange={(v) => setForm({ ...form, customNsMode: v as FormState['customNsMode'] })}>
+                  <SelectTrigger id="int-custom-ns" className="w-72"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ignore">Don&apos;t manage (leave zones as they are)</SelectItem>
+                    <SelectItem value="enable">Enable custom nameservers</SelectItem>
+                    <SelectItem value="disable">Disable (Cloudflare-branded NS)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.customNsMode === 'enable' && (
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="int-ns-set" className="text-sm font-normal whitespace-nowrap">Nameserver set</Label>
+                    <Input id="int-ns-set" className="w-20" value={form.customNsSet}
+                      onChange={(e) => setForm({ ...form, customNsSet: e.target.value })} />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center justify-between sm:col-span-2 p-4 border rounded-lg">

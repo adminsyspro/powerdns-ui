@@ -32,9 +32,10 @@ export interface IntegrationConfig {
   groups: string[];
   // Canonical zone names (trailing dot) when scope === 'zones'.
   zones: string[];
-  // Use the account-level custom nameservers (instead of Cloudflare-branded
-  // ones) on every provisioned zone, with the given nameserver set number.
-  customNsEnabled: boolean;
+  // Account-level custom nameservers on provisioned zones: 'ignore' never
+  // touches the zone setting (manual setups stay as-is), 'enable' enforces
+  // the given nameserver set, 'disable' enforces Cloudflare-branded NS.
+  customNsMode: 'ignore' | 'enable' | 'disable';
   customNsSet: number;
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;

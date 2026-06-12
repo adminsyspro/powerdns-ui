@@ -34,9 +34,15 @@ const syncStates = new Map<string, IntegrationSyncState>();
 // duplicate Cloudflare peers.
 const peerLocks = new Map<string, Promise<void>>();
 
-export function getSyncState(integrationId: string): IntegrationSyncState {
+// Progress is per integration AND per PowerDNS server: a sync against one
+// connection must not show as running (or block syncs) on another.
+function syncKey(integrationId: string, serverUrl: string): string {
+  return `${integrationId}|${normalizeUrl(serverUrl)}`;
+}
+
+export function getSyncState(integrationId: string, serverUrl: string): IntegrationSyncState {
   return (
-    syncStates.get(integrationId) ?? {
+    syncStates.get(syncKey(integrationId, serverUrl)) ?? {
       running: false, total: 0, processed: 0, startedAt: null, finishedAt: null, error: null,
     }
   );
@@ -137,7 +143,7 @@ async function provisionZone(
 
 /** Starts a full reconcile for one integration. Returns false while running. */
 export function startSync(integrationId: string, serverUrl: string): { started: boolean; reason?: string } {
-  const current = getSyncState(integrationId);
+  const current = getSyncState(integrationId, serverUrl);
   if (current.running) return { started: false, reason: 'A sync is already running' };
 
   const integration = getIntegration(integrationId);
@@ -158,7 +164,7 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
     finishedAt: null,
     error: null,
   };
-  syncStates.set(integrationId, state);
+  syncStates.set(syncKey(integrationId, serverUrl), state);
 
   void (async () => {
     try {

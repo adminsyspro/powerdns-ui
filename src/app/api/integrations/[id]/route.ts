@@ -7,6 +7,7 @@ import {
   getIntegration,
   getIntegrationCredentials,
   listIntegrationZones,
+  markZonesForReprovision,
   sanitizeConfig,
   updateIntegration,
 } from '@/lib/integrations/store';
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({
       integration,
       zones: listIntegrationZones(id, normalizeUrl(conn.url)),
-      sync: getSyncState(id),
+      sync: getSyncState(id, conn.url),
     });
   } catch (e) {
     return authzErrorResponse(e);
@@ -54,14 +55,19 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const body = await request.json();
-    const config = body.config !== undefined ? sanitizeConfig(body.config) : existing.config;
+    const config = body.config !== undefined ? sanitizeConfig(body.config) : { ...existing.config };
     const apiToken = typeof body.apiToken === 'string' ? body.apiToken.trim() : '';
     const tsigSecret = typeof body.tsigSecret === 'string' ? body.tsigSecret : '';
 
     // Provider-managed ids survive config edits ONLY while the settings they
-    // were created from are unchanged; otherwise they are dropped so the next
-    // provisioning recreates the peer/TSIG with the new settings.
-    if (!peerSettingsChanged(existing.config, config) && !tsigSecret) {
+    // were created from are unchanged. Otherwise (including a TSIG secret
+    // rotation) they are dropped and every healthy link is flagged stale so
+    // the next sync recreates the peer/TSIG and relinks the zones.
+    if (peerSettingsChanged(existing.config, config) || tsigSecret) {
+      config.peerId = undefined;
+      config.tsigId = undefined;
+      markZonesForReprovision(id);
+    } else {
       config.peerId = existing.config.peerId;
       config.tsigId = existing.config.tsigId;
     }

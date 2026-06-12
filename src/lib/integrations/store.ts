@@ -188,6 +188,22 @@ export function upsertIntegrationZone(
   ).run(integrationId, serverUrl, zoneName, state.remoteZoneId ?? null, state.status, state.message ?? null);
 }
 
+/**
+ * Flags every healthy link of an integration (all servers — the peer is an
+ * account-level object) so the next sync relinks them after peer/TSIG
+ * settings changed.
+ */
+export function markZonesForReprovision(integrationId: string): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE integration_zones
+        SET status = 'stale',
+            message = 'Peer settings changed — run a sync to relink',
+            updated_at = unixepoch()
+      WHERE integration_id = ? AND status != 'orphan'`
+  ).run(integrationId);
+}
+
 export function deleteIntegrationZone(integrationId: string, serverUrl: string, zoneName: string): void {
   const db = getDb();
   db.prepare(

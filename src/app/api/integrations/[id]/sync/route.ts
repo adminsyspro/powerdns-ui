@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!result.started) {
       return NextResponse.json({ error: result.reason }, { status: 409 });
     }
-    return NextResponse.json({ sync: getSyncState(id) }, { status: 202 });
+    return NextResponse.json({ sync: getSyncState(id, conn.url) }, { status: 202 });
   } catch (e) {
     return authzErrorResponse(e);
   }

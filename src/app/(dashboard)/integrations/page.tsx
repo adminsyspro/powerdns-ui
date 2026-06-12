@@ -157,6 +157,7 @@ function ZonePicker({ selected, onChange }: { selected: string[]; onChange: (zon
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = React.useState<IntegrationRow[]>([]);
+  const [stats, setStats] = React.useState<api.IntegrationStats | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<{ zones: IntegrationZoneRow[]; sync: IntegrationSyncState } | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -233,21 +234,26 @@ export default function IntegrationsPage() {
   }, [dialogOpen]);
 
   const load = React.useCallback(async () => {
-    const result = await api.fetchIntegrations();
+    const [result, statsResult] = await Promise.all([api.fetchIntegrations(), api.fetchIntegrationStats()]);
     if (result.data) {
       setIntegrations(result.data);
       setError(null);
     } else {
       setError(result.error || 'Failed to load integrations');
     }
+    if (statsResult.data) setStats(statsResult.data);
     setIsLoading(false);
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
 
   const loadDetail = React.useCallback(async (id: string) => {
-    const result = await api.fetchIntegrationDetail(id);
+    const [result, statsResult] = await Promise.all([
+      api.fetchIntegrationDetail(id),
+      api.fetchIntegrationStats(),
+    ]);
     if (result.data) setDetail({ zones: result.data.zones, sync: result.data.sync });
+    if (statsResult.data) setStats(statsResult.data);
   }, []);
 
   React.useEffect(() => {
@@ -389,9 +395,14 @@ export default function IntegrationsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Integrations</h1>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-8 w-8 object-contain" />
+            Cloudflare
+          </h1>
           <p className="text-muted-foreground">
-            Replicate zones to external providers — Cloudflare secondary DNS (AXFR) with automatic zone provisioning and per-record proxy
+            DNS zone replication to Cloudflare — secondary DNS (AXFR), automatic zone provisioning,
+            custom nameservers and per-record proxy (cache/WAF)
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -400,6 +411,57 @@ export default function IntegrationsPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {/* Replication dashboard */}
+      {stats && integrations.length > 0 && (
+        <div className="space-y-3">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded-lg border p-4">
+              <p className="text-2xl font-bold">{stats.totals.scope}</p>
+              <p className="text-xs text-muted-foreground">Zones in scope</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-2xl font-bold text-green-600">{stats.totals.ok}</p>
+              <p className="text-xs text-muted-foreground">Replicated</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className={`text-2xl font-bold ${stats.totals.error > 0 ? 'text-red-600' : ''}`}>{stats.totals.error}</p>
+              <p className="text-xs text-muted-foreground">Errors</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className={`text-2xl font-bold ${stats.totals.pending > 0 ? 'text-amber-600' : ''}`}>{stats.totals.pending}</p>
+              <p className="text-xs text-muted-foreground">Pending (provisioning / stale)</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className={`text-2xl font-bold ${stats.totals.orphan > 0 ? 'text-amber-600' : ''}`}>{stats.totals.orphan}</p>
+              <p className="text-xs text-muted-foreground">Orphans</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-2xl font-bold">
+                {stats.totals.scope > 0 ? `${Math.round((stats.totals.ok / stats.totals.scope) * 100)}%` : '—'}
+              </p>
+              <p className="text-xs text-muted-foreground">Coverage</p>
+            </div>
+          </div>
+          {/* Coverage bar */}
+          {stats.totals.scope > 0 && (
+            <div className="space-y-1">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-green-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.round((stats.totals.ok / stats.totals.scope) * 100))}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {stats.totals.ok} of {stats.totals.scope} zone(s) in scope replicated to Cloudflare
+                {stats.totals.lastActivity && ` — last activity ${formatDate(stats.totals.lastActivity)}`}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <h2 className="text-lg font-semibold pt-2">Configuration</h2>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

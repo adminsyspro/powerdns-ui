@@ -381,6 +381,22 @@ export async function forceIntegrationAxfr(id: string, zoneName: string) {
   });
 }
 
+export interface IntegrationStats {
+  totals: { scope: number; ok: number; error: number; pending: number; orphan: number; lastActivity: number | null };
+  integrations: Array<{
+    id: string;
+    name: string;
+    active: boolean;
+    scopeCount: number;
+    counts: Record<string, number>;
+    lastActivity: number | null;
+  }>;
+}
+
+export async function fetchIntegrationStats() {
+  return apiRequest<IntegrationStats>('/api/integrations/stats');
+}
+
 export async function fetchCustomNsSets(input: { accountId: string; apiToken?: string; integrationId?: string }) {
   return apiRequest<{ sets: Array<{ set: number; nameservers: string[] }> }>(
     '/api/integrations/custom-ns-sets',

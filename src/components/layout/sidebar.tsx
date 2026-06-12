@@ -19,7 +19,6 @@ import {
   Layers,
   History,
   Radar,
-  Cloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useUIPreferencesStore, useAuthStore } from '@/stores';
 import type { UserRole } from '@/types/powerdns';
+
+// Brand icon rendered like a lucide icon (the sidebar passes className).
+const CloudflareIcon = ({ className }: { className?: string }) => (
+  // eslint-disable-next-line @next/next/no-img-element
+  <img src="/integrations/cloudflare-icon.svg" alt="" className={className} />
+);
 
 interface NavItem {
   title: string;
@@ -70,7 +75,7 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
       { title: 'Groups', href: '/groups', icon: Users2, requiredRole: ['Administrator'] },
-      { title: 'Integrations', href: '/integrations', icon: Cloud, requiredRole: ['Administrator'] },
+      { title: 'Cloudflare', href: '/integrations', icon: CloudflareIcon, requiredRole: ['Administrator'] },
       { title: 'Change History', href: '/history', icon: History, requiredRole: ['Administrator'] },
       { title: 'Activity Log', href: '/activity', icon: FileText, requiredRole: ['Administrator'] },
       { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },

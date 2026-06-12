@@ -61,12 +61,13 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     // Provider-managed ids survive config edits ONLY while the settings they
     // were created from are unchanged. Otherwise (including a TSIG secret
-    // rotation) they are dropped and every healthy link is flagged stale so
-    // the next sync recreates the peer/TSIG and relinks the zones.
-    if (peerSettingsChanged(existing.config, config) || tsigSecret) {
+    // rotation) they are dropped and — once the request is validated below —
+    // every healthy link is flagged stale so the next sync recreates the
+    // peer/TSIG and relinks the zones.
+    const peerChanged = peerSettingsChanged(existing.config, config) || Boolean(tsigSecret);
+    if (peerChanged) {
       config.peerId = undefined;
       config.tsigId = undefined;
-      markZonesForReprovision(id);
     } else {
       config.peerId = existing.config.peerId;
       config.tsigId = existing.config.tsigId;
@@ -87,6 +88,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         );
       }
     }
+
+    // Only after validation: a rejected request must not leave links stale.
+    if (peerChanged) markZonesForReprovision(id);
 
     const updated = updateIntegration(id, {
       name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,

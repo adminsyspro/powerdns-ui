@@ -4,6 +4,7 @@ import * as cloudflare from './cloudflare';
 import {
   getIntegration,
   getIntegrationCredentials,
+  getIntegrationZone,
   listIntegrations,
   listIntegrationZones,
   updateIntegration,
@@ -112,7 +113,14 @@ async function provisionZone(
   serverUrl: string,
   zoneName: string
 ): Promise<void> {
-  upsertIntegrationZone(integration.id, serverUrl, zoneName, { status: 'provisioning' });
+  // A stale/errored link being retried may already know its remote zone id;
+  // keep it through the provisioning states so a failed retry (bad peer
+  // edit, transient Cloudflare outage) doesn't lose the working reference.
+  const knownRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
+  upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+    remoteZoneId: knownRemoteId,
+    status: 'provisioning',
+  });
   try {
     const config = integration.config;
     const peerId = await ensurePeerOnce(integration, creds);
@@ -135,6 +143,7 @@ async function provisionZone(
     upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
   } catch (e) {
     upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+      remoteZoneId: knownRemoteId,
       status: 'error',
       message: e instanceof Error ? e.message : 'provisioning failed',
     });

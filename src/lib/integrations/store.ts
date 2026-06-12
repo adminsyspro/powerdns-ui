@@ -188,6 +188,14 @@ export function upsertIntegrationZone(
   ).run(integrationId, serverUrl, zoneName, state.remoteZoneId ?? null, state.status, state.message ?? null);
 }
 
+export function getIntegrationZone(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string
+): IntegrationZoneRow | undefined {
+  return listIntegrationZones(integrationId, serverUrl).find((l) => l.zoneName === zoneName);
+}
+
 /**
  * Flags every healthy link of an integration (all servers — the peer is an
  * account-level object) so the next sync relinks them after peer/TSIG

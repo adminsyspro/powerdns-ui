@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { normalizeUrl } from '@/lib/cache/zones';
-import { listIntegrations, getIntegrationZoneStats } from '@/lib/integrations/store';
-import { countScopedZones } from '@/lib/integrations/sync';
+import { listIntegrations, listIntegrationZones } from '@/lib/integrations/store';
+import { listScopedZoneNames } from '@/lib/integrations/sync';
+import type { IntegrationZoneStatus } from '@/lib/integrations/types';
 
 // GET /api/integrations/stats — replication dashboard KPIs for the current
 // PowerDNS connection, aggregated over active integrations.
@@ -14,12 +15,28 @@ export async function GET(request: NextRequest) {
     const serverUrl = normalizeUrl(conn.url);
 
     const perIntegration = listIntegrations().map((integration) => {
-      const { counts, lastActivity } = getIntegrationZoneStats(integration.id, serverUrl);
+      const scopedNames = new Set(listScopedZoneNames(serverUrl, integration.config));
+      const links = listIntegrationZones(integration.id, serverUrl);
+
+      // Status counts are intersected with the CURRENT scope: after a scope
+      // change, links not yet re-marked by a sync would otherwise inflate
+      // ok/error counts beyond the scope (e.g. coverage above 100%). Links
+      // outside the scope count as orphans regardless of stored status.
+      const counts: Record<IntegrationZoneStatus, number> = {
+        ok: 0, provisioning: 0, stale: 0, error: 0, orphan: 0,
+      };
+      let lastActivity: number | null = null;
+      for (const link of links) {
+        if (link.status === 'orphan' || !scopedNames.has(link.zoneName)) counts.orphan++;
+        else counts[link.status]++;
+        if (lastActivity === null || link.updatedAt > lastActivity) lastActivity = link.updatedAt;
+      }
+
       return {
         id: integration.id,
         name: integration.name,
         active: integration.active,
-        scopeCount: countScopedZones(serverUrl, integration.config),
+        scopeCount: scopedNames.size,
         counts,
         lastActivity,
       };

@@ -207,31 +207,6 @@ export function upsertIntegrationZone(
   ).run(integrationId, serverUrl, zoneName, state.remoteZoneId ?? null, state.status, state.message ?? null);
 }
 
-/** Per-status link counts + last activity for the replication dashboard. */
-export function getIntegrationZoneStats(
-  integrationId: string,
-  serverUrl: string
-): { counts: Record<IntegrationZoneStatus, number>; lastActivity: number | null } {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT status, COUNT(*) AS n, MAX(updated_at) AS last
-         FROM integration_zones
-        WHERE integration_id = ? AND server_url = ?
-        GROUP BY status`
-    )
-    .all(integrationId, serverUrl) as Array<{ status: IntegrationZoneStatus; n: number; last: number }>;
-  const counts: Record<IntegrationZoneStatus, number> = {
-    ok: 0, provisioning: 0, stale: 0, error: 0, orphan: 0,
-  };
-  let lastActivity: number | null = null;
-  for (const row of rows) {
-    counts[row.status] = row.n;
-    if (lastActivity === null || row.last > lastActivity) lastActivity = row.last;
-  }
-  return { counts, lastActivity };
-}
-
 export function getIntegrationZone(
   integrationId: string,
   serverUrl: string,

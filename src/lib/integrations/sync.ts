@@ -84,9 +84,9 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
   return db.prepare(`${base} ORDER BY name`).all(normalizeUrl(serverUrl)) as Array<{ name: string; account: string }>;
 }
 
-/** Number of PowerDNS zones currently matching the integration scope. */
-export function countScopedZones(serverUrl: string, config: IntegrationConfig): number {
-  return scopedZones(serverUrl, config).length;
+/** Names of the PowerDNS zones currently matching the integration scope. */
+export function listScopedZoneNames(serverUrl: string, config: IntegrationConfig): string[] {
+  return scopedZones(serverUrl, config).map((zone) => zone.name);
 }
 
 function zoneInScope(config: IntegrationConfig, kind: string, account: string, zoneName: string): boolean {

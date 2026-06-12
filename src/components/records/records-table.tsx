@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Cloud } from 'lucide-react';
+import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -394,15 +394,24 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     {sortColumn === 'status' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
                   </button>
                 </TableHead>
+                {cloudProxy && (
+                  <TableHead className="w-[60px] font-semibold text-slate-700 dark:text-slate-200">
+                    <span className="flex items-center gap-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain" />
+                      Proxy
+                    </span>
+                  </TableHead>
+                )}
                 <TableHead className="w-[40px] font-semibold text-slate-700 dark:text-slate-200">Comment</TableHead>
                 <TableHead className="w-[140px] font-semibold text-slate-700 dark:text-slate-200">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={cloudProxy ? 9 : 8} className="h-24 text-center">Loading records...</TableCell></TableRow>
               ) : filteredRecords.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">No records found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={cloudProxy ? 9 : 8} className="h-24 text-center">No records found</TableCell></TableRow>
               ) : (
                 filteredRecords.map(({ rrset, record, index, pendingAction, changeId }) => {
                   const pendingBorder = pendingAction === 'ADD' ? 'border-l-4 border-l-green-500'
@@ -420,38 +429,6 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-2">
-                        {cloudProxy && PROXYABLE_TYPES.has(rrset.type) && (() => {
-                          const cloudKey = `${rrset.name.toLowerCase().replace(/\.$/, '')}|${rrset.type}`;
-                          const state = cloudProxy.byKey[cloudKey];
-                          if (!state) return null;
-                          return (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  disabled={!cloudProxy.canToggle || cloudProxy.busyKey === cloudKey}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    cloudProxy.onToggle(rrset.name, rrset.type, !state.proxied);
-                                  }}
-                                  aria-label={state.proxied ? 'Disable Cloudflare proxy' : 'Enable Cloudflare proxy'}
-                                  className={`flex-shrink-0 ${cloudProxy.canToggle ? 'cursor-pointer' : 'cursor-default'} ${cloudProxy.busyKey === cloudKey ? 'animate-pulse' : ''}`}
-                                >
-                                  <Cloud
-                                    className={state.proxied
-                                      ? 'h-4 w-4 text-orange-500 fill-orange-400'
-                                      : 'h-4 w-4 text-muted-foreground'}
-                                  />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {state.proxied
-                                  ? 'Proxied by Cloudflare (cache/WAF)' + (cloudProxy.canToggle ? ' — click to switch to DNS only' : '')
-                                  : 'DNS only' + (cloudProxy.canToggle ? ' — click to proxy through Cloudflare' : '')}
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })()}
                         {formatRecordName(rrset.name)}
                         {pendingAction === 'ADD' && <Badge className="bg-green-600 text-white text-[10px] px-1.5 py-0">NEW</Badge>}
                         {pendingAction === 'EDIT' && <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0">MODIFIED</Badge>}
@@ -468,6 +445,46 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                       </Tooltip>
                     </TableCell>
                     <TableCell>{record.disabled ? <Badge variant="secondary">Disabled</Badge> : <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Active</Badge>}</TableCell>
+                    {cloudProxy && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {(() => {
+                          if (!PROXYABLE_TYPES.has(rrset.type)) {
+                            return <span className="text-xs text-muted-foreground">—</span>;
+                          }
+                          const cloudKey = `${rrset.name.toLowerCase().replace(/\.$/, '')}|${rrset.type}`;
+                          const state = cloudProxy.byKey[cloudKey];
+                          if (!state) {
+                            // Proxyable type but not present at Cloudflare yet (AXFR pending)
+                            return <span className="text-xs text-muted-foreground" title="Not replicated to Cloudflare yet">…</span>;
+                          }
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  disabled={!cloudProxy.canToggle || cloudProxy.busyKey === cloudKey}
+                                  onClick={() => cloudProxy.onToggle(rrset.name, rrset.type, !state.proxied)}
+                                  aria-label={state.proxied ? 'Disable Cloudflare proxy' : 'Enable Cloudflare proxy'}
+                                  className={`flex items-center justify-center ${cloudProxy.canToggle ? 'cursor-pointer' : 'cursor-default'} ${cloudProxy.busyKey === cloudKey ? 'animate-pulse' : ''}`}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src="/integrations/cloudflare-icon.svg"
+                                    alt={state.proxied ? 'Proxied' : 'DNS only'}
+                                    className={`h-5 w-5 object-contain transition-all ${state.proxied ? '' : 'grayscale opacity-35'}`}
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {state.proxied
+                                  ? 'Proxied by Cloudflare (cache/WAF)' + (cloudProxy.canToggle ? ' — click to switch to DNS only' : '')
+                                  : 'DNS only' + (cloudProxy.canToggle ? ' — click to proxy through Cloudflare' : '')}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
+                      </TableCell>
+                    )}
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       {rrset.comments && rrset.comments.length > 0 ? (
                         <Tooltip>

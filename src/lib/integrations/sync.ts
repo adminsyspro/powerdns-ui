@@ -62,10 +62,12 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
   if (config.scope === 'zones') {
     if (config.zones.length === 0) return [];
     const placeholders = config.zones.map(() => '?').join(',');
+    // Config zone names are stored lowercase; the cache keeps PowerDNS names
+    // verbatim, so compare case-insensitively (DNS names are anyway).
     return db
       .prepare(
         `SELECT name, account FROM zones
-          WHERE server_url = ? AND name IN (${placeholders}) ORDER BY name`
+          WHERE server_url = ? AND LOWER(name) IN (${placeholders}) ORDER BY name`
       )
       .all(normalizeUrl(serverUrl), ...config.zones) as Array<{ name: string; account: string }>;
   }

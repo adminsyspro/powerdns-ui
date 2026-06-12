@@ -26,6 +26,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import type { Zone, ZoneKind } from '@/types/powerdns';
+import * as api from '@/lib/api';
 
 const PRIMARY_KINDS: ZoneKind[] = ['Native', 'Master', 'Slave'];
 
@@ -68,6 +69,13 @@ export function ZoneSettingsDialog({
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [masterInput, setMasterInput] = React.useState('');
 
+  // Zone transfer (AXFR) metadata — loaded separately from the zone object.
+  const [axfrAllow, setAxfrAllow] = React.useState<string[]>([]);
+  const [alsoNotify, setAlsoNotify] = React.useState<string[]>([]);
+  const [axfrInput, setAxfrInput] = React.useState('');
+  const [notifyInput, setNotifyInput] = React.useState('');
+  const metaOriginalsRef = React.useRef<{ axfr: string[]; notify: string[] }>({ axfr: [], notify: [] });
+
   const form = useForm<ZoneSettingsFormData>({
     resolver: zodResolver(zoneSettingsSchema),
     defaultValues: {
@@ -95,6 +103,21 @@ export function ZoneSettingsDialog({
       });
       setSubmitError(null);
       setMasterInput('');
+      setAxfrInput('');
+      setNotifyInput('');
+      setAxfrAllow([]);
+      setAlsoNotify([]);
+      metaOriginalsRef.current = { axfr: [], notify: [] };
+      Promise.all([
+        api.fetchZoneMetadata(zone.id, 'ALLOW-AXFR-FROM'),
+        api.fetchZoneMetadata(zone.id, 'ALSO-NOTIFY'),
+      ]).then(([axfr, notify]) => {
+        const axfrValues = axfr.data?.metadata ?? [];
+        const notifyValues = notify.data?.metadata ?? [];
+        setAxfrAllow(axfrValues);
+        setAlsoNotify(notifyValues);
+        metaOriginalsRef.current = { axfr: axfrValues, notify: notifyValues };
+      });
     }
   }, [open, zone, reset]);
 
@@ -123,12 +146,36 @@ export function ZoneSettingsDialog({
         ...(data.kind === 'Slave' ? { masters: data.masters } : {}),
       };
       await onSubmit(payload);
+
+      // Persist transfer metadata only when it actually changed, so opening
+      // the dialog without touching AXFR never writes metadata.
+      const { axfr, notify } = metaOriginalsRef.current;
+      if (JSON.stringify(axfrAllow) !== JSON.stringify(axfr)) {
+        const result = await api.setZoneMetadata(zone.id, 'ALLOW-AXFR-FROM', axfrAllow);
+        if (result.error) throw new Error(`ALLOW-AXFR-FROM: ${result.error}`);
+      }
+      if (JSON.stringify(alsoNotify) !== JSON.stringify(notify)) {
+        const result = await api.setZoneMetadata(zone.id, 'ALSO-NOTIFY', alsoNotify);
+        if (result.error) throw new Error(`ALSO-NOTIFY: ${result.error}`);
+      }
+
       onOpenChange(false);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to update zone settings');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const addListValue = (
+    value: string,
+    list: string[],
+    setList: (next: string[]) => void,
+    setInput: (next: string) => void
+  ) => {
+    const trimmed = value.trim();
+    if (trimmed && !list.includes(trimmed)) setList([...list, trimmed]);
+    setInput('');
   };
 
   return (
@@ -276,6 +323,103 @@ export function ZoneSettingsDialog({
                 )}
               </div>
             )}
+
+            {/* Zone transfer (AXFR) permissions */}
+            <div className="space-y-4 sm:col-span-2 p-4 border rounded-lg">
+              <div className="space-y-0.5">
+                <Label>Zone transfer (AXFR)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Authorize secondary servers outside this PowerDNS to pull the zone, and notify them on changes.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="axfr-allow" className="text-sm font-normal">
+                  Allowed AXFR sources <span className="text-muted-foreground">(IP or CIDR, e.g. 203.0.113.5 or 2001:db8::/48 — ALLOW-AXFR-FROM)</span>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="axfr-allow"
+                    placeholder="203.0.113.5"
+                    value={axfrInput}
+                    onChange={(e) => setAxfrInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addListValue(axfrInput, axfrAllow, setAxfrAllow, setAxfrInput);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => addListValue(axfrInput, axfrAllow, setAxfrAllow, setAxfrInput)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {axfrAllow.map((entry) => (
+                    <Badge key={entry} variant="secondary" className="gap-1">
+                      {entry}
+                      <button
+                        type="button"
+                        onClick={() => setAxfrAllow(axfrAllow.filter((v) => v !== entry))}
+                        aria-label={`Remove ${entry}`}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  {axfrAllow.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No extra AXFR permission — only the server-wide allow-axfr-ips applies</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="also-notify" className="text-sm font-normal">
+                  Also notify <span className="text-muted-foreground">(IP[:port] to NOTIFY on changes — ALSO-NOTIFY)</span>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="also-notify"
+                    placeholder="203.0.113.5:53"
+                    value={notifyInput}
+                    onChange={(e) => setNotifyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addListValue(notifyInput, alsoNotify, setAlsoNotify, setNotifyInput);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => addListValue(notifyInput, alsoNotify, setAlsoNotify, setNotifyInput)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {alsoNotify.map((entry) => (
+                    <Badge key={entry} variant="secondary" className="gap-1">
+                      {entry}
+                      <button
+                        type="button"
+                        onClick={() => setAlsoNotify(alsoNotify.filter((v) => v !== entry))}
+                        aria-label={`Remove ${entry}`}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Warning when switching to Slave */}
             {kind === 'Slave' && zone.kind !== 'Slave' && (

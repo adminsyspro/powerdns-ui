@@ -303,6 +303,23 @@ export async function deleteCryptokey(zoneId: string, keyId: number) {
   );
 }
 
+// ---- Zone metadata (transfer-related kinds only, see the API route) ----
+
+export type ZoneMetadataKind = 'ALLOW-AXFR-FROM' | 'ALSO-NOTIFY';
+
+export async function fetchZoneMetadata(zoneId: string, kind: ZoneMetadataKind) {
+  return apiRequest<{ kind: string; metadata: string[] }>(
+    `/api/pdns/zones/${encodeURIComponent(zoneId)}/metadata/${kind}`
+  );
+}
+
+export async function setZoneMetadata(zoneId: string, kind: ZoneMetadataKind, metadata: string[]) {
+  return apiRequest<{ kind: string; metadata: string[] }>(
+    `/api/pdns/zones/${encodeURIComponent(zoneId)}/metadata/${kind}`,
+    { method: 'PUT', body: JSON.stringify({ kind, metadata }) }
+  );
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

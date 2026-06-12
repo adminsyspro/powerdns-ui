@@ -585,6 +585,7 @@ export default function IntegrationsPage() {
                 onChange={(e) => setForm({ ...form, apiToken: e.target.value })} />
               <p className="text-xs text-muted-foreground">
                 Scopes needed: Zone&nbsp;:&nbsp;Edit, DNS&nbsp;:&nbsp;Edit, Secondary&nbsp;DNS&nbsp;:&nbsp;Edit on the account
+                — plus Account&nbsp;Settings&nbsp;:&nbsp;Read and Zone&nbsp;Settings&nbsp;:&nbsp;Edit when managing custom nameservers
               </p>
             </div>
             <div className="space-y-2">

@@ -1,5 +1,6 @@
 import dns from 'dns/promises';
 import { getDb } from '@/lib/cache/db';
+import { normalizeUrl } from '@/lib/cache/zones';
 import { normalizeNameserverPools, getDefaultNameserverPool } from '@/lib/ns-pools';
 import type { NameserverPool } from '@/lib/ns-pools';
 
@@ -55,7 +56,7 @@ function emptyState(): NsAuditScanState {
 }
 
 export function getScanState(serverUrl: string): NsAuditScanState {
-  return scanStates.get(serverUrl) ?? emptyState();
+  return scanStates.get(normalizeUrl(serverUrl)) ?? emptyState();
 }
 
 // Compare names without trailing dot and case-insensitively: pools store
@@ -142,7 +143,9 @@ function upsertResult(serverUrl: string, row: NsAuditRow): void {
  * when a scan is already running. The scan itself runs detached; callers poll
  * getScanState() / getAuditResults() for progress and results.
  */
-export function startScan(serverUrl: string): { started: boolean; reason?: string } {
+export function startScan(rawServerUrl: string): { started: boolean; reason?: string } {
+  // The zones cache stores server_url normalized; use the same key everywhere.
+  const serverUrl = normalizeUrl(rawServerUrl);
   const current = getScanState(serverUrl);
   if (current.running) return { started: false, reason: 'A scan is already running' };
 
@@ -226,7 +229,8 @@ export interface NsAuditResults {
   lastCheckedAt: number | null;
 }
 
-export function getAuditResults(serverUrl: string): NsAuditResults {
+export function getAuditResults(rawServerUrl: string): NsAuditResults {
+  const serverUrl = normalizeUrl(rawServerUrl);
   const db = getDb();
   const rows = db
     .prepare(

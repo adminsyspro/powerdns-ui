@@ -4,7 +4,8 @@ import type { ZoneListItem } from '@/types/powerdns';
 // In-memory lock to prevent concurrent syncs for the same server
 const syncLocks = new Map<string, boolean>();
 
-function normalizeUrl(url: string): string {
+// Exported so other server_url-keyed stores (e.g. ns-audit) match the same key.
+export function normalizeUrl(url: string): string {
   return url.replace(/\/$/, '').toLowerCase();
 }
 

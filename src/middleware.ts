@@ -12,6 +12,9 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/providers', '/api/
 // NOT gated here — each handler enforces its own authorization (requireAdmin /
 // zone scoping), so data the allowed pages need still loads.
 const NON_ADMIN_PAGES = ['/dashboard', '/zones', '/profile'];
+// Operators manage all zones server-wide, so they also get the NS Audit page
+// (its API routes require Administrator/Operator).
+const OPERATOR_EXTRA_PAGES = ['/compliance'];
 // Proxy paths use X-API-Key auth, not JWT — handled in route handlers
 const PROXY_PATHS = ['/api/v1/', '/api/health/pdns', '/api/info/allowed'];
 
@@ -59,7 +62,10 @@ export async function middleware(request: NextRequest) {
     // Role-based PAGE protection: non-Administrators may only open the
     // whitelisted pages. (API routes authorize themselves in their handlers.)
     if (userRole !== 'Administrator' && !pathname.startsWith('/api/')) {
-      const allowed = NON_ADMIN_PAGES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+      const pages = userRole === 'Operator'
+        ? [...NON_ADMIN_PAGES, ...OPERATOR_EXTRA_PAGES]
+        : NON_ADMIN_PAGES;
+      const allowed = pages.some((p) => pathname === p || pathname.startsWith(p + '/'));
       if (!allowed) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }

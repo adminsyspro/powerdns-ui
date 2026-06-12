@@ -204,6 +204,19 @@ export async function createSecondaryZone(
   });
 }
 
+/** Reads a zone's incoming-transfer config; undefined when none is set. */
+export async function getZoneIncoming(
+  creds: IntegrationCredentials,
+  cfZoneId: string
+): Promise<{ peers?: string[] } | undefined> {
+  try {
+    return await cf<{ peers?: string[] }>(creds.apiToken, `/zones/${cfZoneId}/secondary_dns/incoming`);
+  } catch (e) {
+    if (e instanceof CloudflareError && e.status === 404) return undefined;
+    throw e;
+  }
+}
+
 export async function linkZoneToPeer(
   creds: IntegrationCredentials,
   cfZoneId: string,

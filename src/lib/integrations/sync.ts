@@ -160,12 +160,24 @@ async function provisionZone(
       await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
     } catch (e) {
       // Cloudflare error 409: the zone already has an incoming transfer
-      // config (pre-existing manual setup). That IS the desired state —
-      // adopt it instead of failing.
+      // config (pre-existing manual setup). Adopt it ONLY when that config
+      // actually points at our peer — a conflict with a different peer must
+      // stay visible, otherwise the zone would silently keep transferring
+      // from the wrong source while being reported ok.
       const alreadyLinked =
         e instanceof cloudflare.CloudflareError &&
         (e.codes.includes(409) || /already linked/i.test(e.message));
       if (!alreadyLinked) throw e;
+      const incoming = await cloudflare.getZoneIncoming(creds, zone.id);
+      const linkedPeers = incoming?.peers ?? [];
+      if (!linkedPeers.includes(peerId)) {
+        upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+          remoteZoneId: zone.id,
+          status: 'error',
+          message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
+        });
+        return;
+      }
     }
     if (config.customNsMode !== 'ignore') {
       await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);

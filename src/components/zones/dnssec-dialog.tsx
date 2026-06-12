@@ -33,7 +33,9 @@ interface DnssecDialogProps {
   // Enable/disable signing and manage keys (Administrator / Operator).
   canManage: boolean;
   // Called after any change that affects the zone object (dnssec flag, keys).
-  onZoneChanged: () => void;
+  // Awaited while `busy` blocks further edits, so a slow cache sync can't be
+  // raced by a second key change (useZoneSync.sync() skips while isSyncing).
+  onZoneChanged: () => void | Promise<void>;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -95,8 +97,7 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
       // Signing an existing zone requires a rectify so NSEC/NSEC3 ordering is
       // written; best-effort since api-rectify may already cover it.
       await api.rectifyZone(zone.id);
-      onZoneChanged();
-      await loadKeys();
+      await Promise.all([onZoneChanged(), loadKeys()]);
     }
     setBusy(false);
   };
@@ -110,7 +111,7 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
     } else {
       setConfirmDisable(false);
       setKeys([]);
-      onZoneChanged();
+      await onZoneChanged();
     }
     setBusy(false);
   };
@@ -122,8 +123,7 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
     if (result.error) setError(result.error);
     else {
       // (De)activating a key can flip the zone's effective DNSSEC status.
-      onZoneChanged();
-      await loadKeys();
+      await Promise.all([onZoneChanged(), loadKeys()]);
     }
     setBusy(false);
   };
@@ -134,8 +134,7 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
     const result = await api.deleteCryptokey(zone.id, key.id);
     if (result.error) setError(result.error);
     else {
-      onZoneChanged();
-      await loadKeys();
+      await Promise.all([onZoneChanged(), loadKeys()]);
     }
     setBusy(false);
   };
@@ -151,8 +150,7 @@ export function DnssecDialog({ open, onOpenChange, zone, canManage, onZoneChange
     if (result.error) setError(result.error);
     else {
       setShowAddKey(false);
-      onZoneChanged();
-      await loadKeys();
+      await Promise.all([onZoneChanged(), loadKeys()]);
     }
     setBusy(false);
   };

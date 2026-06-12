@@ -192,8 +192,14 @@ export default function IntegrationsPage() {
       ...(editing ? { integrationId: editing.id } : {}),
     });
     if (result.data) {
-      setNsSets(result.data.sets);
-      if (result.data.sets.length === 0) setNsSetsError('No custom nameserver set found on this account');
+      const sets = result.data.sets;
+      setNsSets(sets);
+      if (sets.length === 0) setNsSetsError('No custom nameserver set found on this account');
+      // Normalize an empty/blank selection to the first available set so the
+      // selector never renders an empty SelectItem value.
+      if (sets.length > 0) {
+        setForm((prev) => (prev.customNsSet.trim() ? prev : { ...prev, customNsSet: String(sets[0].set) }));
+      }
     } else {
       setNsSets(null);
       setNsSetsError(result.error || 'Failed to load nameserver sets');
@@ -216,6 +222,13 @@ export default function IntegrationsPage() {
       setNsSetsError(null);
     }
   }, [dialogOpen]);
+  // Editing the account or token invalidates previously loaded sets — they
+  // belong to the old credentials (the auto-load effect refetches if needed).
+  React.useEffect(() => {
+    nsSetsRequestedRef.current = false;
+    setNsSets(null);
+    setNsSetsError(null);
+  }, [form.accountId, form.apiToken]);
 
   const load = React.useCallback(async () => {
     const result = await api.fetchIntegrations();
@@ -680,8 +693,9 @@ export default function IntegrationsPage() {
                               Set {set} — {nameservers.map((ns) => ns.replace(/\.$/, '')).join(', ')}
                             </SelectItem>
                           ))}
-                          {/* Preserve a configured set that no longer exists on the account */}
-                          {!nsSets.some((s) => String(s.set) === form.customNsSet) && (
+                          {/* Preserve a configured set that no longer exists on the account
+                              (Radix forbids empty SelectItem values, hence the guard) */}
+                          {form.customNsSet.trim() && !nsSets.some((s) => String(s.set) === form.customNsSet) && (
                             <SelectItem value={form.customNsSet}>Set {form.customNsSet} (not found on account)</SelectItem>
                           )}
                         </SelectContent>

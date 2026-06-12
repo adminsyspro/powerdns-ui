@@ -113,6 +113,7 @@ recover via Settings → LDAP Authentication.
 | **PowerDNS API Proxy** | Expose a controlled PowerDNS-compatible API without giving clients direct access to the PowerDNS backend |
 | **Granular API Access** | Issue per-client tokens with zone-level permissions, record-level ACLs, regex rules, ACME shortcuts, and request logs |
 | **Zone Management** | Create, edit, delete, and export DNS zones (Native, Master, Slave) |
+| **Groups & Zone Ownership** | Admin-managed group list; the zone Account/Group field is a select sourced from it everywhere (no free text, no typos) |
 | **Record Editing** | Full CRUD for all record types (A, AAAA, CNAME, MX, TXT, SRV, CAA, etc.) |
 | **Multi-Selection** | Bulk delete, enable, and disable records and zones |
 | **Pending Changes** | Review and validate changes before applying them to the server |
@@ -125,7 +126,9 @@ recover via Settings → LDAP Authentication.
 | **LDAP Authentication** | Integrate with Active Directory / LDAP |
 | **Local Authentication** | Built-in user management with bcrypt passwords |
 | **Multi-Server** | Connect to multiple PowerDNS instances |
-| **DNSSEC Status** | View DNSSEC status per zone |
+| **DNSSEC Management** | Enable/disable signing on existing zones (e.g. zones received unsigned via AXFR), manage cryptokeys (CSK/KSK/ZSK), copy DS records for the registrar |
+| **NS Compliance Audit** | Scan the public delegation of every forward zone and flag anomalies against your nameserver pool (foreign, partial pool, extra NS) |
+| **Zone Transfer Permissions** | Per-zone AXFR rights: allowed transfer sources (`ALLOW-AXFR-FROM`) and extra servers to notify (`ALSO-NOTIFY`) |
 | **Real-Time Sync** | Background sync with local SQLite cache for fast pagination |
 | **Dark Mode** | Full dark/light theme support |
 | **Responsive** | Works on desktop, tablet, and mobile |

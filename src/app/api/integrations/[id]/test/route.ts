@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Stored credentials are unreadable (APP_SECRET changed?)' }, { status: 500 });
     }
     try {
-      await verifyToken(creds);
+      await verifyToken(creds, integration.config.accountId);
       const zones = await listZones(creds, integration.config.accountId);
       return NextResponse.json({ ok: true, remoteZones: zones.length });
     } catch (e) {

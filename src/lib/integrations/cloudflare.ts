@@ -62,8 +62,18 @@ export interface CfZone {
   status: string;
 }
 
-export async function verifyToken(creds: IntegrationCredentials): Promise<void> {
-  await cf<{ status: string }>(creds.apiToken, '/user/tokens/verify');
+export async function verifyToken(creds: IntegrationCredentials, accountId?: string): Promise<void> {
+  try {
+    await cf<{ status: string }>(creds.apiToken, '/user/tokens/verify');
+  } catch (e) {
+    // Account Owned Tokens (cfat_…) are rejected by the user endpoint with
+    // error 1000 even when valid; they verify against the account endpoint.
+    if (accountId && e instanceof CloudflareError) {
+      await cf<{ status: string }>(creds.apiToken, `/accounts/${encodeURIComponent(accountId)}/tokens/verify`);
+      return;
+    }
+    throw e;
+  }
 }
 
 export async function listZones(creds: IntegrationCredentials, accountId: string): Promise<CfZone[]> {

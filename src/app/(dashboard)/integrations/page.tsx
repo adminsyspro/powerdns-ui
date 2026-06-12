@@ -236,7 +236,11 @@ export default function IntegrationsPage() {
   const load = React.useCallback(async () => {
     const [result, statsResult] = await Promise.all([api.fetchIntegrations(), api.fetchIntegrationStats()]);
     if (result.data) {
-      setIntegrations(result.data);
+      const list = result.data;
+      setIntegrations(list);
+      // Keep the replicated-zones table always visible: auto-select the
+      // first integration (and recover when the selected one was deleted).
+      setSelectedId((prev) => (prev && list.some((i) => i.id === prev) ? prev : list[0]?.id ?? null));
       setError(null);
     } else {
       setError(result.error || 'Failed to load integrations');
@@ -478,52 +482,51 @@ export default function IntegrationsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1">
           {integrations.map((integration) => (
             <Card
               key={integration.id}
-              className={`cursor-pointer transition-colors hover:bg-muted/30 ${selectedId === integration.id ? 'border-primary ring-1 ring-primary' : ''}`}
-              onClick={() => setSelectedId(selectedId === integration.id ? null : integration.id)}
+              className={`transition-colors ${integrations.length > 1 ? 'cursor-pointer hover:bg-muted/30' : ''} ${selectedId === integration.id && integrations.length > 1 ? 'border-primary ring-1 ring-primary' : ''}`}
+              onClick={() => setSelectedId(integration.id)}
             >
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={PROVIDERS.find((p) => p.id === integration.provider)?.logo || '/integrations/cloudflare.png'}
-                    alt={integration.provider}
-                    className="h-5 object-contain"
-                  />
-                  {integration.name}
-                  {!integration.active && <Badge variant="secondary">Inactive</Badge>}
-                </CardTitle>
-                <CardDescription>
-                  Cloudflare · {integration.config.mode.toUpperCase()} · {
-                    integration.config.scope === 'all-master' ? 'all Master zones'
-                    : integration.config.scope === 'groups' ? `groups: ${integration.config.groups.join(', ') || '—'}`
-                    : `${integration.config.zones.length} selected zone(s)`
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center gap-2 pt-0" onClick={(e) => e.stopPropagation()}>
-                <Button variant="outline" size="sm" onClick={() => handleTest(integration)}>Test</Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(integration)} aria-label="Edit">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(integration)} aria-label="Delete">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <div className="ml-auto">
+              <CardContent className="flex items-center gap-4 py-4 flex-wrap">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={PROVIDERS.find((p) => p.id === integration.provider)?.logo || '/integrations/cloudflare.png'}
+                  alt={integration.provider}
+                  className="h-6 object-contain flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium flex items-center gap-2">
+                    {integration.name}
+                    {!integration.active && <Badge variant="secondary">Inactive</Badge>}
+                  </p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {integration.config.mode.toUpperCase()} · {
+                      integration.config.scope === 'all-master' ? 'all Master zones'
+                      : integration.config.scope === 'groups' ? `groups: ${integration.config.groups.join(', ') || '—'}`
+                      : `${integration.config.zones.length} selected zone(s)`
+                    }
+                    {integration.config.customNsMode === 'enable' && ` · custom NS set ${integration.config.customNsSet}`}
+                  </p>
+                </div>
+                <div className="ml-auto flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="outline" size="sm" onClick={() => handleTest(integration)}>Test</Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(integration)} aria-label="Edit">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(integration)} aria-label="Delete">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                   <Switch checked={integration.active} onCheckedChange={() => handleToggleActive(integration)} aria-label="Active" />
                 </div>
-              </CardContent>
-              {testResult?.id === integration.id && (
-                <CardContent className="pt-0">
-                  <p className={`text-xs flex items-center gap-1 ${testResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+                {testResult?.id === integration.id && (
+                  <p className={`w-full text-xs flex items-center gap-1 ${testResult.ok ? 'text-green-600' : 'text-destructive'}`}>
                     {testResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                     {testResult.message}
                   </p>
-                </CardContent>
-              )}
+                )}
+              </CardContent>
             </Card>
           ))}
         </div>

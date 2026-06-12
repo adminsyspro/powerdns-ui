@@ -22,6 +22,22 @@ import * as api from '@/lib/api';
 import type { IntegrationRow, IntegrationZoneRow, IntegrationConfig } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 
+// Available providers. The framework is provider-based: add an entry here
+// (plus a lib/integrations/<provider>.ts implementation) to surface a new one.
+const PROVIDERS: Array<{
+  id: 'cloudflare';
+  label: string;
+  logo: string;
+  description: string;
+}> = [
+  {
+    id: 'cloudflare',
+    label: 'Cloudflare',
+    logo: '/integrations/cloudflare.png',
+    description: 'Secondary DNS (AXFR) + orange-cloud proxy',
+  },
+];
+
 const ZONE_STATUS_BADGE: Record<string, string> = {
   ok: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   provisioning: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -31,6 +47,7 @@ const ZONE_STATUS_BADGE: Record<string, string> = {
 };
 
 interface FormState {
+  provider: 'cloudflare';
   name: string;
   apiToken: string;
   accountId: string;
@@ -47,6 +64,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
+  provider: 'cloudflare',
   name: '', apiToken: '', accountId: '', primaryIp: '', primaryPort: '53',
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
   scope: 'all-master', groups: [], zones: [], autoProvision: true, deleteMode: 'never',
@@ -196,6 +214,7 @@ export default function IntegrationsPage() {
   const openEdit = (integration: IntegrationRow) => {
     setEditing(integration);
     setForm({
+      provider: integration.provider,
       name: integration.name,
       apiToken: '',
       accountId: integration.config.accountId,
@@ -239,7 +258,7 @@ export default function IntegrationsPage() {
           ...(form.tsigSecret ? { tsigSecret: form.tsigSecret } : {}),
         })
       : await api.createIntegrationApi({
-          provider: 'cloudflare',
+          provider: form.provider,
           name: form.name.trim(),
           apiToken: form.apiToken.trim(),
           tsigSecret: form.tsigSecret || undefined,
@@ -343,7 +362,12 @@ export default function IntegrationsPage() {
             >
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Cloud className="h-4 w-4 text-orange-500" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={PROVIDERS.find((p) => p.id === integration.provider)?.logo || '/integrations/cloudflare.png'}
+                    alt={integration.provider}
+                    className="h-5 object-contain"
+                  />
                   {integration.name}
                   {!integration.active && <Badge variant="secondary">Inactive</Badge>}
                 </CardTitle>
@@ -452,12 +476,34 @@ export default function IntegrationsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit ${editing.name}` : 'New Cloudflare integration'}</DialogTitle>
+            <DialogTitle>{editing ? `Edit ${editing.name}` : 'New integration'}</DialogTitle>
             <DialogDescription>
               Cloudflare secondary DNS (AXFR) — requires an Enterprise plan with Secondary DNS
               {editing ? '. Leave the token empty to keep the stored one.' : ''}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Provider selector — the provider of an existing integration is fixed */}
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+            {PROVIDERS.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                disabled={!!editing}
+                onClick={() => setForm({ ...form, provider: provider.id })}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  form.provider === provider.id ? 'border-primary ring-1 ring-primary' : 'hover:bg-muted/50'
+                } ${editing ? 'opacity-70 cursor-default' : ''}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={provider.logo} alt={provider.label} className="h-6 object-contain mb-2" />
+                <p className="text-xs text-muted-foreground">{provider.description}</p>
+              </button>
+            ))}
+            <div className="rounded-lg border border-dashed p-3 flex items-center justify-center">
+              <p className="text-xs text-muted-foreground text-center">More providers coming<br />(open source — contribute!)</p>
+            </div>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

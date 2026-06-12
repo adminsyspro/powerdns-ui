@@ -183,6 +183,22 @@ export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string
   await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
 }
 
+/**
+ * Enables/disables the account-level custom nameservers for a zone (the
+ * "Custom Nameservers" sets configured on the Cloudflare account).
+ */
+export async function setZoneCustomNs(
+  creds: IntegrationCredentials,
+  cfZoneId: string,
+  enabled: boolean,
+  nsSet: number
+): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/custom_ns`, {
+    method: 'PUT',
+    body: { enabled, ns_set: nsSet },
+  });
+}
+
 // ---- DNS records (proxy / orange cloud) ----
 
 export interface CfDnsRecord {

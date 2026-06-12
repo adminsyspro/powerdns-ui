@@ -72,6 +72,10 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       config.peerId = existing.config.peerId;
       config.tsigId = existing.config.tsigId;
     }
+    // Custom-NS changes also need a reprovision pass (keeping peer ids).
+    const provisioningChanged =
+      config.customNsEnabled !== existing.config.customNsEnabled ||
+      config.customNsSet !== existing.config.customNsSet;
 
     // Merge secrets so the token and the TSIG secret rotate independently.
     let credentials;
@@ -90,7 +94,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
 
     // Only after validation: a rejected request must not leave links stale.
-    if (peerChanged) markZonesForReprovision(id);
+    if (peerChanged || provisioningChanged) markZonesForReprovision(id);
 
     const updated = updateIntegration(id, {
       name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,

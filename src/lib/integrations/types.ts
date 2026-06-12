@@ -32,6 +32,10 @@ export interface IntegrationConfig {
   groups: string[];
   // Canonical zone names (trailing dot) when scope === 'zones'.
   zones: string[];
+  // Use the account-level custom nameservers (instead of Cloudflare-branded
+  // ones) on every provisioned zone, with the given nameserver set number.
+  customNsEnabled: boolean;
+  customNsSet: number;
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;
   // What to do remotely when the PowerDNS zone disappears.

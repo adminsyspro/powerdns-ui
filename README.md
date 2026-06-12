@@ -129,6 +129,7 @@ recover via Settings → LDAP Authentication.
 | **DNSSEC Management** | Enable/disable signing on existing zones (e.g. zones received unsigned via AXFR), manage cryptokeys (CSK/KSK/ZSK), copy DS records for the registrar |
 | **NS Compliance Audit** | Scan the public delegation of every forward zone and flag anomalies against your nameserver pool (foreign, partial pool, extra NS) |
 | **Zone Transfer Permissions** | Per-zone AXFR rights: allowed transfer sources (`ALLOW-AXFR-FROM`) and extra servers to notify (`ALSO-NOTIFY`) |
+| **Cloudflare Integration** | Replicate Master zones to Cloudflare secondary DNS (Enterprise AXFR): auto-provision zones, force transfers, and toggle the orange-cloud proxy per record from the records table |
 | **Real-Time Sync** | Background sync with local SQLite cache for fast pagination |
 | **Dark Mode** | Full dark/light theme support |
 | **Responsive** | Works on desktop, tablet, and mobile |

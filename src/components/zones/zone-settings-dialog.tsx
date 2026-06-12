@@ -70,11 +70,17 @@ export function ZoneSettingsDialog({
   const [masterInput, setMasterInput] = React.useState('');
 
   // Zone transfer (AXFR) metadata — loaded separately from the zone object.
+  // Edits and saves stay blocked until BOTH kinds loaded: saving from an
+  // unloaded (empty) baseline would silently wipe existing metadata.
   const [axfrAllow, setAxfrAllow] = React.useState<string[]>([]);
   const [alsoNotify, setAlsoNotify] = React.useState<string[]>([]);
   const [axfrInput, setAxfrInput] = React.useState('');
   const [notifyInput, setNotifyInput] = React.useState('');
+  const [metaState, setMetaState] = React.useState<'loading' | 'loaded' | 'error'>('loading');
   const metaOriginalsRef = React.useRef<{ axfr: string[]; notify: string[] }>({ axfr: [], notify: [] });
+  // Invalidates in-flight metadata loads when the dialog reopens or the zone
+  // changes, so a stale response can't populate another zone's lists.
+  const metaRequestRef = React.useRef(0);
 
   const form = useForm<ZoneSettingsFormData>({
     resolver: zodResolver(zoneSettingsSchema),
@@ -107,16 +113,22 @@ export function ZoneSettingsDialog({
       setNotifyInput('');
       setAxfrAllow([]);
       setAlsoNotify([]);
+      setMetaState('loading');
       metaOriginalsRef.current = { axfr: [], notify: [] };
+      const requestId = ++metaRequestRef.current;
       Promise.all([
         api.fetchZoneMetadata(zone.id, 'ALLOW-AXFR-FROM'),
         api.fetchZoneMetadata(zone.id, 'ALSO-NOTIFY'),
       ]).then(([axfr, notify]) => {
-        const axfrValues = axfr.data?.metadata ?? [];
-        const notifyValues = notify.data?.metadata ?? [];
-        setAxfrAllow(axfrValues);
-        setAlsoNotify(notifyValues);
-        metaOriginalsRef.current = { axfr: axfrValues, notify: notifyValues };
+        if (metaRequestRef.current !== requestId) return; // stale response
+        if (!axfr.data || !notify.data) {
+          setMetaState('error');
+          return;
+        }
+        setAxfrAllow(axfr.data.metadata);
+        setAlsoNotify(notify.data.metadata);
+        metaOriginalsRef.current = { axfr: axfr.data.metadata, notify: notify.data.metadata };
+        setMetaState('loaded');
       });
     }
   }, [open, zone, reset]);
@@ -148,13 +160,14 @@ export function ZoneSettingsDialog({
       await onSubmit(payload);
 
       // Persist transfer metadata only when it actually changed, so opening
-      // the dialog without touching AXFR never writes metadata.
+      // the dialog without touching AXFR never writes metadata. Never write
+      // unless the load succeeded — the baseline would be wrong otherwise.
       const { axfr, notify } = metaOriginalsRef.current;
-      if (JSON.stringify(axfrAllow) !== JSON.stringify(axfr)) {
+      if (metaState === 'loaded' && JSON.stringify(axfrAllow) !== JSON.stringify(axfr)) {
         const result = await api.setZoneMetadata(zone.id, 'ALLOW-AXFR-FROM', axfrAllow);
         if (result.error) throw new Error(`ALLOW-AXFR-FROM: ${result.error}`);
       }
-      if (JSON.stringify(alsoNotify) !== JSON.stringify(notify)) {
+      if (metaState === 'loaded' && JSON.stringify(alsoNotify) !== JSON.stringify(notify)) {
         const result = await api.setZoneMetadata(zone.id, 'ALSO-NOTIFY', alsoNotify);
         if (result.error) throw new Error(`ALSO-NOTIFY: ${result.error}`);
       }
@@ -331,6 +344,11 @@ export function ZoneSettingsDialog({
                 <p className="text-sm text-muted-foreground">
                   Authorize secondary servers outside this PowerDNS to pull the zone, and notify them on changes.
                 </p>
+                {metaState === 'error' && (
+                  <p className="text-sm text-destructive">
+                    Failed to load current transfer settings — editing is disabled to avoid overwriting them. Reopen the dialog to retry.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -342,6 +360,7 @@ export function ZoneSettingsDialog({
                     id="axfr-allow"
                     placeholder="203.0.113.5"
                     value={axfrInput}
+                    disabled={metaState !== 'loaded'}
                     onChange={(e) => setAxfrInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -353,6 +372,7 @@ export function ZoneSettingsDialog({
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={metaState !== 'loaded'}
                     onClick={() => addListValue(axfrInput, axfrAllow, setAxfrAllow, setAxfrInput)}
                   >
                     <Plus className="h-4 w-4" />
@@ -364,6 +384,7 @@ export function ZoneSettingsDialog({
                       {entry}
                       <button
                         type="button"
+                        disabled={metaState !== 'loaded'}
                         onClick={() => setAxfrAllow(axfrAllow.filter((v) => v !== entry))}
                         aria-label={`Remove ${entry}`}
                         className="ml-1 hover:text-destructive"
@@ -372,7 +393,7 @@ export function ZoneSettingsDialog({
                       </button>
                     </Badge>
                   ))}
-                  {axfrAllow.length === 0 && (
+                  {axfrAllow.length === 0 && metaState === 'loaded' && (
                     <p className="text-xs text-muted-foreground">No extra AXFR permission — only the server-wide allow-axfr-ips applies</p>
                   )}
                 </div>
@@ -387,6 +408,7 @@ export function ZoneSettingsDialog({
                     id="also-notify"
                     placeholder="203.0.113.5:53"
                     value={notifyInput}
+                    disabled={metaState !== 'loaded'}
                     onChange={(e) => setNotifyInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -398,6 +420,7 @@ export function ZoneSettingsDialog({
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={metaState !== 'loaded'}
                     onClick={() => addListValue(notifyInput, alsoNotify, setAlsoNotify, setNotifyInput)}
                   >
                     <Plus className="h-4 w-4" />
@@ -409,6 +432,7 @@ export function ZoneSettingsDialog({
                       {entry}
                       <button
                         type="button"
+                        disabled={metaState !== 'loaded'}
                         onClick={() => setAlsoNotify(alsoNotify.filter((v) => v !== entry))}
                         aria-label={`Remove ${entry}`}
                         className="ml-1 hover:text-destructive"

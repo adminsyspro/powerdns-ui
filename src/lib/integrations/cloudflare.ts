@@ -43,7 +43,13 @@ async function cf<T>(
     throw new CloudflareError(`Cloudflare API: HTTP ${response.status}`, response.status);
   }
   if (!response.ok || !envelope.success) {
-    const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
+    let detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
+    // Error 1000 means Cloudflare did not recognize the Bearer value at all —
+    // almost always a Global API Key or a token ID pasted instead of the
+    // token value (shown only once at creation).
+    if (envelope.errors?.some((e) => e.code === 1000)) {
+      detail += ' — make sure you pasted an API Token value (My Profile > API Tokens > Create Token), not the Global API Key or the token ID';
+    }
     throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
   }
   return envelope.result;

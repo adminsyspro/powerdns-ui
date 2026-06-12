@@ -207,8 +207,17 @@ export default function IntegrationsPage() {
     setNsSetsLoading(false);
   }, [form.accountId, form.apiToken, editing]);
 
-  // Auto-load once when switching to "enable" with enough info available.
   const nsSetsRequestedRef = React.useRef(false);
+  // Editing the account or token invalidates previously loaded sets — they
+  // belong to the old credentials. Declared BEFORE the auto-load effect so,
+  // on the render where credentials change, the flag is already cleared when
+  // the auto-load effect runs and the refetch actually happens.
+  React.useEffect(() => {
+    nsSetsRequestedRef.current = false;
+    setNsSets(null);
+    setNsSetsError(null);
+  }, [form.accountId, form.apiToken]);
+  // Auto-load once when switching to "enable" with enough info available.
   React.useEffect(() => {
     if (form.customNsMode === 'enable' && canLoadNsSets && !nsSetsRequestedRef.current) {
       nsSetsRequestedRef.current = true;
@@ -222,13 +231,6 @@ export default function IntegrationsPage() {
       setNsSetsError(null);
     }
   }, [dialogOpen]);
-  // Editing the account or token invalidates previously loaded sets — they
-  // belong to the old credentials (the auto-load effect refetches if needed).
-  React.useEffect(() => {
-    nsSetsRequestedRef.current = false;
-    setNsSets(null);
-    setNsSetsError(null);
-  }, [form.accountId, form.apiToken]);
 
   const load = React.useCallback(async () => {
     const result = await api.fetchIntegrations();

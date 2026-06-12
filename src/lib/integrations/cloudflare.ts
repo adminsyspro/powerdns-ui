@@ -198,6 +198,33 @@ export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string
   await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
 }
 
+export interface CfAccountCustomNs {
+  ns_name: string;
+  ns_set: number;
+}
+
+/** Lists the account-level custom nameservers (each entry belongs to a set). */
+export async function listAccountCustomNs(
+  creds: IntegrationCredentials,
+  accountId: string
+): Promise<CfAccountCustomNs[]> {
+  const entries: CfAccountCustomNs[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const response = await fetch(
+      `${CF_API}/accounts/${encodeURIComponent(accountId)}/custom_ns?per_page=100&page=${page}`,
+      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    );
+    const envelope = (await response.json()) as CfEnvelope<CfAccountCustomNs[]>;
+    if (!response.ok || !envelope.success) {
+      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
+      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
+    }
+    entries.push(...envelope.result);
+    if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
+  }
+  return entries;
+}
+
 /**
  * Enables/disables the account-level custom nameservers for a zone (the
  * "Custom Nameservers" sets configured on the Cloudflare account).

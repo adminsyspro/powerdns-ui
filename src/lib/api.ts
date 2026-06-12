@@ -381,6 +381,13 @@ export async function forceIntegrationAxfr(id: string, zoneName: string) {
   });
 }
 
+export async function fetchCustomNsSets(input: { accountId: string; apiToken?: string; integrationId?: string }) {
+  return apiRequest<{ sets: Array<{ set: number; nameservers: string[] }> }>(
+    '/api/integrations/custom-ns-sets',
+    { method: 'POST', body: JSON.stringify(input) }
+  );
+}
+
 export interface ZoneProxyRecord {
   name: string;
   type: string;

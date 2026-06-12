@@ -177,6 +177,46 @@ export default function IntegrationsPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
+  // Custom-NS sets available on the Cloudflare account (loaded on demand for
+  // the set selector; needs the account id plus a token — typed or stored).
+  const [nsSets, setNsSets] = React.useState<Array<{ set: number; nameservers: string[] }> | null>(null);
+  const [nsSetsError, setNsSetsError] = React.useState<string | null>(null);
+  const [nsSetsLoading, setNsSetsLoading] = React.useState(false);
+  const canLoadNsSets = Boolean(form.accountId.trim() && (form.apiToken.trim() || editing));
+  const loadNsSets = React.useCallback(async () => {
+    setNsSetsLoading(true);
+    setNsSetsError(null);
+    const result = await api.fetchCustomNsSets({
+      accountId: form.accountId.trim(),
+      ...(form.apiToken.trim() ? { apiToken: form.apiToken.trim() } : {}),
+      ...(editing ? { integrationId: editing.id } : {}),
+    });
+    if (result.data) {
+      setNsSets(result.data.sets);
+      if (result.data.sets.length === 0) setNsSetsError('No custom nameserver set found on this account');
+    } else {
+      setNsSets(null);
+      setNsSetsError(result.error || 'Failed to load nameserver sets');
+    }
+    setNsSetsLoading(false);
+  }, [form.accountId, form.apiToken, editing]);
+
+  // Auto-load once when switching to "enable" with enough info available.
+  const nsSetsRequestedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (form.customNsMode === 'enable' && canLoadNsSets && !nsSetsRequestedRef.current) {
+      nsSetsRequestedRef.current = true;
+      loadNsSets();
+    }
+  }, [form.customNsMode, canLoadNsSets, loadNsSets]);
+  React.useEffect(() => {
+    if (!dialogOpen) {
+      nsSetsRequestedRef.current = false;
+      setNsSets(null);
+      setNsSetsError(null);
+    }
+  }, [dialogOpen]);
+
   const load = React.useCallback(async () => {
     const result = await api.fetchIntegrations();
     if (result.data) {
@@ -619,7 +659,7 @@ export default function IntegrationsPage() {
                   zone setting, so manually configured zones stay as they are.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <Select value={form.customNsMode} onValueChange={(v) => setForm({ ...form, customNsMode: v as FormState['customNsMode'] })}>
                   <SelectTrigger id="int-custom-ns" className="w-72"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -631,11 +671,37 @@ export default function IntegrationsPage() {
                 {form.customNsMode === 'enable' && (
                   <div className="flex items-center gap-2">
                     <Label htmlFor="int-ns-set" className="text-sm font-normal whitespace-nowrap">Nameserver set</Label>
-                    <Input id="int-ns-set" className="w-20" value={form.customNsSet}
-                      onChange={(e) => setForm({ ...form, customNsSet: e.target.value })} />
+                    {nsSets && nsSets.length > 0 ? (
+                      <Select value={form.customNsSet} onValueChange={(v) => setForm({ ...form, customNsSet: v })}>
+                        <SelectTrigger id="int-ns-set" className="w-96"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {nsSets.map(({ set, nameservers }) => (
+                            <SelectItem key={set} value={String(set)}>
+                              Set {set} — {nameservers.map((ns) => ns.replace(/\.$/, '')).join(', ')}
+                            </SelectItem>
+                          ))}
+                          {/* Preserve a configured set that no longer exists on the account */}
+                          {!nsSets.some((s) => String(s.set) === form.customNsSet) && (
+                            <SelectItem value={form.customNsSet}>Set {form.customNsSet} (not found on account)</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input id="int-ns-set" className="w-20" value={form.customNsSet}
+                        onChange={(e) => setForm({ ...form, customNsSet: e.target.value })} />
+                    )}
+                    <Button type="button" variant="outline" size="sm" disabled={!canLoadNsSets || nsSetsLoading} onClick={loadNsSets}>
+                      {nsSetsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Load sets'}
+                    </Button>
                   </div>
                 )}
               </div>
+              {form.customNsMode === 'enable' && !canLoadNsSets && (
+                <p className="text-xs text-muted-foreground">Fill in the account ID and API token to list the available sets</p>
+              )}
+              {form.customNsMode === 'enable' && nsSetsError && (
+                <p className="text-xs text-destructive">{nsSetsError}</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between sm:col-span-2 p-4 border rounded-lg">

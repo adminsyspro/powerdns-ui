@@ -193,7 +193,29 @@ export function getIntegrationZone(
   serverUrl: string,
   zoneName: string
 ): IntegrationZoneRow | undefined {
-  return listIntegrationZones(integrationId, serverUrl).find((l) => l.zoneName === zoneName);
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, status, message, updated_at
+         FROM integration_zones
+        WHERE integration_id = ? AND server_url = ? AND zone_name = ?`
+    )
+    .get(integrationId, serverUrl, zoneName) as
+      | {
+          integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
+          status: IntegrationZoneStatus; message: string | null; updated_at: number;
+        }
+      | undefined;
+  if (!row) return undefined;
+  return {
+    integrationId: row.integration_id,
+    serverUrl: row.server_url,
+    zoneName: row.zone_name,
+    remoteZoneId: row.remote_zone_id,
+    status: row.status,
+    message: row.message,
+    updatedAt: row.updated_at,
+  };
 }
 
 /**

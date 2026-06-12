@@ -116,9 +116,11 @@ async function provisionZone(
   // A stale/errored link being retried may already know its remote zone id;
   // keep it through the provisioning states so a failed retry (bad peer
   // edit, transient Cloudflare outage) doesn't lose the working reference.
-  const knownRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
+  // Once the retry has found/created a (possibly different) remote zone,
+  // that id supersedes the old one — even on the failure path.
+  let currentRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
   upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-    remoteZoneId: knownRemoteId,
+    remoteZoneId: currentRemoteId,
     status: 'provisioning',
   });
   try {
@@ -129,6 +131,7 @@ async function provisionZone(
     if (!zone) {
       zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
     }
+    currentRemoteId = zone.id;
     if (zone.type !== 'secondary') {
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,
@@ -143,7 +146,7 @@ async function provisionZone(
     upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
   } catch (e) {
     upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-      remoteZoneId: knownRemoteId,
+      remoteZoneId: currentRemoteId,
       status: 'error',
       message: e instanceof Error ? e.message : 'provisioning failed',
     });

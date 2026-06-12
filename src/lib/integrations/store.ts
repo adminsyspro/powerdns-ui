@@ -145,21 +145,23 @@ export function deleteIntegration(id: string): void {
   db.prepare('DELETE FROM integrations WHERE id = ?').run(id);
 }
 
-// ---- Per-zone replication state ----
+// ---- Per-zone replication state (scoped by PowerDNS server) ----
+// serverUrl must already be normalized (see cache/zones normalizeUrl).
 
-export function listIntegrationZones(integrationId: string): IntegrationZoneRow[] {
+export function listIntegrationZones(integrationId: string, serverUrl: string): IntegrationZoneRow[] {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT integration_id, zone_name, remote_zone_id, status, message, updated_at
-         FROM integration_zones WHERE integration_id = ? ORDER BY zone_name`
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, status, message, updated_at
+         FROM integration_zones WHERE integration_id = ? AND server_url = ? ORDER BY zone_name`
     )
-    .all(integrationId) as Array<{
-      integration_id: string; zone_name: string; remote_zone_id: string | null;
+    .all(integrationId, serverUrl) as Array<{
+      integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
       status: IntegrationZoneStatus; message: string | null; updated_at: number;
     }>;
   return rows.map((row) => ({
     integrationId: row.integration_id,
+    serverUrl: row.server_url,
     zoneName: row.zone_name,
     remoteZoneId: row.remote_zone_id,
     status: row.status,
@@ -170,25 +172,25 @@ export function listIntegrationZones(integrationId: string): IntegrationZoneRow[
 
 export function upsertIntegrationZone(
   integrationId: string,
+  serverUrl: string,
   zoneName: string,
   state: { remoteZoneId?: string | null; status: IntegrationZoneStatus; message?: string | null }
 ): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO integration_zones (integration_id, zone_name, remote_zone_id, status, message, updated_at)
-     VALUES (?, ?, ?, ?, ?, unixepoch())
-     ON CONFLICT(integration_id, zone_name) DO UPDATE SET
+    `INSERT INTO integration_zones (integration_id, server_url, zone_name, remote_zone_id, status, message, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+     ON CONFLICT(integration_id, server_url, zone_name) DO UPDATE SET
        remote_zone_id = excluded.remote_zone_id,
        status = excluded.status,
        message = excluded.message,
        updated_at = excluded.updated_at`
-  ).run(integrationId, zoneName, state.remoteZoneId ?? null, state.status, state.message ?? null);
+  ).run(integrationId, serverUrl, zoneName, state.remoteZoneId ?? null, state.status, state.message ?? null);
 }
 
-export function deleteIntegrationZone(integrationId: string, zoneName: string): void {
+export function deleteIntegrationZone(integrationId: string, serverUrl: string, zoneName: string): void {
   const db = getDb();
-  db.prepare('DELETE FROM integration_zones WHERE integration_id = ? AND zone_name = ?').run(
-    integrationId,
-    zoneName
-  );
+  db.prepare(
+    'DELETE FROM integration_zones WHERE integration_id = ? AND server_url = ? AND zone_name = ?'
+  ).run(integrationId, serverUrl, zoneName);
 }

@@ -29,6 +29,10 @@ export interface IntegrationSyncState {
 
 const CONCURRENCY = 4;
 const syncStates = new Map<string, IntegrationSyncState>();
+// Serializes account-level peer/TSIG creation per integration: concurrent
+// provisioning (first sync, simultaneous zone creations) must not create
+// duplicate Cloudflare peers.
+const peerLocks = new Map<string, Promise<void>>();
 
 export function getSyncState(integrationId: string): IntegrationSyncState {
   return (
@@ -70,29 +74,49 @@ function zoneInScope(config: IntegrationConfig, kind: string, account: string): 
  * the secondary zone (reusing an existing one with the same name), link the
  * peer and trigger the initial transfer.
  */
+// Account-level peer/TSIG are created once then persisted on the config;
+// concurrent callers await the same in-flight creation.
+async function ensurePeerOnce(integration: IntegrationRow, creds: IntegrationCredentials): Promise<string> {
+  if (integration.config.peerId) return integration.config.peerId;
+
+  let pending = peerLocks.get(integration.id);
+  if (!pending) {
+    pending = (async () => {
+      // Re-read: another caller may have persisted the peer meanwhile.
+      const fresh = getIntegration(integration.id) ?? integration;
+      if (fresh.config.peerId) return;
+      const { peerId, tsigId } = await cloudflare.ensurePeer(creds, fresh.config);
+      fresh.config.peerId = peerId;
+      fresh.config.tsigId = tsigId;
+      updateIntegration(integration.id, { config: fresh.config });
+    })().finally(() => peerLocks.delete(integration.id));
+    peerLocks.set(integration.id, pending);
+  }
+  await pending;
+
+  const updated = getIntegration(integration.id);
+  const peerId = updated?.config.peerId;
+  if (!peerId) throw new Error('Cloudflare peer creation failed');
+  return peerId;
+}
+
 async function provisionZone(
   integration: IntegrationRow,
   creds: IntegrationCredentials,
+  serverUrl: string,
   zoneName: string
 ): Promise<void> {
-  upsertIntegrationZone(integration.id, zoneName, { status: 'provisioning' });
+  upsertIntegrationZone(integration.id, serverUrl, zoneName, { status: 'provisioning' });
   try {
     const config = integration.config;
-
-    // Account-level peer/TSIG are created once, then persisted on the config.
-    if (!config.peerId) {
-      const { peerId, tsigId } = await cloudflare.ensurePeer(creds, config);
-      config.peerId = peerId;
-      config.tsigId = tsigId;
-      updateIntegration(integration.id, { config });
-    }
+    const peerId = await ensurePeerOnce(integration, creds);
 
     let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
     if (!zone) {
       zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
     }
     if (zone.type !== 'secondary') {
-      upsertIntegrationZone(integration.id, zoneName, {
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,
         status: 'error',
         message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
@@ -100,11 +124,11 @@ async function provisionZone(
       return;
     }
 
-    await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), config.peerId!);
+    await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
     await cloudflare.forceAxfr(creds, zone.id);
-    upsertIntegrationZone(integration.id, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
+    upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
   } catch (e) {
-    upsertIntegrationZone(integration.id, zoneName, {
+    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
       status: 'error',
       message: e instanceof Error ? e.message : 'provisioning failed',
     });
@@ -121,8 +145,9 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { started: false, reason: 'Stored credentials are unreadable (APP_SECRET changed?)' };
 
+  const normalizedUrl = normalizeUrl(serverUrl);
   const zones = scopedZones(serverUrl, integration.config);
-  const known = listIntegrationZones(integrationId);
+  const known = listIntegrationZones(integrationId, normalizedUrl);
   const scopedNames = new Set(zones.map((z) => z.name));
 
   const state: IntegrationSyncState = {
@@ -142,7 +167,7 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
       // deleteMode on zone deletion, never from a reconcile.
       for (const link of known) {
         if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
-          upsertIntegrationZone(integrationId, link.zoneName, {
+          upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
             remoteZoneId: link.remoteZoneId,
             status: 'orphan',
             message: 'Zone no longer exists in PowerDNS (or left the integration scope)',
@@ -160,7 +185,7 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
           // re-running it retries only failed/missing zones.
           if (!link || link.status !== 'ok') {
             const fresh = getIntegration(integrationId);
-            if (fresh) await provisionZone(fresh, creds, zone.name);
+            if (fresh) await provisionZone(fresh, creds, normalizedUrl, zone.name);
           }
           state.processed++;
         }
@@ -182,12 +207,13 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
  * active integration whose scope matches. Fire-and-forget from API routes.
  */
 export function autoProvisionZone(serverUrl: string, zoneName: string, kind: string, account: string): void {
+  const normalizedUrl = normalizeUrl(serverUrl);
   for (const integration of listIntegrations()) {
     if (!integration.active || !integration.config.autoProvision) continue;
     if (!zoneInScope(integration.config, kind, account)) continue;
     const creds = getIntegrationCredentials(integration.id);
     if (!creds) continue;
-    void provisionZone(integration, creds, zoneName);
+    void provisionZone(integration, creds, normalizedUrl, zoneName);
   }
 }
 
@@ -195,25 +221,26 @@ export function autoProvisionZone(serverUrl: string, zoneName: string, kind: str
  * Best-effort hook for zone deletion: applies the integration's delete policy
  * (default: keep the remote zone and flag the link as orphan).
  */
-export function handleZoneDeleted(zoneName: string): void {
+export function handleZoneDeleted(serverUrl: string, zoneName: string): void {
+  const normalizedUrl = normalizeUrl(serverUrl);
   for (const integration of listIntegrations()) {
-    const link = listIntegrationZones(integration.id).find((l) => l.zoneName === zoneName);
+    const link = listIntegrationZones(integration.id, normalizedUrl).find((l) => l.zoneName === zoneName);
     if (!link) continue;
     if (integration.config.deleteMode === 'delete' && link.remoteZoneId) {
       const creds = getIntegrationCredentials(integration.id);
       if (!creds) continue;
       void cloudflare
         .deleteZone(creds, link.remoteZoneId)
-        .then(() => deleteIntegrationZone(integration.id, zoneName))
+        .then(() => deleteIntegrationZone(integration.id, normalizedUrl, zoneName))
         .catch((e: unknown) => {
-          upsertIntegrationZone(integration.id, zoneName, {
+          upsertIntegrationZone(integration.id, normalizedUrl, zoneName, {
             remoteZoneId: link.remoteZoneId,
             status: 'error',
             message: `Remote deletion failed: ${e instanceof Error ? e.message : 'unknown error'}`,
           });
         });
     } else {
-      upsertIntegrationZone(integration.id, zoneName, {
+      upsertIntegrationZone(integration.id, normalizedUrl, zoneName, {
         remoteZoneId: link.remoteZoneId,
         status: 'orphan',
         message: 'Zone deleted in PowerDNS — remote zone kept (deleteMode: never)',
@@ -226,10 +253,11 @@ export function handleZoneDeleted(zoneName: string): void {
  * First active integration replicating the given zone (used by the record
  * proxy/orange-cloud feature on the zone page).
  */
-export function findZoneLink(zoneName: string) {
+export function findZoneLink(serverUrl: string, zoneName: string) {
+  const normalizedUrl = normalizeUrl(serverUrl);
   for (const integration of listIntegrations()) {
     if (!integration.active) continue;
-    const link = listIntegrationZones(integration.id).find(
+    const link = listIntegrationZones(integration.id, normalizedUrl).find(
       (l) => l.zoneName === zoneName && l.remoteZoneId && l.status !== 'orphan'
     );
     if (link) return { integration, link };
@@ -238,8 +266,8 @@ export function findZoneLink(zoneName: string) {
 }
 
 /** Re-triggers a transfer for one linked zone. */
-export async function forceZoneAxfr(integrationId: string, zoneName: string): Promise<{ error?: string }> {
-  const link = listIntegrationZones(integrationId).find((l) => l.zoneName === zoneName);
+export async function forceZoneAxfr(integrationId: string, serverUrl: string, zoneName: string): Promise<{ error?: string }> {
+  const link = listIntegrationZones(integrationId, normalizeUrl(serverUrl)).find((l) => l.zoneName === zoneName);
   if (!link?.remoteZoneId) return { error: 'Zone is not linked to a remote zone yet' };
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { error: 'Stored credentials are unreadable' };

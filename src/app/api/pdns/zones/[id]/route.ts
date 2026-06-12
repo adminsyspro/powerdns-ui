@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       // the remote zone and flags the link as orphan).
       const zoneName = id.endsWith('.') ? id : `${id}.`;
       try {
-        handleZoneDeleted(zoneName);
+        handleZoneDeleted(conn.url, zoneName);
       } catch { /* never block zone deletion on integration errors */ }
     }
     return forwardPdnsResponse(response);

@@ -203,15 +203,17 @@ function initSchema(db: Database.Database) {
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
-    -- Per-zone replication state for an integration.
+    -- Per-zone replication state for an integration, scoped by PowerDNS
+    -- server so identical zone names on different connections never conflate.
     CREATE TABLE IF NOT EXISTS integration_zones (
       integration_id  TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+      server_url      TEXT NOT NULL,
       zone_name       TEXT NOT NULL,
       remote_zone_id  TEXT DEFAULT NULL,
       status          TEXT NOT NULL,
       message         TEXT DEFAULT NULL,
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
-      PRIMARY KEY (integration_id, zone_name)
+      PRIMARY KEY (integration_id, server_url, zone_name)
     );
     CREATE INDEX IF NOT EXISTS idx_integration_zones_status ON integration_zones(integration_id, status);
   `);

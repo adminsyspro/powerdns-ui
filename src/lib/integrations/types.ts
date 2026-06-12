@@ -49,6 +49,7 @@ export type IntegrationZoneStatus = 'ok' | 'provisioning' | 'error' | 'orphan';
 
 export interface IntegrationZoneRow {
   integrationId: string;
+  serverUrl: string;
   zoneName: string;
   remoteZoneId: string | null;
   status: IntegrationZoneStatus;

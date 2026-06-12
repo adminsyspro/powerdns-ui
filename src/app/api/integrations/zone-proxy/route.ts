@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
     if (zone === '.') return NextResponse.json({ error: 'zone parameter required' }, { status: 400 });
     authorizeZone(request, zone, 'read');
 
-    const found = findZoneLink(zone);
+    const conn = getConnectionFromRequest(request);
+    const found = findZoneLink(conn.url, zone);
     if (!found) return NextResponse.json({ linked: false, records: [] });
 
     const creds = getIntegrationCredentials(found.integration.id);
@@ -79,7 +80,8 @@ export async function PUT(request: NextRequest) {
     }
     authorizeZone(request, zone, 'write-zone');
 
-    const found = findZoneLink(zone);
+    const conn = getConnectionFromRequest(request);
+    const found = findZoneLink(conn.url, zone);
     if (!found) return NextResponse.json({ error: 'Zone is not replicated to Cloudflare' }, { status: 404 });
     const creds = getIntegrationCredentials(found.integration.id);
     if (!creds) return NextResponse.json({ error: 'Stored credentials are unreadable' }, { status: 500 });

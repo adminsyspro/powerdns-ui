@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { getConnectionFromRequest } from '@/lib/pdns-proxy';
+import { normalizeUrl } from '@/lib/cache/zones';
 import {
   deleteIntegration,
   getIntegration,
+  getIntegrationCredentials,
   listIntegrationZones,
   sanitizeConfig,
   updateIntegration,
 } from '@/lib/integrations/store';
 import { getSyncState } from '@/lib/integrations/sync';
+import type { IntegrationConfig } from '@/lib/integrations/types';
+
+// Provider-side peer/TSIG objects only stay valid while the settings they
+// were created from are unchanged.
+function peerSettingsChanged(a: IntegrationConfig, b: IntegrationConfig): boolean {
+  return (
+    a.accountId !== b.accountId ||
+    a.primaryIp !== b.primaryIp ||
+    a.primaryPort !== b.primaryPort ||
+    (a.tsigName ?? '') !== (b.tsigName ?? '') ||
+    (a.tsigAlgo ?? '') !== (b.tsigAlgo ?? '')
+  );
+}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -18,9 +34,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const integration = getIntegration(id);
     if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const conn = getConnectionFromRequest(request);
     return NextResponse.json({
       integration,
-      zones: listIntegrationZones(id),
+      zones: listIntegrationZones(id, normalizeUrl(conn.url)),
       sync: getSyncState(id),
     });
   } catch (e) {
@@ -38,19 +55,38 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const body = await request.json();
     const config = body.config !== undefined ? sanitizeConfig(body.config) : existing.config;
-    // Provider-managed ids survive config edits.
-    config.peerId = existing.config.peerId;
-    config.tsigId = existing.config.tsigId;
-
     const apiToken = typeof body.apiToken === 'string' ? body.apiToken.trim() : '';
     const tsigSecret = typeof body.tsigSecret === 'string' ? body.tsigSecret : '';
+
+    // Provider-managed ids survive config edits ONLY while the settings they
+    // were created from are unchanged; otherwise they are dropped so the next
+    // provisioning recreates the peer/TSIG with the new settings.
+    if (!peerSettingsChanged(existing.config, config) && !tsigSecret) {
+      config.peerId = existing.config.peerId;
+      config.tsigId = existing.config.tsigId;
+    }
+
+    // Merge secrets so the token and the TSIG secret rotate independently.
+    let credentials;
+    if (apiToken || tsigSecret) {
+      const current = getIntegrationCredentials(id);
+      credentials = {
+        apiToken: apiToken || current?.apiToken || '',
+        tsigSecret: tsigSecret || current?.tsigSecret,
+      };
+      if (!credentials.apiToken) {
+        return NextResponse.json(
+          { error: 'Stored API token is unreadable — provide apiToken with this update' },
+          { status: 400 }
+        );
+      }
+    }
+
     const updated = updateIntegration(id, {
       name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,
       config,
       active: typeof body.active === 'boolean' ? body.active : undefined,
-      ...(apiToken
-        ? { credentials: { apiToken, tsigSecret: tsigSecret || undefined } }
-        : {}),
+      ...(credentials ? { credentials } : {}),
     });
     return NextResponse.json(updated);
   } catch (e) {

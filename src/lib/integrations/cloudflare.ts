@@ -17,7 +17,13 @@ interface CfEnvelope<T> {
 }
 
 export class CloudflareError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    // Cloudflare error codes from the response envelope (e.g. 409 "already
+    // linked"), distinct from the HTTP status.
+    public readonly codes: number[] = []
+  ) {
     super(message);
   }
 }
@@ -50,7 +56,11 @@ async function cf<T>(
     if (envelope.errors?.some((e) => e.code === 1000)) {
       detail += ' — make sure you pasted an API Token value (My Profile > API Tokens > Create Token), not the Global API Key or the token ID';
     }
-    throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
+    throw new CloudflareError(
+      `Cloudflare API: ${detail}`,
+      response.status,
+      envelope.errors?.map((e) => e.code) ?? []
+    );
   }
   return envelope.result;
 }

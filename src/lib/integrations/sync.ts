@@ -156,7 +156,17 @@ async function provisionZone(
       return;
     }
 
-    await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
+    try {
+      await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
+    } catch (e) {
+      // Cloudflare error 409: the zone already has an incoming transfer
+      // config (pre-existing manual setup). That IS the desired state —
+      // adopt it instead of failing.
+      const alreadyLinked =
+        e instanceof cloudflare.CloudflareError &&
+        (e.codes.includes(409) || /already linked/i.test(e.message));
+      if (!alreadyLinked) throw e;
+    }
     if (config.customNsMode !== 'ignore') {
       await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
     }

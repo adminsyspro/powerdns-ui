@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireAuth, requireCreateInGroup, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
+import { autoProvisionZone } from '@/lib/integrations/sync';
 
 // GET /api/pdns/zones - List all zones
 export async function GET(request: NextRequest) {
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       body: JSON.stringify(body),
     });
+    if (response.ok && typeof body.name === 'string') {
+      // Best-effort: replicate the new zone to active integrations in scope.
+      const zoneName = body.name.endsWith('.') ? body.name : `${body.name}.`;
+      try {
+        autoProvisionZone(conn.url, zoneName, String(body.kind ?? ''), account);
+      } catch { /* never block zone creation on integration errors */ }
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

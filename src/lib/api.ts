@@ -12,6 +12,8 @@ import type {
 import type { ImportPreview } from '@/lib/bind/types';
 import type { NameserverPool } from '@/lib/ns-pools';
 import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
+import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/lib/integrations/types';
+import type { IntegrationSyncState } from '@/lib/integrations/sync';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -317,6 +319,85 @@ export async function setZoneMetadata(zoneId: string, kind: ZoneMetadataKind, me
   return apiRequest<{ kind: string; metadata: string[] }>(
     `/api/pdns/zones/${encodeURIComponent(zoneId)}/metadata/${kind}`,
     { method: 'PUT', body: JSON.stringify({ kind, metadata }) }
+  );
+}
+
+// ---- Integrations (Cloudflare secondary DNS, …) ----
+
+export async function fetchIntegrations() {
+  return apiRequest<IntegrationRow[]>('/api/integrations');
+}
+
+export async function createIntegrationApi(input: {
+  provider: 'cloudflare';
+  name: string;
+  apiToken: string;
+  tsigSecret?: string;
+  config: Partial<IntegrationConfig>;
+}) {
+  return apiRequest<IntegrationRow>('/api/integrations', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateIntegrationApi(
+  id: string,
+  patch: { name?: string; apiToken?: string; tsigSecret?: string; config?: Partial<IntegrationConfig>; active?: boolean }
+) {
+  return apiRequest<IntegrationRow>(`/api/integrations/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteIntegrationApi(id: string) {
+  return apiRequest<void>(`/api/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function fetchIntegrationDetail(id: string) {
+  return apiRequest<{ integration: IntegrationRow; zones: IntegrationZoneRow[]; sync: IntegrationSyncState }>(
+    `/api/integrations/${encodeURIComponent(id)}`
+  );
+}
+
+export async function testIntegration(id: string) {
+  return apiRequest<{ ok: boolean; remoteZones?: number; error?: string }>(
+    `/api/integrations/${encodeURIComponent(id)}/test`,
+    { method: 'POST' }
+  );
+}
+
+export async function startIntegrationSync(id: string) {
+  return apiRequest<{ sync: IntegrationSyncState }>(`/api/integrations/${encodeURIComponent(id)}/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function forceIntegrationAxfr(id: string, zoneName: string) {
+  return apiRequest<{ ok: boolean }>(`/api/integrations/${encodeURIComponent(id)}/force-axfr`, {
+    method: 'POST',
+    body: JSON.stringify({ zoneName }),
+  });
+}
+
+export interface ZoneProxyRecord {
+  name: string;
+  type: string;
+  proxied: boolean;
+  proxiable: boolean;
+}
+
+export async function fetchZoneProxyState(zone: string) {
+  return apiRequest<{ linked: boolean; integrationId?: string; integrationName?: string; records: ZoneProxyRecord[]; error?: string }>(
+    `/api/integrations/zone-proxy?zone=${encodeURIComponent(zone)}`
+  );
+}
+
+export async function setZoneRecordProxied(zone: string, recordName: string, type: string, proxied: boolean) {
+  return apiRequest<{ ok: boolean; updated: number; proxied: boolean }>(
+    '/api/integrations/zone-proxy',
+    { method: 'PUT', body: JSON.stringify({ zone, recordName, type, proxied }) }
   );
 }
 

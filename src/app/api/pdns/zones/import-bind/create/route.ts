@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseBind } from '@/lib/bind/parser';
 import { pdnsProxy, getConnectionFromRequest, forwardPdnsResponse } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireCreateInGroup, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
+import { autoProvisionZone } from '@/lib/integrations/sync';
 
 const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -79,6 +80,13 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         body: JSON.stringify(pdnsBody),
       });
+      if (response.ok) {
+        // Best-effort: replicate the new zone to active integrations in scope.
+        const canonical = zoneName.endsWith('.') ? zoneName : `${zoneName}.`;
+        try {
+          autoProvisionZone(conn.url, canonical, String(body.kind ?? ''), account);
+        } catch { /* never block zone creation on integration errors */ }
+      }
       return forwardPdnsResponse(response);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown error';

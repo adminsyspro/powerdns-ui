@@ -189,6 +189,31 @@ function initSchema(db: Database.Database) {
       PRIMARY KEY (server_url, zone_id)
     );
     CREATE INDEX IF NOT EXISTS idx_ns_audit_status ON ns_audit(server_url, status);
+
+    -- External provider integrations (e.g. Cloudflare secondary DNS).
+    -- credentials is encrypted with APP_SECRET like other stored secrets.
+    CREATE TABLE IF NOT EXISTS integrations (
+      id              TEXT PRIMARY KEY,
+      provider        TEXT NOT NULL,
+      name            TEXT NOT NULL,
+      credentials     TEXT NOT NULL,
+      config          TEXT NOT NULL DEFAULT '{}',
+      active          INTEGER NOT NULL DEFAULT 1,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    -- Per-zone replication state for an integration.
+    CREATE TABLE IF NOT EXISTS integration_zones (
+      integration_id  TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+      zone_name       TEXT NOT NULL,
+      remote_zone_id  TEXT DEFAULT NULL,
+      status          TEXT NOT NULL,
+      message         TEXT DEFAULT NULL,
+      updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (integration_id, zone_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_integration_zones_status ON integration_zones(integration_id, status);
   `);
 
   // Migrations — add columns that may not exist in older databases

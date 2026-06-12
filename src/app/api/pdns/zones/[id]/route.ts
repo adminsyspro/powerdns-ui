@@ -5,6 +5,7 @@ import {
   isZoneLevelPatch, canSeeAllZones, AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
+import { handleZoneDeleted } from '@/lib/integrations/sync';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -116,6 +117,14 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones/${id}`, {
       method: 'DELETE',
     });
+    if (response.ok || response.status === 204) {
+      // Best-effort: apply each integration's delete policy (default keeps
+      // the remote zone and flags the link as orphan).
+      const zoneName = id.endsWith('.') ? id : `${id}.`;
+      try {
+        handleZoneDeleted(zoneName);
+      } catch { /* never block zone deletion on integration errors */ }
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

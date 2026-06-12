@@ -256,6 +256,40 @@ export default function ZoneDetailPage() {
   const { sync } = useZoneSync();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [dnssecOpen, setDnssecOpen] = React.useState(false);
+
+  // Cloudflare orange-cloud state when the zone is replicated via an
+  // integration. Keys: `${bare lowercase name}|${TYPE}`.
+  const [cfProxy, setCfProxy] = React.useState<{
+    linked: boolean;
+    integrationName?: string;
+    byKey: Record<string, { proxied: boolean; proxiable: boolean }>;
+  } | null>(null);
+  const [cfBusyKey, setCfBusyKey] = React.useState<string | null>(null);
+  const loadCfProxy = React.useCallback(async () => {
+    const result = await api.fetchZoneProxyState(zoneId);
+    if (result.data?.linked) {
+      const byKey: Record<string, { proxied: boolean; proxiable: boolean }> = {};
+      for (const r of result.data.records) {
+        byKey[`${r.name.toLowerCase()}|${r.type}`] = { proxied: r.proxied, proxiable: r.proxiable };
+      }
+      setCfProxy({ linked: true, integrationName: result.data.integrationName, byKey });
+    } else {
+      setCfProxy({ linked: false, byKey: {} });
+    }
+  }, [zoneId]);
+  React.useEffect(() => { loadCfProxy(); }, [loadCfProxy]);
+
+  const handleCloudToggle = React.useCallback(async (name: string, type: string, proxied: boolean) => {
+    const key = `${name.toLowerCase().replace(/\.$/, '')}|${type}`;
+    setCfBusyKey(key);
+    const result = await api.setZoneRecordProxied(zoneId, name, type, proxied);
+    if (!result.error) {
+      setCfProxy((prev) => prev
+        ? { ...prev, byKey: { ...prev.byKey, [key]: { ...prev.byKey[key], proxied } } }
+        : prev);
+    }
+    setCfBusyKey(null);
+  }, [zoneId]);
   const [notifySent, setNotifySent] = React.useState(false);
   const notifyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => () => { if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current); }, []);
@@ -752,6 +786,12 @@ export default function ZoneDetailPage() {
         serverTypeStats={paginatedData?.typeStats}
         onBulkDelete={handleBulkDelete}
         onBulkToggle={handleBulkToggle}
+        cloudProxy={cfProxy?.linked ? {
+          byKey: cfProxy.byKey,
+          canToggle: canManageAllZones,
+          busyKey: cfBusyKey,
+          onToggle: handleCloudToggle,
+        } : undefined}
       />
 
       {/* Zone Settings Dialog */}

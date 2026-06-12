@@ -19,6 +19,7 @@ import {
   Layers,
   History,
   Radar,
+  Cloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
       { title: 'Groups', href: '/groups', icon: Users2, requiredRole: ['Administrator'] },
+      { title: 'Integrations', href: '/integrations', icon: Cloud, requiredRole: ['Administrator'] },
       { title: 'Change History', href: '/history', icon: History, requiredRole: ['Administrator'] },
       { title: 'Activity Log', href: '/activity', icon: FileText, requiredRole: ['Administrator'] },
       { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },

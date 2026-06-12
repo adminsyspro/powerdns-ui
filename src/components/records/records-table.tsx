@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Cloud } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -50,7 +50,17 @@ interface RecordsTableProps {
   onSelectionChange?: (selectedKeys: string[]) => void;
   onBulkDelete?: (records: RRSet[]) => void;
   onBulkToggle?: (records: RRSet[], disabled: boolean) => void;
+  // Cloudflare orange cloud: present when the zone is replicated to a
+  // Cloudflare integration. Keys are `${bare lowercase name}|${TYPE}`.
+  cloudProxy?: {
+    byKey: Record<string, { proxied: boolean; proxiable: boolean }>;
+    canToggle: boolean;
+    busyKey?: string | null;
+    onToggle: (name: string, type: string, proxied: boolean) => void;
+  };
 }
+
+const PROXYABLE_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 
 const RECORD_TYPES: RecordType[] = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'SRV', 'PTR', 'CAA', 'ALIAS', 'DNSKEY', 'DS', 'NAPTR', 'SSHFP', 'TLSA', 'URI'];
 
@@ -69,7 +79,7 @@ function getRecordPendingAction(
   return ttlChanged ? change.action : undefined;
 }
 
-export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle }: RecordsTableProps) {
+export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle, cloudProxy }: RecordsTableProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<RecordType | 'all'>('all');
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
@@ -410,6 +420,38 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-2">
+                        {cloudProxy && PROXYABLE_TYPES.has(rrset.type) && (() => {
+                          const cloudKey = `${rrset.name.toLowerCase().replace(/\.$/, '')}|${rrset.type}`;
+                          const state = cloudProxy.byKey[cloudKey];
+                          if (!state) return null;
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  disabled={!cloudProxy.canToggle || cloudProxy.busyKey === cloudKey}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    cloudProxy.onToggle(rrset.name, rrset.type, !state.proxied);
+                                  }}
+                                  aria-label={state.proxied ? 'Disable Cloudflare proxy' : 'Enable Cloudflare proxy'}
+                                  className={`flex-shrink-0 ${cloudProxy.canToggle ? 'cursor-pointer' : 'cursor-default'} ${cloudProxy.busyKey === cloudKey ? 'animate-pulse' : ''}`}
+                                >
+                                  <Cloud
+                                    className={state.proxied
+                                      ? 'h-4 w-4 text-orange-500 fill-orange-400'
+                                      : 'h-4 w-4 text-muted-foreground'}
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {state.proxied
+                                  ? 'Proxied by Cloudflare (cache/WAF)' + (cloudProxy.canToggle ? ' — click to switch to DNS only' : '')
+                                  : 'DNS only' + (cloudProxy.canToggle ? ' — click to proxy through Cloudflare' : '')}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
                         {formatRecordName(rrset.name)}
                         {pendingAction === 'ADD' && <Badge className="bg-green-600 text-white text-[10px] px-1.5 py-0">NEW</Badge>}
                         {pendingAction === 'EDIT' && <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0">MODIFIED</Badge>}

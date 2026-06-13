@@ -80,6 +80,8 @@ interface ZonesTableProps {
   canDelete?: boolean;
   // Action buttons slot
   actions?: React.ReactNode;
+  // Leading slot in the filter row (e.g. the forward/reverse scope tabs).
+  scopeFilter?: React.ReactNode;
   // Selection
   onSelectionChange?: (selectedIds: string[]) => void;
   onBulkDelete?: (zoneIds: string[]) => void;
@@ -127,6 +129,7 @@ export function ZonesTable({
   onSelectionChange,
   onBulkDelete,
   replicatedZones,
+  scopeFilter,
 }: ZonesTableProps) {
   // Selection state
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -238,6 +241,7 @@ export function ZonesTable({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
+        {scopeFilter}
         <div className="flex-1 min-w-[200px] max-w-md flex items-center gap-0">
           <Select value={searchMode} onValueChange={handleSearchModeChange}>
             <SelectTrigger className="w-[110px] rounded-r-none border-r-0">

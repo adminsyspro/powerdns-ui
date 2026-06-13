@@ -248,18 +248,16 @@ export default function ZonesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Zones</h1>
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <p>Manage your DNS zones and domains</p>
-            {syncStatus && syncStatus.lastSyncAt > 0 && (
-              <span className="flex items-center gap-1 text-xs">
-                <Clock className="h-3 w-3" />
-                Synced {formatRelativeTime(syncStatus.lastSyncAt)} ({syncStatus.zoneCount?.toLocaleString()} zones)
-              </span>
-            )}
-          </div>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight">Zones</h1>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <p className="text-sm">Manage your DNS zones and domains</p>
+          {syncStatus && syncStatus.lastSyncAt > 0 && (
+            <span className="flex items-center gap-1 text-xs">
+              <Clock className="h-3 w-3" />
+              Synced {formatRelativeTime(syncStatus.lastSyncAt)} ({syncStatus.zoneCount?.toLocaleString()} zones)
+            </span>
+          )}
         </div>
       </div>
 
@@ -336,20 +334,21 @@ export default function ZonesPage() {
         </Card>
       )}
 
-      <Tabs value={scope} onValueChange={handleScopeChange}>
-        <TabsList>
-          <TabsTrigger value="forward">
-            Domains{data ? ` (${data.forwardTotal.toLocaleString()})` : ''}
-          </TabsTrigger>
-          <TabsTrigger value="reverse">
-            Reverse{data ? ` (${data.reverseTotal.toLocaleString()})` : ''}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       <ZonesTable
         zones={groupFilteredZones}
         isLoading={isLoading}
+        scopeFilter={
+          <Tabs value={scope} onValueChange={handleScopeChange}>
+            <TabsList>
+              <TabsTrigger value="forward">
+                Domains{data ? ` (${data.forwardTotal.toLocaleString()})` : ''}
+              </TabsTrigger>
+              <TabsTrigger value="reverse">
+                Reverse{data ? ` (${data.reverseTotal.toLocaleString()})` : ''}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
         onDelete={handleDelete}
         onNotify={handleNotify}
         onExport={handleExport}

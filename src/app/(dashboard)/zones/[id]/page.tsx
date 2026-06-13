@@ -726,35 +726,66 @@ export default function ZoneDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={refetch}>
-                <RefreshCw className="mr-2 h-4 w-4" />Refresh
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
-                <Settings className="mr-2 h-4 w-4" />Settings
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDnssecOpen(true)}>
-                <Shield className="mr-2 h-4 w-4" />DNSSEC
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={refetch} aria-label="Refresh">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Refresh</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Settings</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setDnssecOpen(true)} aria-label="DNSSEC">
+                    <Shield className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>DNSSEC</TooltipContent>
+              </Tooltip>
               {/* NOTIFY is an outbound primary→secondary action, so it only applies to Master zones. Slave zones pull from their master via AXFR instead; Native and catalog zones (Producer/Consumer) have no replicas to notify. */}
               {zone.kind === 'Master' && (
-                <Button variant="outline" size="sm" onClick={handleNotify}>
-                  {notifySent ? (
-                    <><Check className="mr-2 h-4 w-4" />Sent</>
-                  ) : (
-                    <><Send className="mr-2 h-4 w-4" />NOTIFY</>
-                  )}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleNotify} aria-label={notifySent ? 'NOTIFY sent' : 'Send NOTIFY'}>
+                      {notifySent ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{notifySent ? 'NOTIFY sent' : 'Send NOTIFY'}</TooltipContent>
+                </Tooltip>
               )}
-              <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
-                <Upload className="mr-2 h-4 w-4" />Import
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleOpenHistory}>
-                <History className="mr-2 h-4 w-4" />History
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setImportDialogOpen(true)} aria-label="Import">
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Import</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleOpenHistory} aria-label="History">
+                    <History className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>History</TooltipContent>
+              </Tooltip>
               {isAdmin && (
-                <Button variant="destructive" size="sm" onClick={handleDeleteZone}>
-                  <Trash2 className="mr-2 h-4 w-4" />Delete
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="destructive" size="icon" className="h-9 w-9" onClick={handleDeleteZone} aria-label="Delete">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete</TooltipContent>
+                </Tooltip>
               )}
             </div>
           </div>

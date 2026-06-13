@@ -424,6 +424,12 @@ export async function setZoneRecordProxied(zone: string, recordName: string, typ
   );
 }
 
+// Canonical names of zones replicated to a provider (Cloudflare secondary) on
+// the current connection — used to flag those zones in lists and the switcher.
+export async function fetchReplicatedZoneNames() {
+  return apiRequest<{ zones: string[] }>('/api/integrations/replicated-zones');
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

@@ -44,6 +44,19 @@ export default function ZonesPage() {
       .catch(() => {});
   }, []);
 
+  // Zones replicated to Cloudflare (secondary): flagged with the orange cloud
+  // in the table. Normalized to bare lowercase names for lookup.
+  const [replicatedZones, setReplicatedZones] = React.useState<Set<string>>(new Set());
+  const loadReplicatedZones = React.useCallback(async () => {
+    const result = await api.fetchReplicatedZoneNames();
+    const names = (result.data?.zones || []).map((n) => n.toLowerCase().replace(/\.$/, ''));
+    setReplicatedZones(new Set(names));
+  }, []);
+  React.useEffect(() => {
+    if (!activeConnection) return;
+    loadReplicatedZones();
+  }, [activeConnection, loadReplicatedZones]);
+
   // Global search state
   const [globalResults, setGlobalResults] = React.useState<SearchResult[]>([]);
   const [isGlobalSearching, setIsGlobalSearching] = React.useState(false);
@@ -106,6 +119,7 @@ export default function ZonesPage() {
   const handleRefresh = async () => {
     await sync();
     refetch();
+    loadReplicatedZones();
   };
 
   const handleDelete = async (zoneId: string) => {
@@ -363,6 +377,7 @@ export default function ZonesPage() {
         onGlobalSearch={handleGlobalSearch}
         isGlobalSearching={isGlobalSearching}
         onBulkDelete={handleBulkDelete}
+        replicatedZones={replicatedZones}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isSyncing || isLoading}>

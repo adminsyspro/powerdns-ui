@@ -328,6 +328,24 @@ export function findZoneLink(serverUrl: string, zoneName: string) {
   return undefined;
 }
 
+/**
+ * Canonical names of every zone currently replicated to a provider on this
+ * server: an active integration holds a healthy link (linked remote zone, not
+ * orphaned). Same predicate as findZoneLink but collected across all zones, so
+ * the zones list / switcher can flag Cloudflare secondaries in one query.
+ */
+export function listReplicatedZoneNames(serverUrl: string): string[] {
+  const normalizedUrl = normalizeUrl(serverUrl);
+  const names = new Set<string>();
+  for (const integration of listIntegrations()) {
+    if (!integration.active) continue;
+    for (const link of listIntegrationZones(integration.id, normalizedUrl)) {
+      if (link.remoteZoneId && link.status !== 'orphan') names.add(link.zoneName);
+    }
+  }
+  return [...names];
+}
+
 /** Re-triggers a transfer for one linked zone. */
 export async function forceZoneAxfr(integrationId: string, serverUrl: string, zoneName: string): Promise<{ error?: string }> {
   const link = listIntegrationZones(integrationId, normalizeUrl(serverUrl)).find((l) => l.zoneName === zoneName);

@@ -34,11 +34,16 @@ import * as api from '@/lib/api';
 
 // ---- Zone Switcher ----
 
-function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
+function zoneKey(name: string): string {
+  return name.toLowerCase().replace(/\.$/, '');
+}
+
+function ZoneSwitcher({ currentZoneId, currentZoneReplicated }: { currentZoneId: string; currentZoneReplicated?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [zones, setZones] = React.useState<ZoneListItem[]>([]);
+  const [replicatedZones, setReplicatedZones] = React.useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = React.useState(false);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [page, setPage] = React.useState(1);
@@ -101,13 +106,30 @@ function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
 
+  // Flag Cloudflare secondaries in the list with the orange cloud. Fetched once
+  // when the popover first opens.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api.fetchReplicatedZoneNames().then((result) => {
+      if (cancelled) return;
+      const names = (result.data?.zones || []).map(zoneKey);
+      setReplicatedZones(new Set(names));
+    });
+    return () => { cancelled = true; };
+  }, [open]);
+
   const displayName = currentZoneId.replace(/\.$/, '');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" className="h-auto py-1 px-3 text-left gap-2 max-w-[400px]">
-          <Globe2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          {currentZoneReplicated ? (
+            <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare secondary" className="h-5 w-5 object-contain flex-shrink-0" />
+          ) : (
+            <Globe2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          )}
           <h1 className="text-2xl font-bold tracking-tight truncate">{displayName}</h1>
           <ChevronsUpDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         </Button>
@@ -136,6 +158,7 @@ function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
             <>
               {zones.map((z) => {
                 const isActive = z.id === currentZoneId;
+                const isReplicated = replicatedZones.has(zoneKey(z.name));
                 return (
                   <button
                     key={z.id}
@@ -147,7 +170,11 @@ function ZoneSwitcher({ currentZoneId }: { currentZoneId: string }) {
                       if (!isActive) router.push(`/zones/${encodeURIComponent(z.id)}`);
                     }}
                   >
-                    <Globe2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    {isReplicated ? (
+                      <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare secondary" className="h-4 w-4 object-contain flex-shrink-0" />
+                    ) : (
+                      <Globe2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    )}
                     <span className="truncate font-medium">{z.name.replace(/\.$/, '')}</span>
                     <Badge variant="outline" className={`${getZoneKindColor(z.kind)} text-[10px] px-1.5 py-0 ml-auto flex-shrink-0`}>{z.kind}</Badge>
                   </button>
@@ -662,7 +689,7 @@ export default function ZoneDetailPage() {
               <Button variant="ghost" size="icon" className="flex-shrink-0" asChild>
                 <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
               </Button>
-              <ZoneSwitcher currentZoneId={zoneId} />
+              <ZoneSwitcher currentZoneId={zoneId} currentZoneReplicated={!!cfProxy?.linked} />
               {lookup && lookup.ns.length > 0 && (
                 <>
                   <div className="w-px h-5 bg-border" />

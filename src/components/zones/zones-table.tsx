@@ -83,6 +83,15 @@ interface ZonesTableProps {
   // Selection
   onSelectionChange?: (selectedIds: string[]) => void;
   onBulkDelete?: (zoneIds: string[]) => void;
+  // Normalized (lowercase, no trailing dot) names of zones replicated to
+  // Cloudflare as a secondary — flags them with the orange cloud + a column.
+  replicatedZones?: Set<string>;
+}
+
+// A zone's lookup key into the replicated-zones set (DNS is case-insensitive
+// and the cache/API mix trailing-dot forms).
+function zoneKey(name: string): string {
+  return name.toLowerCase().replace(/\.$/, '');
 }
 
 export function ZonesTable({
@@ -117,6 +126,7 @@ export function ZonesTable({
   actions,
   onSelectionChange,
   onBulkDelete,
+  replicatedZones,
 }: ZonesTableProps) {
   // Selection state
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -342,13 +352,14 @@ export function ZonesTable({
               <TableHead><SortHeader column="serial">Serial</SortHeader></TableHead>
               <TableHead><SortHeader column="dnssec">DNSSEC</SortHeader></TableHead>
               <TableHead><SortHeader column="account">Account</SortHeader></TableHead>
+              <TableHead>Cloudflare Secondary</TableHead>
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex items-center justify-center">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -356,7 +367,7 @@ export function ZonesTable({
               </TableRow>
             ) : displayedZones.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Globe className="h-8 w-8 text-muted-foreground" />
                     <p className="text-muted-foreground">No zones found</p>
@@ -364,7 +375,9 @@ export function ZonesTable({
                 </TableCell>
               </TableRow>
             ) : (
-              displayedZones.map((zone) => (
+              displayedZones.map((zone) => {
+                const isReplicated = replicatedZones?.has(zoneKey(zone.name)) ?? false;
+                return (
                 <TableRow key={zone.id} className={selectedIds.has(zone.id) ? 'bg-muted/50' : undefined}>
                   <TableCell>
                     <Checkbox
@@ -378,7 +391,11 @@ export function ZonesTable({
                       href={`/zones/${encodeURIComponent(zone.id)}`}
                       className="flex items-center gap-2 font-medium hover:underline"
                     >
-                      <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      {isReplicated ? (
+                        <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare secondary" className="h-4 w-4 object-contain flex-shrink-0" />
+                      ) : (
+                        <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
                       <span className="truncate">{zone.name.replace(/\.$/, '')}</span>
                     </Link>
                   </TableCell>
@@ -396,6 +413,21 @@ export function ZonesTable({
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{zone.account || '-'}</TableCell>
+                  <TableCell>
+                    {isReplicated ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1.5 text-sm">
+                            <img src="/integrations/cloudflare-icon.svg" alt="" className="h-4 w-4 object-contain" />
+                            <span className="text-muted-foreground">Yes</span>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Replicated to Cloudflare as a secondary zone</TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
                       <Tooltip>
@@ -437,7 +469,8 @@ export function ZonesTable({
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

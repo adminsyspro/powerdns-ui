@@ -41,7 +41,7 @@ const peerLocks = new Map<string, Promise<void>>();
 // manual sync or the background worker on the same zone.
 const provisioningInFlight = new Set<string>();
 const inFlightKey = (integrationId: string, serverUrl: string, zoneName: string) =>
-  `${integrationId}|${serverUrl}|${zoneName}`;
+  `${integrationId}|${normalizeUrl(serverUrl)}|${zoneName}`;
 
 // Progress is per integration AND per PowerDNS server: a sync against one
 // connection must not show as running (or block syncs) on another.
@@ -218,6 +218,8 @@ interface ReconcileContext {
   serverUrl: string; // normalized
   creds: IntegrationCredentials;
   state: IntegrationSyncState;
+  zones: ReturnType<typeof scopedZones>;
+  known: ReturnType<typeof listIntegrationZones>;
 }
 
 // Validates + reserves the running slot. Returns the context, or a reason it
@@ -235,7 +237,8 @@ function reserveSync(
   if (!creds) return { ok: false, reason: 'Stored credentials are unreadable (APP_SECRET changed?)' };
 
   const normalizedUrl = normalizeUrl(serverUrl);
-  const zones = scopedZones(serverUrl, integration.config);
+  const zones = scopedZones(normalizedUrl, integration.config);
+  const known = listIntegrationZones(integrationId, normalizedUrl);
 
   const state: IntegrationSyncState = {
     running: true,
@@ -246,16 +249,13 @@ function reserveSync(
     error: null,
   };
   syncStates.set(syncKey(integrationId, serverUrl), state);
-  return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state } };
+  return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state, zones, known } };
 }
 
 // The reconcile body. Resolves when the pass is complete.
 async function runReconcile(ctx: ReconcileContext): Promise<void> {
-  const { integrationId, serverUrl: normalizedUrl, creds, state } = ctx;
+  const { integrationId, serverUrl: normalizedUrl, creds, state, zones, known } = ctx;
   try {
-    const integration = getIntegration(integrationId)!;
-    const zones = scopedZones(normalizedUrl, integration.config);
-    const known = listIntegrationZones(integrationId, normalizedUrl);
     const scopedNames = new Set(zones.map((z) => z.name));
 
     // Zones we tracked that left the scope: flag orphan (never remote-delete here).

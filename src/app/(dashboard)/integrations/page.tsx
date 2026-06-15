@@ -400,6 +400,20 @@ export default function IntegrationsPage() {
     else await loadDetail(selectedId);
   };
 
+  const handlePurgeOrphan = async (zoneName: string) => {
+    if (!selectedId) return;
+    const ok = await confirm({
+      title: 'Purge remote zone',
+      description: `Delete the Cloudflare zone for "${zoneName.replace(/\.$/, '')}"? This removes it from Cloudflare.`,
+      confirmLabel: 'Purge',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    const result = await api.purgeIntegrationOrphan(selectedId, zoneName);
+    if (result.error) setError(result.error);
+    else await loadDetail(selectedId);
+  };
+
   const handleToggleActive = async (integration: IntegrationRow) => {
     await api.updateIntegrationApi(integration.id, { active: !integration.active });
     await load();
@@ -619,6 +633,11 @@ export default function IntegrationsPage() {
                         {zone.remoteZoneId && zone.status !== 'orphan' && (
                           <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
                             <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
+                          </Button>
+                        )}
+                        {zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
+                          <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
                           </Button>
                         )}
                       </TableCell>

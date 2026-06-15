@@ -419,6 +419,20 @@ export function autoProvisionZone(serverUrl: string, zoneName: string, kind: str
   }
 }
 
+/** Manually purge one orphaned remote zone (UI action). Returns an error string on failure. */
+export async function purgeOrphanZone(integrationId: string, serverUrl: string, zoneName: string): Promise<{ error?: string }> {
+  const normalizedUrl = normalizeUrl(serverUrl);
+  const integration = getIntegration(integrationId);
+  if (!integration) return { error: 'Integration not found' };
+  if (integration.config.deleteMode === 'never') return { error: 'Deletion is disabled (deleteMode: never)' };
+  const link = getIntegrationZone(integrationId, normalizedUrl, zoneName);
+  if (!link || link.status !== 'orphan' || !link.remoteZoneId) return { error: 'No orphan link to purge for this zone' };
+  const creds = getIntegrationCredentials(integrationId);
+  if (!creds) return { error: 'Stored credentials are unreadable' };
+  await deleteZoneLink(integration, creds, normalizedUrl, zoneName, link.remoteZoneId);
+  return {};
+}
+
 /**
  * Best-effort hook for zone deletion: applies the integration's delete policy
  * (default: keep the remote zone and flag the link as orphan).

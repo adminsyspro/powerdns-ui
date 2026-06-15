@@ -385,6 +385,13 @@ export async function forceIntegrationAxfr(id: string, zoneName: string) {
   });
 }
 
+export async function purgeIntegrationOrphan(id: string, zoneName: string) {
+  return apiRequest<{ ok: boolean }>(`/api/integrations/${encodeURIComponent(id)}/purge-orphan`, {
+    method: 'POST',
+    body: JSON.stringify({ zoneName }),
+  });
+}
+
 export interface IntegrationStats {
   totals: { scope: number; ok: number; error: number; pending: number; orphan: number; lastActivity: number | null };
   integrations: Array<{

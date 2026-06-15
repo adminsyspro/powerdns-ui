@@ -159,6 +159,7 @@ async function provisionZone(
     });
     try {
       const config = integration.config;
+      const warnings: string[] = [];
       const peerId = await ensurePeerOnce(integration, creds);
 
       let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
@@ -173,6 +174,17 @@ async function provisionZone(
           message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
         });
         return;
+      }
+
+      // Cloudflare Secondary DNS is Enterprise-only; ensure the zone is on the
+      // Enterprise plan. Best-effort: never fail a working secondary over a
+      // plan/billing issue. Skipped when already enterprise (idempotent).
+      if (zone.plan?.id !== 'enterprise') {
+        try {
+          await cloudflare.setZonePlan(creds, zone.id);
+        } catch (e) {
+          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+        }
       }
 
       try {
@@ -202,7 +214,18 @@ async function provisionZone(
         await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
       }
       await cloudflare.forceAxfr(creds, zone.id);
-      upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
+      if (config.secondaryOverride) {
+        try {
+          await cloudflare.setSecondaryOverride(creds, zone.id, true);
+        } catch (e) {
+          warnings.push(`Secondary DNS override not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+        }
+      }
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+        remoteZoneId: zone.id,
+        status: 'ok',
+        message: warnings.length ? warnings.join('; ') : null,
+      });
     } catch (e) {
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: currentRemoteId,

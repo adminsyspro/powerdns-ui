@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { createIntegration, listIntegrations, sanitizeConfig } from '@/lib/integrations/store';
-import { getConnectionById } from '@/lib/integrations/connections';
+import { connectionExists } from '@/lib/integrations/connections';
 
 // GET /api/integrations — list instances (credentials never leave the server)
 export async function GET(request: NextRequest) {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'config.primaryIp (public IP of the PowerDNS primary) is required for axfr mode' }, { status: 400 });
     }
     const connectionId = typeof body.connectionId === 'string' ? body.connectionId : '';
-    if (!connectionId || !getConnectionById(connectionId)) {
+    if (!connectionId || !connectionExists(connectionId)) {
       return NextResponse.json({ error: 'connectionId (an existing PowerDNS connection) is required' }, { status: 400 });
     }
     const integration = createIntegration({

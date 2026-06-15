@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
-import { getConnectionById } from '@/lib/integrations/connections';
+import { connectionExists } from '@/lib/integrations/connections';
 import { normalizeUrl } from '@/lib/cache/zones';
 import {
   deleteIntegration,
@@ -62,7 +62,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     let connectionId: string | null | undefined;
     if (typeof body.connectionId === 'string') {
-      if (!getConnectionById(body.connectionId)) {
+      if (!connectionExists(body.connectionId)) {
         return NextResponse.json({ error: 'Unknown connectionId' }, { status: 400 });
       }
       connectionId = body.connectionId;

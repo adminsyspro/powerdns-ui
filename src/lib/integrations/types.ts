@@ -47,6 +47,7 @@ export interface IntegrationRow {
   id: string;
   provider: IntegrationProvider;
   name: string;
+  connectionId: string | null;
   config: IntegrationConfig;
   active: boolean;
   createdAt: number;

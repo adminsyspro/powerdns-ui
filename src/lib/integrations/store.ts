@@ -69,13 +69,14 @@ function parseConfig(value: string): IntegrationConfig {
 }
 
 function rowToIntegration(row: {
-  id: string; provider: string; name: string; config: string;
+  id: string; provider: string; name: string; connection_id: string | null; config: string;
   active: number; created_at: number; updated_at: number;
 }): IntegrationRow {
   return {
     id: row.id,
     provider: row.provider as IntegrationProvider,
     name: row.name,
+    connectionId: row.connection_id,
     config: parseConfig(row.config),
     active: row.active === 1,
     createdAt: row.created_at,
@@ -86,7 +87,7 @@ function rowToIntegration(row: {
 export function listIntegrations(): IntegrationRow[] {
   const db = getDb();
   const rows = db
-    .prepare('SELECT id, provider, name, config, active, created_at, updated_at FROM integrations ORDER BY name')
+    .prepare('SELECT id, provider, name, connection_id, config, active, created_at, updated_at FROM integrations ORDER BY name')
     .all() as Parameters<typeof rowToIntegration>[0][];
   return rows.map(rowToIntegration);
 }
@@ -94,7 +95,7 @@ export function listIntegrations(): IntegrationRow[] {
 export function getIntegration(id: string): IntegrationRow | undefined {
   const db = getDb();
   const row = db
-    .prepare('SELECT id, provider, name, config, active, created_at, updated_at FROM integrations WHERE id = ?')
+    .prepare('SELECT id, provider, name, connection_id, config, active, created_at, updated_at FROM integrations WHERE id = ?')
     .get(id) as Parameters<typeof rowToIntegration>[0] | undefined;
   return row ? rowToIntegration(row) : undefined;
 }
@@ -115,14 +116,15 @@ export function getIntegrationCredentials(id: string): IntegrationCredentials | 
 export function createIntegration(input: {
   provider: IntegrationProvider;
   name: string;
+  connectionId: string | null;
   config: IntegrationConfig;
   credentials: IntegrationCredentials;
 }): IntegrationRow {
   const db = getDb();
   const id = randomUUID();
   db.prepare(
-    'INSERT INTO integrations (id, provider, name, credentials, config) VALUES (?, ?, ?, ?, ?)'
-  ).run(id, input.provider, input.name, encrypt(JSON.stringify(input.credentials)), JSON.stringify(input.config));
+    'INSERT INTO integrations (id, provider, name, connection_id, credentials, config) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, input.provider, input.name, input.connectionId, encrypt(JSON.stringify(input.credentials)), JSON.stringify(input.config));
   return getIntegration(id)!;
 }
 
@@ -130,6 +132,7 @@ export function updateIntegration(
   id: string,
   patch: {
     name?: string;
+    connectionId?: string | null;
     config?: IntegrationConfig;
     active?: boolean;
     // Only re-encrypted when explicitly provided, so editing settings never
@@ -142,10 +145,11 @@ export function updateIntegration(
   const db = getDb();
   db.prepare(
     `UPDATE integrations
-        SET name = ?, config = ?, active = ?, updated_at = unixepoch()
+        SET name = ?, connection_id = ?, config = ?, active = ?, updated_at = unixepoch()
       WHERE id = ?`
   ).run(
     patch.name ?? existing.name,
+    patch.connectionId !== undefined ? patch.connectionId : existing.connectionId,
     JSON.stringify(patch.config ?? existing.config),
     (patch.active ?? existing.active) ? 1 : 0,
     id

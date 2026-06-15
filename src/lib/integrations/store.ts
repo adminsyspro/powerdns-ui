@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   customNsSet: 1,
   autoProvision: true,
   deleteMode: 'never',
+  orphanRetentionHours: 72,
 };
 
 // Zone names are stored canonical (trailing dot), matching the zones cache.
@@ -56,13 +57,23 @@ export function sanitizeConfig(input: Partial<IntegrationConfig> | undefined): I
       ? (config.customNsSet as number)
       : 1,
     autoProvision: config.autoProvision !== false,
-    deleteMode: config.deleteMode === 'delete' ? 'delete' : 'never',
+    deleteMode:
+      config.deleteMode === 'auto' ? 'auto'
+      : config.deleteMode === 'manual' || (config.deleteMode as string) === 'delete' ? 'manual'
+      : 'never',
+    orphanRetentionHours:
+      Number.isInteger(config.orphanRetentionHours) && (config.orphanRetentionHours as number) >= 1
+        ? (config.orphanRetentionHours as number)
+        : 72,
   };
 }
 
 function parseConfig(value: string): IntegrationConfig {
   try {
-    return { ...DEFAULT_CONFIG, ...(JSON.parse(value) as Partial<IntegrationConfig>) };
+    const parsed = { ...DEFAULT_CONFIG, ...(JSON.parse(value) as Partial<IntegrationConfig>) };
+    // Legacy migration: the old two-state 'delete' becomes 'manual' (never auto).
+    if ((parsed.deleteMode as string) === 'delete') parsed.deleteMode = 'manual';
+    return parsed;
   } catch {
     return { ...DEFAULT_CONFIG };
   }

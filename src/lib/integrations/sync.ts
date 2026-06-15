@@ -335,7 +335,7 @@ export function handleZoneDeleted(serverUrl: string, zoneName: string): void {
   for (const integration of listIntegrations()) {
     const link = listIntegrationZones(integration.id, normalizedUrl).find((l) => l.zoneName === zoneName);
     if (!link) continue;
-    if (integration.config.deleteMode === 'delete' && link.remoteZoneId) {
+    if (integration.config.deleteMode === 'auto' && link.remoteZoneId) {
       const creds = getIntegrationCredentials(integration.id);
       if (!creds) continue;
       void cloudflare

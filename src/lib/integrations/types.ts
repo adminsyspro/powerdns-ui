@@ -40,7 +40,9 @@ export interface IntegrationConfig {
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;
   // What to do remotely when the PowerDNS zone disappears.
-  deleteMode: 'never' | 'delete';
+  deleteMode: 'never' | 'manual' | 'auto';
+  // Hours an orphan link is kept before auto-deletion (deleteMode: 'auto').
+  orphanRetentionHours: number;
 }
 
 export interface IntegrationRow {

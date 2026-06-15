@@ -63,7 +63,8 @@ interface FormState {
   customNsMode: 'ignore' | 'enable' | 'disable';
   customNsSet: string;
   autoProvision: boolean;
-  deleteMode: 'never' | 'delete';
+  deleteMode: 'never' | 'manual' | 'auto';
+  orphanRetentionHours: string;
   connectionId: string;
 }
 
@@ -73,7 +74,7 @@ const EMPTY_FORM: FormState = {
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
   scope: 'all-master', groups: [], zones: [],
   customNsMode: 'ignore', customNsSet: '1',
-  autoProvision: true, deleteMode: 'never',
+  autoProvision: true, deleteMode: 'never', orphanRetentionHours: '72',
   connectionId: '',
 };
 
@@ -310,6 +311,7 @@ export default function IntegrationsPage() {
       customNsSet: String(integration.config.customNsSet || 1),
       autoProvision: integration.config.autoProvision,
       deleteMode: integration.config.deleteMode,
+      orphanRetentionHours: String(integration.config.orphanRetentionHours || 72),
       connectionId: integration.connectionId ?? '',
     });
     setFormError(null);
@@ -330,6 +332,7 @@ export default function IntegrationsPage() {
     customNsSet: parseInt(form.customNsSet, 10) || 1,
     autoProvision: form.autoProvision,
     deleteMode: form.deleteMode,
+    orphanRetentionHours: parseInt(form.orphanRetentionHours, 10) || 72,
   });
 
   const handleSave = async () => {
@@ -804,10 +807,19 @@ export default function IntegrationsPage() {
                 <SelectTrigger id="int-delete"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="never">Keep the remote zone (flag as orphan)</SelectItem>
-                  <SelectItem value="delete">Delete the remote zone too</SelectItem>
+                  <SelectItem value="manual">Flag orphan; delete manually from the list</SelectItem>
+                  <SelectItem value="auto">Mirror PowerDNS — delete the remote zone after a retention period</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {form.deleteMode === 'auto' && (
+              <div className="space-y-2">
+                <Label htmlFor="int-orphan-retention">Keep orphans for (hours) before deleting</Label>
+                <Input id="int-orphan-retention" type="number" min={1} value={form.orphanRetentionHours}
+                  onChange={(e) => setForm({ ...form, orphanRetentionHours: e.target.value })} />
+                <p className="text-xs text-muted-foreground">A zone removed from PowerDNS is kept this long before the background worker deletes it on Cloudflare.</p>
+              </div>
+            )}
             {/* Account custom nameservers */}
             <div className="sm:col-span-2 p-4 border rounded-lg space-y-3">
               <div className="space-y-0.5">

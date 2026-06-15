@@ -266,9 +266,13 @@ export default function ZoneDetailPage() {
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
   const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
-  // Administrators and Operators manage all zones (edit records + settings,
-  // orphan option, reassign to any group); only Administrators may delete.
+  // All-zone / orphan privilege (Settings dialog "No group" option, reassign to
+  // any group): Administrators and Operators only; Managers are scoped, so the
+  // Settings picker must require a group for them. Only Administrators may delete.
   const canManageAllZones = isAdmin || user?.role === 'Operator';
+  // Management affordances on a zone the user can already access (DNSSEC, Cloudflare
+  // proxy toggle). Managers manage their own zones too — the server enforces scope.
+  const canManageZone = canManageAllZones || user?.role === 'Manager';
 
   // Groups the user may assign this zone to (Settings dialog account picker).
   const [groups, setGroups] = React.useState<api.GroupSummary[]>([]);
@@ -846,7 +850,7 @@ export default function ZoneDetailPage() {
         onBulkToggle={handleBulkToggle}
         cloudProxy={cfProxy?.linked ? {
           byKey: cfProxy.byKey,
-          canToggle: canManageAllZones,
+          canToggle: canManageZone,
           busyKey: cfBusyKey,
           onToggle: handleCloudToggle,
         } : undefined}
@@ -870,7 +874,7 @@ export default function ZoneDetailPage() {
           open={dnssecOpen}
           onOpenChange={setDnssecOpen}
           zone={zone}
-          canManage={canManageAllZones}
+          canManage={canManageZone}
           onZoneChanged={async () => {
             // Refresh the SQLite cache (list / ZoneSwitcher / dashboard dnssec
             // badge) AND the detail view, same as handleSaveSettings.

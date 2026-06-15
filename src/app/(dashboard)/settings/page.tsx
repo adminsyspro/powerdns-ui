@@ -186,6 +186,15 @@ export default function SettingsPage() {
         clientSecret: '',
         hasClientSecret: prev.hasClientSecret || !!prev.clientSecret,
         callbackUrl: refreshed?.callbackUrl ?? prev.callbackUrl,
+        // Reflect the *stored* (normalized) mappings so the user immediately sees
+        // what was actually persisted — e.g. entries dropped for being malformed —
+        // instead of stale textarea contents that look saved but weren't.
+        groupRoleMapping: refreshed && typeof refreshed.groupRoleMapping === 'object'
+          ? JSON.stringify(refreshed.groupRoleMapping, null, 2)
+          : prev.groupRoleMapping,
+        groupAppGroupsMapping: refreshed && typeof refreshed.groupAppGroupsMapping === 'object'
+          ? JSON.stringify(refreshed.groupAppGroupsMapping, null, 2)
+          : prev.groupAppGroupsMapping,
       }));
     } else {
       const data = await res.json().catch(() => ({}));
@@ -633,6 +642,7 @@ export default function SettingsPage() {
                           <SelectContent>
                             <SelectItem value="Administrator">Administrator</SelectItem>
                             <SelectItem value="Operator">Operator</SelectItem>
+                            <SelectItem value="Manager">Manager</SelectItem>
                             <SelectItem value="User">User</SelectItem>
                             <SelectItem value="Customer">Customer</SelectItem>
                           </SelectContent>

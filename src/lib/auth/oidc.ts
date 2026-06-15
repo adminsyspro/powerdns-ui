@@ -3,7 +3,7 @@ import { encrypt, decrypt } from '@/lib/crypto';
 import type { UserRole } from '@/types/powerdns';
 import * as client from 'openid-client';
 
-const VALID_ROLES: UserRole[] = ['Administrator', 'Operator', 'User', 'Customer'];
+const VALID_ROLES: UserRole[] = ['Administrator', 'Operator', 'Manager', 'User', 'Customer'];
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 const DEFAULTS = {
@@ -115,7 +115,12 @@ function normalizeGroupsMap(input: Record<string, unknown>): Record<string, stri
   for (const [k, v] of Object.entries(input)) {
     const key = String(k).trim();
     if (!key || DANGEROUS_KEYS.has(key)) continue;
-    const arr = Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [];
+    // Be liberal in what we accept: an array of slugs, or a single slug string
+    // (a common mistake — the Group→Role field next to it takes a bare string, so
+    // people enter "acme" instead of ["acme"]). Without this, a string-valued entry
+    // is silently dropped and the whole map round-trips back to {} after a reload.
+    const raw = Array.isArray(v) ? v : typeof v === 'string' ? [v] : [];
+    const arr = raw.map((x) => String(x).trim()).filter(Boolean);
     if (arr.length) out[key] = arr;
   }
   return out;

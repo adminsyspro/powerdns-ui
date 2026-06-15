@@ -24,9 +24,11 @@ export default function ZonesPage() {
   const { addLog } = useActivityLogStore();
   const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
-  // Administrators and Operators manage all zones (orphan option, full group
-  // picker, create anywhere); only Administrators may delete zones.
-  const canManageAllZones = isAdmin || user?.role === 'Operator';
+  // "Create anywhere" + orphan affordances (orphan filter, orphan account option,
+  // full group picker): Administrators and Operators only. Managers are scoped by
+  // canSeeAllZones — they get the group-required behaviour and never see orphan
+  // options; the server enforces their account scope. Only Admins may delete.
+  const canCreateAnywhere = isAdmin || user?.role === 'Operator';
   const { sync, isSyncing, syncStatus } = useZoneSync();
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [importDialogOpen, setImportDialogOpen] = React.useState(false);
@@ -371,7 +373,7 @@ export default function ZonesPage() {
         groups={groups}
         groupValue={groupFilter}
         onGroupChange={handleGroupFilterChange}
-        isAdmin={canManageAllZones}
+        isAdmin={canCreateAnywhere}
         canDelete={isAdmin}
         onGlobalSearch={handleGlobalSearch}
         isGlobalSearching={isGlobalSearching}
@@ -394,7 +396,7 @@ export default function ZonesPage() {
               onOpenChange={setCreateDialogOpen}
               onSubmit={handleCreateZone}
               groups={groups}
-              isAdmin={canManageAllZones}
+              isAdmin={canCreateAnywhere}
               trigger={
                 <Button size="sm"><Plus className="mr-2 h-4 w-4" />New Zone</Button>
               }
@@ -408,7 +410,7 @@ export default function ZonesPage() {
         mode={{ type: 'create' }}
         onCreateSuccess={handleImportSuccess}
         groups={groups}
-        isAdmin={canManageAllZones}
+        isAdmin={canCreateAnywhere}
       />
       <ConfirmDialog />
     </div>

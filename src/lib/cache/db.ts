@@ -80,7 +80,7 @@ function initSchema(db: Database.Database) {
       email           TEXT NOT NULL,
       firstname       TEXT DEFAULT '',
       lastname        TEXT DEFAULT '',
-      role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','User','Customer')),
+      role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','Manager','User','Customer')),
       active          INTEGER NOT NULL DEFAULT 1,
       password_hash   TEXT DEFAULT NULL,
       avatar          TEXT DEFAULT NULL,
@@ -307,6 +307,43 @@ function initSchema(db: Database.Database) {
       INSERT INTO users_new
         (id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, oidc_subject, session_version, created_at, updated_at)
         SELECT id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, NULL, 0, created_at, updated_at
+          FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    `);
+  }
+
+  // Migration: extend users.role CHECK to allow 'Manager' (a group-scoped
+  // technician role). Re-read the stored CREATE (the 'Customer' migration just
+  // above may have rebuilt the table) and rebuild again if 'Manager' is not yet
+  // permitted. SQLite cannot ALTER a CHECK in place, so rebuild the table.
+  const usersSqlMgr =
+    (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as
+      | { sql: string }
+      | undefined)?.sql ?? '';
+  if (!usersSqlMgr.includes("'Manager'")) {
+    db.exec(`
+      DROP TABLE IF EXISTS users_new;
+      CREATE TABLE users_new (
+        id              TEXT PRIMARY KEY,
+        username        TEXT NOT NULL UNIQUE,
+        email           TEXT NOT NULL,
+        firstname       TEXT DEFAULT '',
+        lastname        TEXT DEFAULT '',
+        role            TEXT NOT NULL DEFAULT 'User' CHECK(role IN ('Administrator','Operator','Manager','User','Customer')),
+        active          INTEGER NOT NULL DEFAULT 1,
+        password_hash   TEXT DEFAULT NULL,
+        avatar          TEXT DEFAULT NULL,
+        auth_type       TEXT NOT NULL DEFAULT 'local' CHECK(auth_type IN ('local','ldap','oidc')),
+        oidc_subject    TEXT DEFAULT NULL,
+        session_version INTEGER NOT NULL DEFAULT 0,
+        created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO users_new
+        (id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, oidc_subject, session_version, created_at, updated_at)
+        SELECT id, username, email, firstname, lastname, role, active, password_hash, avatar, auth_type, oidc_subject, session_version, created_at, updated_at
           FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;

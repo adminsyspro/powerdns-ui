@@ -189,7 +189,7 @@ export interface User {
   updated_at: Date;
 }
 
-export type UserRole = 'Administrator' | 'Operator' | 'User' | 'Customer';
+export type UserRole = 'Administrator' | 'Operator' | 'Manager' | 'User' | 'Customer';
 
 export interface ApiKey {
   id: string;

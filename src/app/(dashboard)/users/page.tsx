@@ -233,7 +233,7 @@ export default function UsersPage() {
   };
 
   const getRoleBadge = (role: UserRole) => {
-    const variants: Record<UserRole, 'default' | 'secondary' | 'outline'> = { Administrator: 'default', Operator: 'secondary', User: 'outline', Customer: 'outline' };
+    const variants: Record<UserRole, 'default' | 'secondary' | 'outline'> = { Administrator: 'default', Operator: 'secondary', Manager: 'secondary', User: 'outline', Customer: 'outline' };
     return <Badge variant={variants[role]}>{role}</Badge>;
   };
 
@@ -279,6 +279,7 @@ export default function UsersPage() {
                   <SelectContent>
                     <SelectItem value="Administrator">Administrator</SelectItem>
                     <SelectItem value="Operator">Operator</SelectItem>
+                    <SelectItem value="Manager">Manager</SelectItem>
                     <SelectItem value="User">User</SelectItem>
                     <SelectItem value="Customer">Customer</SelectItem>
                   </SelectContent>

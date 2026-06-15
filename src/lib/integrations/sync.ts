@@ -242,10 +242,13 @@ async function deleteZoneLink(
     const message = e instanceof Error ? e.message : 'unknown error';
     const current = getIntegrationZone(integration.id, serverUrl, zoneName);
     if (current && current.remoteZoneId === remoteZoneId) {
+      // Keep it an orphan (gone from source, remote remains) so the worker and
+      // the manual purge button can retry — NOT 'error' (which is reserved for
+      // provisioning refusals that must never be deleted).
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId,
-        status: 'error',
-        message: `Remote deletion failed: ${message}`,
+        status: 'orphan',
+        message: `Remote deletion failed — will retry: ${message}`,
       });
     }
     return { ok: false, error: `Remote deletion failed: ${message}` };
@@ -303,10 +306,11 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
 
     // Zones we tracked that left the scope: flag orphan (never remote-delete here).
     for (const link of known) {
-      // Re-flag any out-of-scope link (including 'error' from a failed delete) back
-      // to 'orphan' with a fresh updatedAt: this restarts the retention grace on
-      // scope departure AND keeps failed worker-deletes / manual purges retryable.
-      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
+      // Re-flag out-of-scope links back to 'orphan' (restarting the retention
+      // grace), but NEVER 'error' rows: those are provisioning refusals (e.g. an
+      // existing non-secondary CF zone, or one linked to a different peer) that
+      // the integration does not own and must never auto-delete or purge.
+      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan' && link.status !== 'error') {
         upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
           remoteZoneId: link.remoteZoneId,
           status: 'orphan',

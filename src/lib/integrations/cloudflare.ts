@@ -1,4 +1,5 @@
 import type { IntegrationConfig, IntegrationCredentials } from './types';
+import { acquireCfSlot } from './rate-limit';
 
 /**
  * Minimal Cloudflare v4 API client for secondary DNS (Enterprise):
@@ -8,6 +9,19 @@ import type { IntegrationConfig, IntegrationCredentials } from './types';
  */
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
+
+const MAX_RETRIES = Math.max(0, Number(process.env.CF_MAX_RETRIES) || 5);
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD']);
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function backoffMs(attempt: number, retryAfter: string | null): number {
+  if (retryAfter) {
+    const secs = Number(retryAfter);
+    if (!Number.isNaN(secs)) return Math.min(secs * 1000, 60_000);
+  }
+  return Math.min(1000 * 2 ** attempt, 30_000) + Math.floor(Math.random() * 250);
+}
 
 interface CfEnvelope<T> {
   success: boolean;
@@ -28,41 +42,74 @@ export class CloudflareError extends Error {
   }
 }
 
+// Single choke point for ALL Cloudflare HTTP: applies the global rate limiter
+// and retries transient failures. Retries 429 for any method (the request was
+// not processed) and 5xx/network only for idempotent methods — a POST that may
+// have succeeded remotely must not be replayed (would duplicate or 409); the
+// idempotent reconcile caller re-runs and rediscovers state instead.
+async function cfRequest<T>(
+  token: string,
+  path: string,
+  options: { method?: string; body?: unknown } = {}
+): Promise<CfEnvelope<T>> {
+  const method = options.method ?? 'GET';
+  const idempotent = IDEMPOTENT_METHODS.has(method);
+
+  for (let attempt = 0; ; attempt++) {
+    await acquireCfSlot();
+
+    let response: Response;
+    try {
+      response = await fetch(`${CF_API}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      });
+    } catch (networkErr) {
+      if (idempotent && attempt < MAX_RETRIES) {
+        await sleep(backoffMs(attempt, null));
+        continue;
+      }
+      throw new CloudflareError(
+        `Cloudflare API: network error (${networkErr instanceof Error ? networkErr.message : 'unknown'})`,
+        0
+      );
+    }
+
+    // Decide retry on the HTTP status BEFORE parsing — 429/5xx bodies may not be JSON.
+    const is429 = response.status === 429;
+    const is5xx = response.status >= 500 && response.status <= 599;
+    if ((is429 || (is5xx && idempotent)) && attempt < MAX_RETRIES) {
+      await sleep(backoffMs(attempt, response.headers.get('retry-after')));
+      continue;
+    }
+
+    let envelope: CfEnvelope<T>;
+    try {
+      envelope = (await response.json()) as CfEnvelope<T>;
+    } catch {
+      throw new CloudflareError(`Cloudflare API: HTTP ${response.status}`, response.status);
+    }
+    if (!response.ok || !envelope.success) {
+      let detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
+      if (envelope.errors?.some((e) => e.code === 1000)) {
+        detail += ' — make sure you pasted an API Token value (My Profile > API Tokens > Create Token), not the Global API Key or the token ID';
+      }
+      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status, envelope.errors?.map((e) => e.code) ?? []);
+    }
+    return envelope;
+  }
+}
+
 async function cf<T>(
   token: string,
   path: string,
   options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
-  const response = await fetch(`${CF_API}${path}`, {
-    method: options.method ?? 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
-
-  let envelope: CfEnvelope<T>;
-  try {
-    envelope = (await response.json()) as CfEnvelope<T>;
-  } catch {
-    throw new CloudflareError(`Cloudflare API: HTTP ${response.status}`, response.status);
-  }
-  if (!response.ok || !envelope.success) {
-    let detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
-    // Error 1000 means Cloudflare did not recognize the Bearer value at all —
-    // almost always a Global API Key or a token ID pasted instead of the
-    // token value (shown only once at creation).
-    if (envelope.errors?.some((e) => e.code === 1000)) {
-      detail += ' — make sure you pasted an API Token value (My Profile > API Tokens > Create Token), not the Global API Key or the token ID';
-    }
-    throw new CloudflareError(
-      `Cloudflare API: ${detail}`,
-      response.status,
-      envelope.errors?.map((e) => e.code) ?? []
-    );
-  }
-  return envelope.result;
+  return (await cfRequest<T>(token, path, options)).result;
 }
 
 export interface CfZone {
@@ -90,15 +137,10 @@ export async function listZones(creds: IntegrationCredentials, accountId: string
   const zones: CfZone[] = [];
   // 50 zones/page; loop with a hard cap so a huge account can't spin forever.
   for (let page = 1; page <= 200; page++) {
-    const response = await fetch(
-      `${CF_API}/zones?account.id=${encodeURIComponent(accountId)}&per_page=50&page=${page}`,
-      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    const envelope = await cfRequest<CfZone[]>(
+      creds.apiToken,
+      `/zones?account.id=${encodeURIComponent(accountId)}&per_page=50&page=${page}`
     );
-    const envelope = (await response.json()) as CfEnvelope<CfZone[]>;
-    if (!response.ok || !envelope.success) {
-      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
-      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
-    }
     zones.push(...envelope.result);
     if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
   }
@@ -148,15 +190,10 @@ export async function ensurePeer(
   // fall through to creating a duplicate.
   const existing: CfPeer[] = [];
   for (let page = 1; page <= 100; page++) {
-    const response = await fetch(
-      `${CF_API}/accounts/${encodeURIComponent(config.accountId)}/secondary_dns/peers?per_page=100&page=${page}`,
-      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    const envelope = await cfRequest<CfPeer[]>(
+      creds.apiToken,
+      `/accounts/${encodeURIComponent(config.accountId)}/secondary_dns/peers?per_page=100&page=${page}`
     );
-    const envelope = (await response.json()) as CfEnvelope<CfPeer[]>;
-    if (!response.ok || !envelope.success) {
-      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
-      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
-    }
     existing.push(...envelope.result);
     if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
   }
@@ -249,15 +286,10 @@ export async function listAccountCustomNs(
 ): Promise<CfAccountCustomNs[]> {
   const entries: CfAccountCustomNs[] = [];
   for (let page = 1; page <= 20; page++) {
-    const response = await fetch(
-      `${CF_API}/accounts/${encodeURIComponent(accountId)}/custom_ns?per_page=100&page=${page}`,
-      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    const envelope = await cfRequest<CfAccountCustomNs[]>(
+      creds.apiToken,
+      `/accounts/${encodeURIComponent(accountId)}/custom_ns?per_page=100&page=${page}`
     );
-    const envelope = (await response.json()) as CfEnvelope<CfAccountCustomNs[]>;
-    if (!response.ok || !envelope.success) {
-      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
-      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
-    }
     entries.push(...envelope.result);
     if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
   }
@@ -297,15 +329,10 @@ export async function listDnsRecords(
 ): Promise<CfDnsRecord[]> {
   const records: CfDnsRecord[] = [];
   for (let page = 1; page <= 100; page++) {
-    const response = await fetch(
-      `${CF_API}/zones/${cfZoneId}/dns_records?per_page=100&page=${page}`,
-      { headers: { Authorization: `Bearer ${creds.apiToken}` } }
+    const envelope = await cfRequest<CfDnsRecord[]>(
+      creds.apiToken,
+      `/zones/${cfZoneId}/dns_records?per_page=100&page=${page}`
     );
-    const envelope = (await response.json()) as CfEnvelope<CfDnsRecord[]>;
-    if (!response.ok || !envelope.success) {
-      const detail = envelope.errors?.map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${response.status}`;
-      throw new CloudflareError(`Cloudflare API: ${detail}`, response.status);
-    }
     records.push(...envelope.result);
     if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
   }

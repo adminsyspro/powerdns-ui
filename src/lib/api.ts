@@ -337,6 +337,7 @@ export async function createIntegrationApi(input: {
   apiToken: string;
   tsigSecret?: string;
   config: Partial<IntegrationConfig>;
+  connectionId: string;
 }) {
   return apiRequest<IntegrationRow>('/api/integrations', {
     method: 'POST',
@@ -346,7 +347,7 @@ export async function createIntegrationApi(input: {
 
 export async function updateIntegrationApi(
   id: string,
-  patch: { name?: string; apiToken?: string; tsigSecret?: string; config?: Partial<IntegrationConfig>; active?: boolean }
+  patch: { name?: string; apiToken?: string; tsigSecret?: string; config?: Partial<IntegrationConfig>; active?: boolean; connectionId?: string }
 ) {
   return apiRequest<IntegrationRow>(`/api/integrations/${encodeURIComponent(id)}`, {
     method: 'PUT',

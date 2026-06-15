@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useConfirm } from '@/hooks/use-confirm';
+import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
 import type { IntegrationRow, IntegrationZoneRow, IntegrationConfig } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
@@ -63,6 +64,7 @@ interface FormState {
   customNsSet: string;
   autoProvision: boolean;
   deleteMode: 'never' | 'delete';
+  connectionId: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -72,6 +74,7 @@ const EMPTY_FORM: FormState = {
   scope: 'all-master', groups: [], zones: [],
   customNsMode: 'ignore', customNsSet: '1',
   autoProvision: true, deleteMode: 'never',
+  connectionId: '',
 };
 
 // Searchable multi-picker over the cached zones (the scope may target a few
@@ -177,6 +180,7 @@ export default function IntegrationsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const { confirm, ConfirmDialog } = useConfirm();
+  const { connections, activeConnection } = useServerConnectionStore();
 
   // Pagination for the replicated-zones table (client-side over the loaded list).
   const [zonesPage, setZonesPage] = React.useState(1);
@@ -282,7 +286,7 @@ export default function IntegrationsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, connectionId: activeConnection?.id ?? connections[0]?.id ?? '' });
     setFormError(null);
     setDialogOpen(true);
   };
@@ -306,6 +310,7 @@ export default function IntegrationsPage() {
       customNsSet: String(integration.config.customNsSet || 1),
       autoProvision: integration.config.autoProvision,
       deleteMode: integration.config.deleteMode,
+      connectionId: integration.connectionId ?? '',
     });
     setFormError(null);
     setDialogOpen(true);
@@ -334,6 +339,7 @@ export default function IntegrationsPage() {
       ? await api.updateIntegrationApi(editing.id, {
           name: form.name.trim(),
           config: buildConfig(),
+          connectionId: form.connectionId,
           ...(form.apiToken.trim() ? { apiToken: form.apiToken.trim() } : {}),
           ...(form.tsigSecret ? { tsigSecret: form.tsigSecret } : {}),
         })
@@ -343,6 +349,7 @@ export default function IntegrationsPage() {
           apiToken: form.apiToken.trim(),
           tsigSecret: form.tsigSecret || undefined,
           config: buildConfig(),
+          connectionId: form.connectionId,
         });
     if (result.error) {
       setFormError(result.error);
@@ -695,6 +702,18 @@ export default function IntegrationsPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="int-connection">PowerDNS connection</Label>
+              <Select value={form.connectionId} onValueChange={(v) => setForm({ ...form, connectionId: v })}>
+                <SelectTrigger id="int-connection"><SelectValue placeholder="Select a connection" /></SelectTrigger>
+                <SelectContent>
+                  {connections.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Zones from this connection are replicated by this integration.</p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="int-account">Cloudflare account ID</Label>
               <Input id="int-account" placeholder="023e105f4ecef8ad9ca31a8372d0c353" value={form.accountId}
                 onChange={(e) => setForm({ ...form, accountId: e.target.value })} />
@@ -857,7 +876,7 @@ export default function IntegrationsPage() {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button type="button" onClick={handleSave} disabled={isSaving || !form.name.trim() || (!editing && !form.apiToken.trim())}>
+            <Button type="button" onClick={handleSave} disabled={isSaving || !form.name.trim() || (!editing && !form.apiToken.trim()) || !form.connectionId}>
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save' : 'Create'}
             </Button>

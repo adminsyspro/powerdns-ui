@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/cache/db';
 import { normalizeUrl } from '@/lib/cache/zones';
 import * as cloudflare from './cloudflare';
+import { getConnectionById } from './connections';
 import {
   getIntegration,
   getIntegrationCredentials,
@@ -315,6 +316,9 @@ export function autoProvisionZone(serverUrl: string, zoneName: string, kind: str
   const normalizedUrl = normalizeUrl(serverUrl);
   for (const integration of listIntegrations()) {
     if (!integration.active || !integration.config.autoProvision) continue;
+    if (!integration.connectionId) continue;
+    const conn = getConnectionById(integration.connectionId);
+    if (!conn || normalizeUrl(conn.url) !== normalizedUrl) continue;
     if (!zoneInScope(integration.config, kind, account, zoneName)) continue;
     const creds = getIntegrationCredentials(integration.id);
     if (!creds) continue;

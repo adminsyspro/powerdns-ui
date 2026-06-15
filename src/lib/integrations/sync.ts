@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/cache/db';
 import { normalizeUrl } from '@/lib/cache/zones';
+import { zoneExistsOnPdns } from '@/lib/pdns-proxy';
 import * as cloudflare from './cloudflare';
 import { getConnectionById } from './connections';
 import {
@@ -255,13 +256,15 @@ interface ReconcileContext {
   state: IntegrationSyncState;
   zones: ReturnType<typeof scopedZones>;
   known: ReturnType<typeof listIntegrationZones>;
+  allowDeletion: boolean;
 }
 
 // Validates + reserves the running slot. Returns the context, or a reason it
 // could not start (already running, missing/inactive, unreadable creds).
 function reserveSync(
   integrationId: string,
-  serverUrl: string
+  serverUrl: string,
+  allowDeletion: boolean
 ): { ok: true; ctx: ReconcileContext } | { ok: false; reason: string } {
   const current = getSyncState(integrationId, serverUrl);
   if (current.running) return { ok: false, reason: 'A sync is already running' };
@@ -284,7 +287,7 @@ function reserveSync(
     error: null,
   };
   syncStates.set(syncKey(integrationId, serverUrl), state);
-  return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state, zones, known } };
+  return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state, zones, known, allowDeletion } };
 }
 
 // The reconcile body. Resolves when the pass is complete.
@@ -318,6 +321,14 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, zones.length) }, worker));
+
+    // Worker-only mirror deletion: remove remote zones whose PowerDNS zone is gone.
+    if (ctx.allowDeletion) {
+      const fresh = getIntegration(integrationId);
+      if (fresh && fresh.config.deleteMode === 'auto') {
+        await deleteAgedOrphans(fresh, creds, normalizedUrl, scopedNames);
+      }
+    }
   } catch (e) {
     state.error = e instanceof Error ? e.message : 'sync failed';
   } finally {
@@ -326,17 +337,65 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
   }
 }
 
+const ORPHAN_DELETE_MAX = Math.max(1, Number(process.env.INTEGRATION_ORPHAN_DELETE_MAX) || 50);
+
+// Deletes orphaned remote zones for an 'auto' integration, with: retention grace,
+// "still in scope" exclusion, a per-cycle circuit breaker, and a live PowerDNS
+// existence check (authoritative) before each delete.
+async function deleteAgedOrphans(
+  integration: IntegrationRow,
+  creds: IntegrationCredentials,
+  serverUrl: string,
+  scopedNames: Set<string>
+): Promise<void> {
+  const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
+  if (!conn) return; // can't verify against PowerDNS → never delete
+
+  const retentionSec = Math.max(1, integration.config.orphanRetentionHours || 72) * 3600;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const candidates = listIntegrationZones(integration.id, serverUrl).filter(
+    (l) =>
+      l.status === 'orphan' &&
+      l.remoteZoneId &&
+      !scopedNames.has(l.zoneName) &&
+      nowSec - l.updatedAt >= retentionSec
+  );
+  if (candidates.length === 0) return;
+
+  if (candidates.length > ORPHAN_DELETE_MAX) {
+    console.warn(
+      `[reconcile] ${candidates.length} orphan deletions exceed INTEGRATION_ORPHAN_DELETE_MAX=${ORPHAN_DELETE_MAX} for "${integration.name}" — skipping deletions this cycle`
+    );
+    return;
+  }
+
+  for (const link of candidates) {
+    let exists: boolean;
+    try {
+      exists = await zoneExistsOnPdns(conn.url, conn.apiKey, 'localhost', link.zoneName);
+    } catch {
+      continue; // unknown PowerDNS state → do not delete
+    }
+    if (exists) continue; // cache artifact — zone is actually still in PowerDNS
+    await deleteZoneLink(integration, creds, serverUrl, link.zoneName, link.remoteZoneId!);
+  }
+}
+
 /** Starts a full reconcile for one integration (detached). Returns false while running. */
 export function startSync(integrationId: string, serverUrl: string): { started: boolean; reason?: string } {
-  const reserved = reserveSync(integrationId, serverUrl);
+  const reserved = reserveSync(integrationId, serverUrl, false);
   if (!reserved.ok) return { started: false, reason: reserved.reason };
   void runReconcile(reserved.ctx);
   return { started: true };
 }
 
 /** Awaitable reconcile for the background worker. Skips if already running. */
-export async function runSync(integrationId: string, serverUrl: string): Promise<{ ran: boolean; reason?: string }> {
-  const reserved = reserveSync(integrationId, serverUrl);
+export async function runSync(
+  integrationId: string,
+  serverUrl: string,
+  opts: { allowDeletion?: boolean } = {}
+): Promise<{ ran: boolean; reason?: string }> {
+  const reserved = reserveSync(integrationId, serverUrl, opts.allowDeletion ?? false);
   if (!reserved.ok) return { ran: false, reason: reserved.reason };
   await runReconcile(reserved.ctx);
   return { ran: true };

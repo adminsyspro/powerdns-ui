@@ -40,7 +40,7 @@ async function runCycle(): Promise<void> {
     if (!(await refreshConnectionCache(conn))) continue;
     for (const integration of integrations) {
       // runSync is a no-op when a manual sync is already running for this pair.
-      await runSync(integration.id, conn.url);
+      await runSync(integration.id, conn.url, { allowDeletion: true });
     }
   }
 }

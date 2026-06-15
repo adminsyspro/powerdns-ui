@@ -21,6 +21,7 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   customNsMode: 'ignore',
   customNsSet: 1,
   autoProvision: true,
+  secondaryOverride: false,
   deleteMode: 'never',
   orphanRetentionHours: 72,
 };
@@ -57,6 +58,7 @@ export function sanitizeConfig(input: Partial<IntegrationConfig> | undefined): I
       ? (config.customNsSet as number)
       : 1,
     autoProvision: config.autoProvision !== false,
+    secondaryOverride: config.secondaryOverride === true,
     deleteMode:
       config.deleteMode === 'auto' ? 'auto'
       : config.deleteMode === 'manual' || (config.deleteMode as string) === 'delete' ? 'manual'

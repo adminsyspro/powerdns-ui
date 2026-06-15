@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useServerConnectionStore } from '@/stores';
+import { ServerStatsBlock } from '@/components/servers/server-stats-block';
 import { useConfirm } from '@/hooks/use-confirm';
 import * as api from '@/lib/api';
 import type { ServerConnection } from '@/types/powerdns';
@@ -198,27 +199,29 @@ export default function ServersPage() {
                 <CardDescription className="font-mono text-xs">{conn.url}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    {conn.version ? `v${conn.version}` : 'Version unknown'}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setActiveConnection(conn.id)}
-                      disabled={activeConnection?.id === conn.id}
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(conn)}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(conn.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
+                <ServerStatsBlock
+                  key={`${conn.id}:${conn.url}`}
+                  connectionId={conn.id}
+                  fallbackVersion={conn.version}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setActiveConnection(conn.id)}
+                        disabled={activeConnection?.id === conn.id}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(conn)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(conn.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  }
+                />
               </CardContent>
             </Card>
           ))}

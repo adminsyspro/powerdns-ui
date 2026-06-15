@@ -35,8 +35,8 @@ export function setConnectionGetter(getter: () => ConnectionInfo | null) {
   activeConnectionGetter = getter;
 }
 
-function getHeaders(): HeadersInit {
-  const conn = activeConnectionGetter?.();
+function getHeaders(override?: ConnectionInfo | null): HeadersInit {
+  const conn = override ?? activeConnectionGetter?.();
   if (!conn) return {};
   return {
     ...(conn.connectionId ? { 'x-pdns-connection-id': conn.connectionId } : {}),
@@ -46,14 +46,17 @@ function getHeaders(): HeadersInit {
 
 async function apiRequest<T>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  // Optional per-call connection override: targets a specific stored
+  // connection (e.g. a non-active server card) instead of the active one.
+  conn?: ConnectionInfo
 ): Promise<{ data?: T; error?: string; status: number }> {
   try {
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...getHeaders(),
+        ...getHeaders(conn),
         ...options.headers,
       },
     });
@@ -114,12 +117,12 @@ export async function deleteConnection(id: string) {
 
 // ---- Server ----
 
-export async function fetchServerInfo() {
-  return apiRequest<Server>('/api/pdns/servers');
+export async function fetchServerInfo(connectionId?: string, serverId?: string) {
+  return apiRequest<Server>('/api/pdns/servers', {}, connectionId ? { connectionId, serverId } : undefined);
 }
 
-export async function fetchStatistics() {
-  return apiRequest<ServerStatistic[]>('/api/pdns/statistics');
+export async function fetchStatistics(connectionId?: string, serverId?: string) {
+  return apiRequest<ServerStatistic[]>('/api/pdns/statistics', {}, connectionId ? { connectionId, serverId } : undefined);
 }
 
 export async function fetchConfig() {

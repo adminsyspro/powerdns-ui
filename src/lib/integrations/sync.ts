@@ -35,6 +35,14 @@ const syncStates = new Map<string, IntegrationSyncState>();
 // duplicate Cloudflare peers.
 const peerLocks = new Map<string, Promise<void>>();
 
+// Guards a single (integration, server, zone) against concurrent provisioning
+// from different entry points: autoProvisionZone calls provisionZone directly,
+// bypassing the coarse syncStates.running flag, so it could otherwise race a
+// manual sync or the background worker on the same zone.
+const provisioningInFlight = new Set<string>();
+const inFlightKey = (integrationId: string, serverUrl: string, zoneName: string) =>
+  `${integrationId}|${serverUrl}|${zoneName}`;
+
 // Progress is per integration AND per PowerDNS server: a sync against one
 // connection must not show as running (or block syncs) on another.
 function syncKey(integrationId: string, serverUrl: string): string {
@@ -133,85 +141,101 @@ async function provisionZone(
   serverUrl: string,
   zoneName: string
 ): Promise<void> {
-  // A stale/errored link being retried may already know its remote zone id;
-  // keep it through the provisioning states so a failed retry (bad peer
-  // edit, transient Cloudflare outage) doesn't lose the working reference.
-  // Once the retry has found/created a (possibly different) remote zone,
-  // that id supersedes the old one — even on the failure path.
-  let currentRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
-  upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-    remoteZoneId: currentRemoteId,
-    status: 'provisioning',
-  });
+  const flightKey = inFlightKey(integration.id, serverUrl, zoneName);
+  if (provisioningInFlight.has(flightKey)) return; // another path is provisioning this zone
+  provisioningInFlight.add(flightKey);
   try {
-    const config = integration.config;
-    const peerId = await ensurePeerOnce(integration, creds);
-
-    let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
-    if (!zone) {
-      zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
-    }
-    currentRemoteId = zone.id;
-    if (zone.type !== 'secondary') {
-      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-        remoteZoneId: zone.id,
-        status: 'error',
-        message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
-      });
-      return;
-    }
-
+    // A stale/errored link being retried may already know its remote zone id;
+    // keep it through the provisioning states so a failed retry (bad peer
+    // edit, transient Cloudflare outage) doesn't lose the working reference.
+    // Once the retry has found/created a (possibly different) remote zone,
+    // that id supersedes the old one — even on the failure path.
+    let currentRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
+    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+      remoteZoneId: currentRemoteId,
+      status: 'provisioning',
+    });
     try {
-      await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
-    } catch (e) {
-      // Cloudflare error 409: the zone already has an incoming transfer
-      // config (pre-existing manual setup). Adopt it ONLY when that config
-      // actually points at our peer — a conflict with a different peer must
-      // stay visible, otherwise the zone would silently keep transferring
-      // from the wrong source while being reported ok.
-      const alreadyLinked =
-        e instanceof cloudflare.CloudflareError &&
-        (e.codes.includes(409) || /already linked/i.test(e.message));
-      if (!alreadyLinked) throw e;
-      const incoming = await cloudflare.getZoneIncoming(creds, zone.id);
-      const linkedPeers = incoming?.peers ?? [];
-      if (!linkedPeers.includes(peerId)) {
+      const config = integration.config;
+      const peerId = await ensurePeerOnce(integration, creds);
+
+      let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
+      if (!zone) {
+        zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
+      }
+      currentRemoteId = zone.id;
+      if (zone.type !== 'secondary') {
         upsertIntegrationZone(integration.id, serverUrl, zoneName, {
           remoteZoneId: zone.id,
           status: 'error',
-          message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
+          message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
         });
         return;
       }
+
+      try {
+        await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
+      } catch (e) {
+        // Cloudflare error 409: the zone already has an incoming transfer
+        // config (pre-existing manual setup). Adopt it ONLY when that config
+        // actually points at our peer — a conflict with a different peer must
+        // stay visible, otherwise the zone would silently keep transferring
+        // from the wrong source while being reported ok.
+        const alreadyLinked =
+          e instanceof cloudflare.CloudflareError &&
+          (e.codes.includes(409) || /already linked/i.test(e.message));
+        if (!alreadyLinked) throw e;
+        const incoming = await cloudflare.getZoneIncoming(creds, zone.id);
+        const linkedPeers = incoming?.peers ?? [];
+        if (!linkedPeers.includes(peerId)) {
+          upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+            remoteZoneId: zone.id,
+            status: 'error',
+            message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
+          });
+          return;
+        }
+      }
+      if (config.customNsMode !== 'ignore') {
+        await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
+      }
+      await cloudflare.forceAxfr(creds, zone.id);
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
+    } catch (e) {
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+        remoteZoneId: currentRemoteId,
+        status: 'error',
+        message: e instanceof Error ? e.message : 'provisioning failed',
+      });
     }
-    if (config.customNsMode !== 'ignore') {
-      await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
-    }
-    await cloudflare.forceAxfr(creds, zone.id);
-    upsertIntegrationZone(integration.id, serverUrl, zoneName, { remoteZoneId: zone.id, status: 'ok', message: null });
-  } catch (e) {
-    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-      remoteZoneId: currentRemoteId,
-      status: 'error',
-      message: e instanceof Error ? e.message : 'provisioning failed',
-    });
+  } finally {
+    provisioningInFlight.delete(flightKey);
   }
 }
 
-/** Starts a full reconcile for one integration. Returns false while running. */
-export function startSync(integrationId: string, serverUrl: string): { started: boolean; reason?: string } {
+interface ReconcileContext {
+  integrationId: string;
+  serverUrl: string; // normalized
+  creds: IntegrationCredentials;
+  state: IntegrationSyncState;
+}
+
+// Validates + reserves the running slot. Returns the context, or a reason it
+// could not start (already running, missing/inactive, unreadable creds).
+function reserveSync(
+  integrationId: string,
+  serverUrl: string
+): { ok: true; ctx: ReconcileContext } | { ok: false; reason: string } {
   const current = getSyncState(integrationId, serverUrl);
-  if (current.running) return { started: false, reason: 'A sync is already running' };
+  if (current.running) return { ok: false, reason: 'A sync is already running' };
 
   const integration = getIntegration(integrationId);
-  if (!integration || !integration.active) return { started: false, reason: 'Integration not found or inactive' };
+  if (!integration || !integration.active) return { ok: false, reason: 'Integration not found or inactive' };
   const creds = getIntegrationCredentials(integrationId);
-  if (!creds) return { started: false, reason: 'Stored credentials are unreadable (APP_SECRET changed?)' };
+  if (!creds) return { ok: false, reason: 'Stored credentials are unreadable (APP_SECRET changed?)' };
 
   const normalizedUrl = normalizeUrl(serverUrl);
   const zones = scopedZones(serverUrl, integration.config);
-  const known = listIntegrationZones(integrationId, normalizedUrl);
-  const scopedNames = new Set(zones.map((z) => z.name));
 
   const state: IntegrationSyncState = {
     running: true,
@@ -222,47 +246,65 @@ export function startSync(integrationId: string, serverUrl: string): { started: 
     error: null,
   };
   syncStates.set(syncKey(integrationId, serverUrl), state);
+  return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state } };
+}
 
-  void (async () => {
-    try {
-      // Zones we tracked that left the scope (deleted or reassigned): flag
-      // them — remote deletion only ever happens through the explicit
-      // deleteMode on zone deletion, never from a reconcile.
-      for (const link of known) {
-        if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
-          upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
-            remoteZoneId: link.remoteZoneId,
-            status: 'orphan',
-            message: 'Zone no longer exists in PowerDNS (or left the integration scope)',
-          });
-        }
+// The reconcile body. Resolves when the pass is complete.
+async function runReconcile(ctx: ReconcileContext): Promise<void> {
+  const { integrationId, serverUrl: normalizedUrl, creds, state } = ctx;
+  try {
+    const integration = getIntegration(integrationId)!;
+    const zones = scopedZones(normalizedUrl, integration.config);
+    const known = listIntegrationZones(integrationId, normalizedUrl);
+    const scopedNames = new Set(zones.map((z) => z.name));
+
+    // Zones we tracked that left the scope: flag orphan (never remote-delete here).
+    for (const link of known) {
+      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
+        upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
+          remoteZoneId: link.remoteZoneId,
+          status: 'orphan',
+          message: 'Zone no longer exists in PowerDNS (or left the integration scope)',
+        });
       }
-
-      const linkByName = new Map(known.map((l) => [l.zoneName, l]));
-      let index = 0;
-      const worker = async () => {
-        while (index < zones.length) {
-          const zone = zones[index++];
-          const link = linkByName.get(zone.name);
-          // Healthy links are left alone so a reconcile stays cheap and
-          // re-running it retries only failed/missing zones.
-          if (!link || link.status !== 'ok') {
-            const fresh = getIntegration(integrationId);
-            if (fresh) await provisionZone(fresh, creds, normalizedUrl, zone.name);
-          }
-          state.processed++;
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, zones.length) }, worker));
-    } catch (e) {
-      state.error = e instanceof Error ? e.message : 'sync failed';
-    } finally {
-      state.running = false;
-      state.finishedAt = Date.now();
     }
-  })();
 
+    const linkByName = new Map(known.map((l) => [l.zoneName, l]));
+    let index = 0;
+    const worker = async () => {
+      while (index < zones.length) {
+        const zone = zones[index++];
+        const link = linkByName.get(zone.name);
+        if (!link || link.status !== 'ok') {
+          const fresh = getIntegration(integrationId);
+          if (fresh) await provisionZone(fresh, creds, normalizedUrl, zone.name);
+        }
+        state.processed++;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, zones.length) }, worker));
+  } catch (e) {
+    state.error = e instanceof Error ? e.message : 'sync failed';
+  } finally {
+    state.running = false;
+    state.finishedAt = Date.now();
+  }
+}
+
+/** Starts a full reconcile for one integration (detached). Returns false while running. */
+export function startSync(integrationId: string, serverUrl: string): { started: boolean; reason?: string } {
+  const reserved = reserveSync(integrationId, serverUrl);
+  if (!reserved.ok) return { started: false, reason: reserved.reason };
+  void runReconcile(reserved.ctx);
   return { started: true };
+}
+
+/** Awaitable reconcile for the background worker. Skips if already running. */
+export async function runSync(integrationId: string, serverUrl: string): Promise<{ ran: boolean; reason?: string }> {
+  const reserved = reserveSync(integrationId, serverUrl);
+  if (!reserved.ok) return { ran: false, reason: reserved.reason };
+  await runReconcile(reserved.ctx);
+  return { ran: true };
 }
 
 /**

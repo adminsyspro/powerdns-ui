@@ -463,6 +463,9 @@ export function handleZoneDeleted(serverUrl: string, zoneName: string): void {
   for (const integration of listIntegrations()) {
     const link = listIntegrationZones(integration.id, normalizedUrl).find((l) => l.zoneName === zoneName);
     if (!link) continue;
+    // 'error' links are provisioning refusals (a zone we don't own) — never
+    // delete or orphan them. Consistent with the worker/purge paths.
+    if (link.status === 'error') continue;
     if (integration.config.deleteMode === 'auto' && link.remoteZoneId) {
       const creds = getIntegrationCredentials(integration.id);
       if (!creds) continue;

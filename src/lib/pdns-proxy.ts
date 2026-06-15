@@ -83,8 +83,10 @@ export async function fetchZonesFromPdns(
   serverId = 'localhost'
 ): Promise<unknown[]> {
   const base = url.replace(/\/$/, '');
+  const timeoutMs = Number(process.env.PDNS_FETCH_TIMEOUT_MS) || 30_000;
   const response = await fetch(`${base}/api/v1/servers/${serverId}/zones`, {
     headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     const text = await response.text();

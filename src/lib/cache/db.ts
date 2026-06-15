@@ -217,6 +217,14 @@ function initSchema(db: Database.Database) {
       PRIMARY KEY (integration_id, server_url, zone_name)
     );
     CREATE INDEX IF NOT EXISTS idx_integration_zones_status ON integration_zones(integration_id, status);
+
+    -- Single-row advisory lease so only one process runs the reconcile loop
+    -- (guards against accidental multi-start; single-process is the norm).
+    CREATE TABLE IF NOT EXISTS worker_lease (
+      id         TEXT PRIMARY KEY,
+      owner      TEXT NOT NULL,
+      heartbeat  INTEGER NOT NULL
+    );
   `);
 
   // Migrations — add columns that may not exist in older databases

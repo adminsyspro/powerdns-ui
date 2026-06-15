@@ -214,12 +214,14 @@ async function provisionZone(
         await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
       }
       await cloudflare.forceAxfr(creds, zone.id);
-      if (config.secondaryOverride) {
-        try {
-          await cloudflare.setSecondaryOverride(creds, zone.id, true);
-        } catch (e) {
-          warnings.push(`Secondary DNS override not set: ${e instanceof Error ? e.message : 'unknown error'}`);
-        }
+      // Enforce the configured override state both ways (enabling and disabling),
+      // so a toggle re-provision propagates to Cloudflare. Best-effort.
+      try {
+        await cloudflare.setSecondaryOverride(creds, zone.id, config.secondaryOverride);
+      } catch (e) {
+        warnings.push(
+          `Secondary DNS override not ${config.secondaryOverride ? 'enabled' : 'disabled'}: ${e instanceof Error ? e.message : 'unknown error'}`
+        );
       }
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Cloud, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, Send } from 'lucide-react';
+import { Cloud, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, Send, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -178,6 +178,10 @@ export default function IntegrationsPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
+  // Pagination for the replicated-zones table (client-side over the loaded list).
+  const [zonesPage, setZonesPage] = React.useState(1);
+  const [zonesPageSize, setZonesPageSize] = React.useState(10);
+
   // Custom-NS sets available on the Cloudflare account (loaded on demand for
   // the set selector; needs the account id plus a token — typed or stored).
   const [nsSets, setNsSets] = React.useState<Array<{ set: number; nameservers: string[] }> | null>(null);
@@ -264,6 +268,9 @@ export default function IntegrationsPage() {
     if (selectedId) loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
+
+  // Reset to the first page when switching integrations.
+  React.useEffect(() => { setZonesPage(1); }, [selectedId]);
 
   // Poll while a sync runs.
   const syncRunning = detail?.sync.running ?? false;
@@ -394,6 +401,15 @@ export default function IntegrationsPage() {
     });
 
   const selected = integrations.find((i) => i.id === selectedId) ?? null;
+
+  const zonesTotalPages = Math.max(1, Math.ceil((detail?.zones.length ?? 0) / zonesPageSize));
+  const paginatedZones = detail
+    ? detail.zones.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize)
+    : [];
+  // Clamp the page if the list shrank (sync removed zones, smaller page size).
+  React.useEffect(() => {
+    if (zonesPage > zonesTotalPages) setZonesPage(zonesTotalPages);
+  }, [zonesPage, zonesTotalPages]);
 
   return (
     <div className="space-y-6">
@@ -557,6 +573,7 @@ export default function IntegrationsPage() {
                 No zone tracked yet — run a sync to provision every Master zone in scope at Cloudflare
               </p>
             ) : (
+              <>
               <Table>
                 <TableHeader className="bg-slate-100 dark:bg-slate-800">
                   <TableRow>
@@ -568,7 +585,7 @@ export default function IntegrationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {detail.zones.map((zone) => (
+                  {paginatedZones.map((zone) => (
                     <TableRow key={zone.zoneName}>
                       <TableCell>
                         <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
@@ -595,6 +612,47 @@ export default function IntegrationsPage() {
                   ))}
                 </TableBody>
               </Table>
+              {detail.zones.length > zonesPageSize && (
+                <div className="flex items-center justify-between pt-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>
+                      Showing {(zonesPage - 1) * zonesPageSize + 1}-{Math.min(zonesPage * zonesPageSize, detail.zones.length)} of {detail.zones.length} zone(s)
+                    </span>
+                    <Select
+                      value={String(zonesPageSize)}
+                      onValueChange={(value) => { setZonesPageSize(Number.parseInt(value, 10)); setZonesPage(1); }}
+                    >
+                      <SelectTrigger className="w-[80px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span>per page</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZonesPage(1)} disabled={zonesPage <= 1}>
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZonesPage(zonesPage - 1)} disabled={zonesPage <= 1}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="px-3 text-sm">
+                      Page {zonesPage} of {zonesTotalPages}
+                    </span>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZonesPage(zonesPage + 1)} disabled={zonesPage >= zonesTotalPages}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZonesPage(zonesTotalPages)} disabled={zonesPage >= zonesTotalPages}>
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -628,9 +686,6 @@ export default function IntegrationsPage() {
                 <p className="text-xs text-muted-foreground">{provider.description}</p>
               </button>
             ))}
-            <div className="rounded-lg border border-dashed p-3 flex items-center justify-center">
-              <p className="text-xs text-muted-foreground text-center">More providers coming<br />(open source — contribute!)</p>
-            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

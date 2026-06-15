@@ -20,8 +20,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
     if (!conn) return NextResponse.json({ error: 'Integration is not bound to an existing PowerDNS connection' }, { status: 409 });
 
-    // Canonicalize to the trailing-dot form used in integration_zones.
-    const canonical = zoneName.endsWith('.') ? zoneName.toLowerCase() : `${zoneName.toLowerCase()}.`;
+    // Preserve case (integration_zones stores PowerDNS names verbatim); only ensure trailing dot.
+    const canonical = zoneName.endsWith('.') ? zoneName : `${zoneName}.`;
     const result = await purgeOrphanZone(id, conn.url, canonical);
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });

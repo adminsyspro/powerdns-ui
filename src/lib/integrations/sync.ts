@@ -228,22 +228,27 @@ async function deleteZoneLink(
   serverUrl: string,
   zoneName: string,
   remoteZoneId: string
-): Promise<void> {
-  const key = inFlightKey(integration.id, serverUrl, zoneName);
-  if (deletingInFlight.has(key)) return;
+): Promise<{ ok: boolean; error?: string }> {
+  // Key includes remoteZoneId so a delete of a *different* remote zone for the
+  // same name (zone recreated/re-provisioned mid-flight) is not coalesced away.
+  const key = `${inFlightKey(integration.id, serverUrl, zoneName)}|${remoteZoneId}`;
+  if (deletingInFlight.has(key)) return { ok: false, error: 'A deletion for this zone is already in progress' };
   deletingInFlight.add(key);
   try {
     await cloudflare.deleteZone(creds, remoteZoneId);
     deleteIntegrationZoneIfRemote(integration.id, serverUrl, zoneName, remoteZoneId);
+    return { ok: true };
   } catch (e) {
+    const message = e instanceof Error ? e.message : 'unknown error';
     const current = getIntegrationZone(integration.id, serverUrl, zoneName);
     if (current && current.remoteZoneId === remoteZoneId) {
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId,
         status: 'error',
-        message: `Remote deletion failed: ${e instanceof Error ? e.message : 'unknown error'}`,
+        message: `Remote deletion failed: ${message}`,
       });
     }
+    return { ok: false, error: `Remote deletion failed: ${message}` };
   } finally {
     deletingInFlight.delete(key);
   }
@@ -298,7 +303,7 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
 
     // Zones we tracked that left the scope: flag orphan (never remote-delete here).
     for (const link of known) {
-      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
+      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan' && link.status !== 'error') {
         upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
           remoteZoneId: link.remoteZoneId,
           status: 'orphan',
@@ -353,30 +358,39 @@ async function deleteAgedOrphans(
 
   const retentionSec = Math.max(1, integration.config.orphanRetentionHours || 72) * 3600;
   const nowSec = Math.floor(Date.now() / 1000);
+  // Candidates: out-of-scope, aged, with a remote zone. 'error' rows are failed
+  // prior deletions (provisioning errors are in-scope → excluded by !scopedNames).
   const candidates = listIntegrationZones(integration.id, serverUrl).filter(
     (l) =>
-      l.status === 'orphan' &&
+      (l.status === 'orphan' || l.status === 'error') &&
       l.remoteZoneId &&
       !scopedNames.has(l.zoneName) &&
       nowSec - l.updatedAt >= retentionSec
   );
   if (candidates.length === 0) return;
 
-  if (candidates.length > ORPHAN_DELETE_MAX) {
+  // Authoritative guard: only zones the live PowerDNS confirms are gone.
+  const gone: typeof candidates = [];
+  for (const link of candidates) {
+    try {
+      if (!(await zoneExistsOnPdns(conn.url, conn.apiKey, 'localhost', link.zoneName))) gone.push(link);
+    } catch {
+      // unknown PowerDNS state → skip (never delete on uncertainty)
+    }
+  }
+  if (gone.length === 0) return;
+
+  // Circuit breaker applies to CONFIRMED-GONE zones only, so a legitimate scope
+  // reduction (many out-of-scope-but-still-alive orphans) cannot permanently
+  // block deletion of genuinely removed zones.
+  if (gone.length > ORPHAN_DELETE_MAX) {
     console.warn(
-      `[reconcile] ${candidates.length} orphan deletions exceed INTEGRATION_ORPHAN_DELETE_MAX=${ORPHAN_DELETE_MAX} for "${integration.name}" — skipping deletions this cycle`
+      `[reconcile] ${gone.length} confirmed-gone zones exceed INTEGRATION_ORPHAN_DELETE_MAX=${ORPHAN_DELETE_MAX} for "${integration.name}" — skipping deletions this cycle`
     );
     return;
   }
 
-  for (const link of candidates) {
-    let exists: boolean;
-    try {
-      exists = await zoneExistsOnPdns(conn.url, conn.apiKey, 'localhost', link.zoneName);
-    } catch {
-      continue; // unknown PowerDNS state → do not delete
-    }
-    if (exists) continue; // cache artifact — zone is actually still in PowerDNS
+  for (const link of gone) {
     await deleteZoneLink(integration, creds, serverUrl, link.zoneName, link.remoteZoneId!);
   }
 }
@@ -429,8 +443,8 @@ export async function purgeOrphanZone(integrationId: string, serverUrl: string, 
   if (!link || link.status !== 'orphan' || !link.remoteZoneId) return { error: 'No orphan link to purge for this zone' };
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { error: 'Stored credentials are unreadable' };
-  await deleteZoneLink(integration, creds, normalizedUrl, zoneName, link.remoteZoneId);
-  return {};
+  const result = await deleteZoneLink(integration, creds, normalizedUrl, zoneName, link.remoteZoneId);
+  return result.ok ? {} : { error: result.error || 'Remote deletion failed' };
 }
 
 /**

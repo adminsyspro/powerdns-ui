@@ -271,7 +271,13 @@ export async function forceAxfr(creds: IntegrationCredentials, cfZoneId: string)
 }
 
 export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
-  await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
+  try {
+    await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
+  } catch (e) {
+    // 404 = the zone is already gone, which is the desired end state.
+    if (e instanceof CloudflareError && e.status === 404) return;
+    throw e;
+  }
 }
 
 export interface CfAccountCustomNs {

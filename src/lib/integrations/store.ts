@@ -274,3 +274,23 @@ export function deleteIntegrationZone(integrationId: string, serverUrl: string, 
     'DELETE FROM integration_zones WHERE integration_id = ? AND server_url = ? AND zone_name = ?'
   ).run(integrationId, serverUrl, zoneName);
 }
+
+/**
+ * Deletes a link only if it still references the given remote zone id — so a
+ * concurrent re-provision that rewrote the link (new remoteZoneId) is not
+ * clobbered by a late delete. Returns true if a row was removed.
+ */
+export function deleteIntegrationZoneIfRemote(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  remoteZoneId: string
+): boolean {
+  const db = getDb();
+  const result = db
+    .prepare(
+      'DELETE FROM integration_zones WHERE integration_id = ? AND server_url = ? AND zone_name = ? AND remote_zone_id = ?'
+    )
+    .run(integrationId, serverUrl, zoneName, remoteZoneId);
+  return result.changes > 0;
+}

@@ -96,6 +96,29 @@ export async function fetchZonesFromPdns(
 }
 
 /**
+ * Live check whether a zone still exists on PowerDNS. 200 → true, 404 → false.
+ * Any other status or a network error throws, so callers treat it as "unknown"
+ * and must NOT delete on that basis.
+ */
+export async function zoneExistsOnPdns(
+  url: string,
+  apiKey: string,
+  serverId: string,
+  zoneName: string
+): Promise<boolean> {
+  const base = url.replace(/\/$/, '');
+  const timeoutMs = Number(process.env.PDNS_FETCH_TIMEOUT_MS) || 30_000;
+  const response = await fetch(
+    `${base}/api/v1/servers/${serverId}/zones/${encodeURIComponent(zoneName)}`,
+    { headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(timeoutMs) }
+  );
+  if (response.status === 200) return true;
+  if (response.status === 404) return false;
+  const text = await response.text();
+  throw new Error(`PowerDNS zone check returned ${response.status}: ${text}`);
+}
+
+/**
  * Helper to forward a PowerDNS response as a NextResponse.
  */
 export async function forwardPdnsResponse(response: Response): Promise<NextResponse> {

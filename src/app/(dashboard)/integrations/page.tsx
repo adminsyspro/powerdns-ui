@@ -63,6 +63,7 @@ interface FormState {
   customNsMode: 'ignore' | 'enable' | 'disable';
   customNsSet: string;
   autoProvision: boolean;
+  secondaryOverride: boolean;
   deleteMode: 'never' | 'manual' | 'auto';
   orphanRetentionHours: string;
   connectionId: string;
@@ -74,7 +75,7 @@ const EMPTY_FORM: FormState = {
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
   scope: 'all-master', groups: [], zones: [],
   customNsMode: 'ignore', customNsSet: '1',
-  autoProvision: true, deleteMode: 'never', orphanRetentionHours: '72',
+  autoProvision: true, secondaryOverride: false, deleteMode: 'never', orphanRetentionHours: '72',
   connectionId: '',
 };
 
@@ -310,6 +311,7 @@ export default function IntegrationsPage() {
       customNsMode: integration.config.customNsMode,
       customNsSet: String(integration.config.customNsSet || 1),
       autoProvision: integration.config.autoProvision,
+      secondaryOverride: integration.config.secondaryOverride,
       deleteMode: integration.config.deleteMode,
       orphanRetentionHours: String(integration.config.orphanRetentionHours || 72),
       connectionId: integration.connectionId ?? '',
@@ -331,6 +333,7 @@ export default function IntegrationsPage() {
     customNsMode: form.customNsMode,
     customNsSet: parseInt(form.customNsSet, 10) || 1,
     autoProvision: form.autoProvision,
+    secondaryOverride: form.secondaryOverride,
     deleteMode: form.deleteMode,
     orphanRetentionHours: parseInt(form.orphanRetentionHours, 10) || 72,
   });
@@ -750,7 +753,8 @@ export default function IntegrationsPage() {
                 onChange={(e) => setForm({ ...form, apiToken: e.target.value })} />
               <p className="text-xs text-muted-foreground">
                 Scopes needed: Zone&nbsp;:&nbsp;Edit, DNS&nbsp;:&nbsp;Edit, Secondary&nbsp;DNS&nbsp;:&nbsp;Edit on the account
-                — plus Account&nbsp;Settings&nbsp;:&nbsp;Read and Zone&nbsp;Settings&nbsp;:&nbsp;Edit when managing custom nameservers
+                — plus Account&nbsp;Settings&nbsp;:&nbsp;Read and Zone&nbsp;Settings&nbsp;:&nbsp;Edit for custom nameservers,
+                Zone&nbsp;DNS&nbsp;Settings&nbsp;:&nbsp;Edit for Secondary&nbsp;DNS override, and Billing/Subscriptions write to set the Enterprise plan
               </p>
             </div>
             <div className="space-y-2">
@@ -904,6 +908,17 @@ export default function IntegrationsPage() {
               </div>
               <Switch id="int-auto" checked={form.autoProvision}
                 onCheckedChange={(checked) => setForm({ ...form, autoProvision: checked })} />
+            </div>
+            <div className="flex items-center justify-between sm:col-span-2 p-4 border rounded-lg">
+              <div className="space-y-0.5">
+                <Label htmlFor="int-secondary-override">Enable Secondary DNS override</Label>
+                <p className="text-sm text-muted-foreground">
+                  Proxy (orange-cloud) records on a secondary zone — required for the proxy feature.
+                  Requires DNSSEC set to Unsigned or Live Signing on the Cloudflare zone.
+                </p>
+              </div>
+              <Switch id="int-secondary-override" checked={form.secondaryOverride}
+                onCheckedChange={(checked) => setForm({ ...form, secondaryOverride: checked })} />
             </div>
           </div>
 

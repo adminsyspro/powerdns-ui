@@ -10,7 +10,7 @@ import {
   listIntegrationZones,
   updateIntegration,
   upsertIntegrationZone,
-  deleteIntegrationZone,
+  deleteIntegrationZoneIfRemote,
 } from './store';
 import type { IntegrationConfig, IntegrationCredentials, IntegrationRow } from './types';
 
@@ -214,6 +214,40 @@ async function provisionZone(
   }
 }
 
+// Deletion in-flight guard, separate from provisioning, keyed the same way.
+const deletingInFlight = new Set<string>();
+
+// Race-safe remote deletion shared by the UI hook, the worker pass and the purge
+// endpoint: one delete per link at a time; CF 404 is success (deleteZone handles
+// it); the link row is removed only if it still points at the same remoteZoneId,
+// and an error is recorded only if the row still references that remote id.
+async function deleteZoneLink(
+  integration: IntegrationRow,
+  creds: IntegrationCredentials,
+  serverUrl: string,
+  zoneName: string,
+  remoteZoneId: string
+): Promise<void> {
+  const key = inFlightKey(integration.id, serverUrl, zoneName);
+  if (deletingInFlight.has(key)) return;
+  deletingInFlight.add(key);
+  try {
+    await cloudflare.deleteZone(creds, remoteZoneId);
+    deleteIntegrationZoneIfRemote(integration.id, serverUrl, zoneName, remoteZoneId);
+  } catch (e) {
+    const current = getIntegrationZone(integration.id, serverUrl, zoneName);
+    if (current && current.remoteZoneId === remoteZoneId) {
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+        remoteZoneId,
+        status: 'error',
+        message: `Remote deletion failed: ${e instanceof Error ? e.message : 'unknown error'}`,
+      });
+    }
+  } finally {
+    deletingInFlight.delete(key);
+  }
+}
+
 interface ReconcileContext {
   integrationId: string;
   serverUrl: string; // normalized
@@ -338,21 +372,12 @@ export function handleZoneDeleted(serverUrl: string, zoneName: string): void {
     if (integration.config.deleteMode === 'auto' && link.remoteZoneId) {
       const creds = getIntegrationCredentials(integration.id);
       if (!creds) continue;
-      void cloudflare
-        .deleteZone(creds, link.remoteZoneId)
-        .then(() => deleteIntegrationZone(integration.id, normalizedUrl, zoneName))
-        .catch((e: unknown) => {
-          upsertIntegrationZone(integration.id, normalizedUrl, zoneName, {
-            remoteZoneId: link.remoteZoneId,
-            status: 'error',
-            message: `Remote deletion failed: ${e instanceof Error ? e.message : 'unknown error'}`,
-          });
-        });
+      void deleteZoneLink(integration, creds, normalizedUrl, zoneName, link.remoteZoneId);
     } else {
       upsertIntegrationZone(integration.id, normalizedUrl, zoneName, {
         remoteZoneId: link.remoteZoneId,
         status: 'orphan',
-        message: 'Zone deleted in PowerDNS — remote zone kept (deleteMode: never)',
+        message: 'Zone deleted in PowerDNS — remote zone kept',
       });
     }
   }

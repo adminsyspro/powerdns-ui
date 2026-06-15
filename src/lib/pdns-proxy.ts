@@ -74,6 +74,26 @@ export async function pdnsProxy(
 }
 
 /**
+ * Fetches all zones for a connection directly (no NextRequest needed) so both
+ * the /api/zones/sync route and the background worker share one implementation.
+ */
+export async function fetchZonesFromPdns(
+  url: string,
+  apiKey: string,
+  serverId = 'localhost'
+): Promise<unknown[]> {
+  const base = url.replace(/\/$/, '');
+  const response = await fetch(`${base}/api/v1/servers/${serverId}/zones`, {
+    headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PowerDNS returned ${response.status}: ${text}`);
+  }
+  return (await response.json()) as unknown[];
+}
+
+/**
  * Helper to forward a PowerDNS response as a NextResponse.
  */
 export async function forwardPdnsResponse(response: Response): Promise<NextResponse> {

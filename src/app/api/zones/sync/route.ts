@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getConnectionFromRequest, pdnsProxy } from '@/lib/pdns-proxy';
+import { getConnectionFromRequest, fetchZonesFromPdns } from '@/lib/pdns-proxy';
 import { syncZonesToCache, getSyncMeta } from '@/lib/cache/zones';
 import { getAuthContextFromHeaders, requireRole, authzErrorResponse, AuthzError } from '@/lib/auth/authz';
 
@@ -9,22 +9,13 @@ export async function POST(request: NextRequest) {
     requireRole(getAuthContextFromHeaders(request), 'Administrator', 'Operator');
 
     const conn = getConnectionFromRequest(request);
-
-    // Fetch all zones from PowerDNS
-    const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones`);
-
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json(
-        { error: `PowerDNS returned ${response.status}: ${text}` },
-        { status: 502 }
-      );
+    let zones: unknown[];
+    try {
+      zones = await fetchZonesFromPdns(conn.url, conn.apiKey, conn.serverId);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'PowerDNS fetch failed' }, { status: 502 });
     }
-
-    const zones = await response.json();
-
-    // Sync to SQLite cache
-    const result = syncZonesToCache(conn.url, zones);
+    const result = syncZonesToCache(conn.url, zones as Parameters<typeof syncZonesToCache>[1]);
 
     return NextResponse.json(result);
   } catch (e) {

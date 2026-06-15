@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
-import { getConnectionFromRequest } from '@/lib/pdns-proxy';
+import { getIntegration } from '@/lib/integrations/store';
+import { getConnectionById } from '@/lib/integrations/connections';
 import { startSync, getSyncState } from '@/lib/integrations/sync';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -10,7 +11,15 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     requireAdmin(request);
     const { id } = await params;
-    const conn = getConnectionFromRequest(request);
+    const integration = getIntegration(id);
+    if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
+    if (!conn) {
+      return NextResponse.json(
+        { error: 'Integration is not bound to an existing PowerDNS connection' },
+        { status: 409 }
+      );
+    }
     const result = startSync(id, conn.url);
     if (!result.started) {
       return NextResponse.json({ error: result.reason }, { status: 409 });

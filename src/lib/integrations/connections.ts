@@ -23,10 +23,3 @@ export function connectionExists(id: string): boolean {
   const row = getDb().prepare('SELECT 1 FROM server_connections WHERE id = ?').get(id);
   return row !== undefined;
 }
-
-export function listConnections(): StoredConnection[] {
-  const rows = getDb()
-    .prepare('SELECT id, name, url, api_key FROM server_connections ORDER BY is_default DESC, created_at ASC')
-    .all() as Array<{ id: string; name: string; url: string; api_key: string }>;
-  return rows.map(rowToConn);
-}

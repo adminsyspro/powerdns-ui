@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
-import { getConnectionFromRequest } from '@/lib/pdns-proxy';
-import { connectionExists } from '@/lib/integrations/connections';
+import { connectionExists, getConnectionById } from '@/lib/integrations/connections';
 import { normalizeUrl } from '@/lib/cache/zones';
 import {
   deleteIntegration,
@@ -36,11 +35,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const integration = getIntegration(id);
     if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const conn = getConnectionFromRequest(request);
+    const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
     return NextResponse.json({
       integration,
-      zones: listIntegrationZones(id, normalizeUrl(conn.url)),
-      sync: getSyncState(id, conn.url),
+      zones: conn ? listIntegrationZones(id, normalizeUrl(conn.url)) : [],
+      sync: getSyncState(id, conn?.url ?? ''),
     });
   } catch (e) {
     return authzErrorResponse(e);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
+import { getConnectionById } from '@/lib/integrations/connections';
 import { normalizeUrl } from '@/lib/cache/zones';
 import {
   deleteIntegration,
@@ -59,6 +60,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const apiToken = typeof body.apiToken === 'string' ? body.apiToken.trim() : '';
     const tsigSecret = typeof body.tsigSecret === 'string' ? body.tsigSecret : '';
 
+    let connectionId: string | null | undefined;
+    if (typeof body.connectionId === 'string') {
+      if (!getConnectionById(body.connectionId)) {
+        return NextResponse.json({ error: 'Unknown connectionId' }, { status: 400 });
+      }
+      connectionId = body.connectionId;
+    }
+
     // Provider-managed ids survive config edits ONLY while the settings they
     // were created from are unchanged. Otherwise (including a TSIG secret
     // rotation) they are dropped and — once the request is validated below —
@@ -98,6 +107,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const updated = updateIntegration(id, {
       name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,
+      ...(connectionId !== undefined ? { connectionId } : {}),
       config,
       active: typeof body.active === 'boolean' ? body.active : undefined,
       ...(credentials ? { credentials } : {}),

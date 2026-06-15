@@ -198,6 +198,7 @@ function initSchema(db: Database.Database) {
       name            TEXT NOT NULL,
       credentials     TEXT NOT NULL,
       config          TEXT NOT NULL DEFAULT '{}',
+      connection_id   TEXT DEFAULT NULL,
       active          INTEGER NOT NULL DEFAULT 1,
       created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
@@ -252,6 +253,20 @@ function initSchema(db: Database.Database) {
   const logColNames = logCols.map((c) => c.name);
   if (!logColNames.includes('request_body')) {
     db.exec('ALTER TABLE proxy_logs ADD COLUMN request_body TEXT DEFAULT NULL');
+  }
+
+  // Migration: bind each integration to a PowerDNS connection. Backfill existing
+  // rows to the default connection (is_default, else oldest) so upgrades keep
+  // working. New integrations set it explicitly via the API.
+  const intCols = db.prepare("PRAGMA table_info(integrations)").all() as Array<{ name: string }>;
+  if (!intCols.some((c) => c.name === 'connection_id')) {
+    db.exec('ALTER TABLE integrations ADD COLUMN connection_id TEXT DEFAULT NULL');
+    const def = db
+      .prepare('SELECT id FROM server_connections ORDER BY is_default DESC, created_at ASC LIMIT 1')
+      .get() as { id: string } | undefined;
+    if (def) {
+      db.prepare('UPDATE integrations SET connection_id = ? WHERE connection_id IS NULL').run(def.id);
+    }
   }
 
   // Migration: extend users.role CHECK to include 'Customer', users.auth_type

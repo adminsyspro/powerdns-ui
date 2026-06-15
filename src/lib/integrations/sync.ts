@@ -163,7 +163,6 @@ async function provisionZone(
       const peerId = await ensurePeerOnce(integration, creds);
 
       let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
-      const created = !zone;
       if (!zone) {
         zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
       }
@@ -177,10 +176,12 @@ async function provisionZone(
         return;
       }
 
-      // Cloudflare Secondary DNS is Enterprise-only. For a zone WE created (fresh,
-      // Free), upgrade to Enterprise BEFORE linkZoneToPeer — that endpoint is
-      // Enterprise-only. Best-effort, idempotent (skip if already enterprise).
-      if (created && zone.plan?.id !== 'enterprise') {
+      // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so a
+      // zone linked to a peer is necessarily Enterprise. setZonePlan only runs
+      // when the zone is NOT enterprise — which therefore can't be a foreign
+      // working secondary — so upgrading it here, before the Enterprise-only
+      // linkZoneToPeer, is always safe. Best-effort; idempotent (skip if enterprise).
+      if (zone.plan?.id !== 'enterprise') {
         try {
           await cloudflare.setZonePlan(creds, zone.id);
         } catch (e) {
@@ -209,17 +210,6 @@ async function provisionZone(
             message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
           });
           return;
-        }
-      }
-
-      // For a pre-existing zone, set Enterprise only AFTER the link/adopt check
-      // confirmed it's ours — never change billing on a different-peer zone we
-      // reject above. (Pre-existing secondaries are normally already enterprise.)
-      if (!created && zone.plan?.id !== 'enterprise') {
-        try {
-          await cloudflare.setZonePlan(creds, zone.id);
-        } catch (e) {
-          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
         }
       }
 

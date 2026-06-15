@@ -303,7 +303,10 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
 
     // Zones we tracked that left the scope: flag orphan (never remote-delete here).
     for (const link of known) {
-      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan' && link.status !== 'error') {
+      // Re-flag any out-of-scope link (including 'error' from a failed delete) back
+      // to 'orphan' with a fresh updatedAt: this restarts the retention grace on
+      // scope departure AND keeps failed worker-deletes / manual purges retryable.
+      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan') {
         upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
           remoteZoneId: link.remoteZoneId,
           status: 'orphan',
@@ -362,7 +365,7 @@ async function deleteAgedOrphans(
   // prior deletions (provisioning errors are in-scope → excluded by !scopedNames).
   const candidates = listIntegrationZones(integration.id, serverUrl).filter(
     (l) =>
-      (l.status === 'orphan' || l.status === 'error') &&
+      l.status === 'orphan' &&
       l.remoteZoneId &&
       !scopedNames.has(l.zoneName) &&
       nowSec - l.updatedAt >= retentionSec

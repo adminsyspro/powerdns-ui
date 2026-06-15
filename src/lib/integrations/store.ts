@@ -268,13 +268,6 @@ export function markZonesForReprovision(integrationId: string): void {
   ).run(integrationId);
 }
 
-export function deleteIntegrationZone(integrationId: string, serverUrl: string, zoneName: string): void {
-  const db = getDb();
-  db.prepare(
-    'DELETE FROM integration_zones WHERE integration_id = ? AND server_url = ? AND zone_name = ?'
-  ).run(integrationId, serverUrl, zoneName);
-}
-
 /**
  * Deletes a link only if it still references the given remote zone id — so a
  * concurrent re-provision that rewrote the link (new remoteZoneId) is not

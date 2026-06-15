@@ -176,17 +176,6 @@ async function provisionZone(
         return;
       }
 
-      // Cloudflare Secondary DNS is Enterprise-only; ensure the zone is on the
-      // Enterprise plan. Best-effort: never fail a working secondary over a
-      // plan/billing issue. Skipped when already enterprise (idempotent).
-      if (zone.plan?.id !== 'enterprise') {
-        try {
-          await cloudflare.setZonePlan(creds, zone.id);
-        } catch (e) {
-          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
-        }
-      }
-
       try {
         await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
       } catch (e) {
@@ -210,6 +199,19 @@ async function provisionZone(
           return;
         }
       }
+
+      // Cloudflare Secondary DNS is Enterprise-only; ensure the zone is on the
+      // Enterprise plan — only AFTER linkZoneToPeer confirmed the zone is ours
+      // (so we never change billing on a zone linked to a different peer that we
+      // reject above). Best-effort; skipped when already enterprise (idempotent).
+      if (zone.plan?.id !== 'enterprise') {
+        try {
+          await cloudflare.setZonePlan(creds, zone.id);
+        } catch (e) {
+          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+        }
+      }
+
       if (config.customNsMode !== 'ignore') {
         await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
       }

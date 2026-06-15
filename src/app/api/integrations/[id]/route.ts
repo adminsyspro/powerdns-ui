@@ -81,10 +81,11 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       config.peerId = existing.config.peerId;
       config.tsigId = existing.config.tsigId;
     }
-    // Custom-NS changes also need a reprovision pass (keeping peer ids).
+    // Custom-NS and secondaryOverride changes also need a reprovision pass (keeping peer ids).
     const provisioningChanged =
       config.customNsMode !== existing.config.customNsMode ||
-      config.customNsSet !== existing.config.customNsSet;
+      config.customNsSet !== existing.config.customNsSet ||
+      config.secondaryOverride !== existing.config.secondaryOverride;
 
     // Merge secrets so the token and the TSIG secret rotate independently.
     let credentials;

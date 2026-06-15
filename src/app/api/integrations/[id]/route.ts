@@ -38,6 +38,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
     return NextResponse.json({
       integration,
+      connectionMissing: !conn,
       zones: conn ? listIntegrationZones(id, normalizeUrl(conn.url)) : [],
       sync: getSyncState(id, conn?.url ?? ''),
     });

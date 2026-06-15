@@ -162,7 +162,7 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = React.useState<IntegrationRow[]>([]);
   const [stats, setStats] = React.useState<api.IntegrationStats | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [detail, setDetail] = React.useState<{ zones: IntegrationZoneRow[]; sync: IntegrationSyncState } | null>(null);
+  const [detail, setDetail] = React.useState<{ connectionMissing: boolean; zones: IntegrationZoneRow[]; sync: IntegrationSyncState } | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [testResult, setTestResult] = React.useState<{ id: string; ok: boolean; message: string } | null>(null);
@@ -264,7 +264,7 @@ export default function IntegrationsPage() {
       api.fetchIntegrationDetail(id),
       api.fetchIntegrationStats(),
     ]);
-    if (result.data) setDetail({ zones: result.data.zones, sync: result.data.sync });
+    if (result.data) setDetail({ connectionMissing: result.data.connectionMissing, zones: result.data.zones, sync: result.data.sync });
     if (statsResult.data) setStats(statsResult.data);
   }, []);
 
@@ -575,7 +575,11 @@ export default function IntegrationsPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            {detail.zones.length === 0 ? (
+            {detail.connectionMissing ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
+                This integration&apos;s PowerDNS connection is missing or was deleted — edit the integration to rebind it to a connection.
+              </div>
+            ) : detail.zones.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">
                 No zone tracked yet — run a sync to provision every Master zone in scope at Cloudflare
               </p>

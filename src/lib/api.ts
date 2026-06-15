@@ -360,7 +360,7 @@ export async function deleteIntegrationApi(id: string) {
 }
 
 export async function fetchIntegrationDetail(id: string) {
-  return apiRequest<{ integration: IntegrationRow; zones: IntegrationZoneRow[]; sync: IntegrationSyncState }>(
+  return apiRequest<{ integration: IntegrationRow; connectionMissing: boolean; zones: IntegrationZoneRow[]; sync: IntegrationSyncState }>(
     `/api/integrations/${encodeURIComponent(id)}`
   );
 }

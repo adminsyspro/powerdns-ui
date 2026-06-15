@@ -117,6 +117,7 @@ export interface CfZone {
   name: string;
   type: string;
   status: string;
+  plan?: { id: string; name?: string };
 }
 
 export async function verifyToken(creds: IntegrationCredentials, accountId?: string): Promise<void> {
@@ -300,6 +301,29 @@ export async function listAccountCustomNs(
     if (!envelope.result_info || envelope.result_info.page >= envelope.result_info.total_pages) break;
   }
   return entries;
+}
+
+/** Puts the zone on the Enterprise plan (Cloudflare Secondary DNS is Enterprise-only). */
+export async function setZonePlan(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/subscription`, {
+    method: 'POST',
+    body: { rate_plan: { id: 'enterprise' } },
+  });
+}
+
+/**
+ * Enables/disables "Secondary DNS override" (secondary_overrides) so a secondary
+ * zone can serve proxied override records. Requires DNSSEC Unsigned or Live Signing.
+ */
+export async function setSecondaryOverride(
+  creds: IntegrationCredentials,
+  cfZoneId: string,
+  enabled: boolean
+): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/dns_settings`, {
+    method: 'PATCH',
+    body: { secondary_overrides: enabled },
+  });
 }
 
 /**

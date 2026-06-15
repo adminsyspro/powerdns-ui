@@ -163,6 +163,7 @@ async function provisionZone(
       const peerId = await ensurePeerOnce(integration, creds);
 
       let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
+      const created = !zone;
       if (!zone) {
         zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
       }
@@ -174,6 +175,17 @@ async function provisionZone(
           message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
         });
         return;
+      }
+
+      // Cloudflare Secondary DNS is Enterprise-only. For a zone WE created (fresh,
+      // Free), upgrade to Enterprise BEFORE linkZoneToPeer — that endpoint is
+      // Enterprise-only. Best-effort, idempotent (skip if already enterprise).
+      if (created && zone.plan?.id !== 'enterprise') {
+        try {
+          await cloudflare.setZonePlan(creds, zone.id);
+        } catch (e) {
+          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+        }
       }
 
       try {
@@ -200,11 +212,10 @@ async function provisionZone(
         }
       }
 
-      // Cloudflare Secondary DNS is Enterprise-only; ensure the zone is on the
-      // Enterprise plan — only AFTER linkZoneToPeer confirmed the zone is ours
-      // (so we never change billing on a zone linked to a different peer that we
-      // reject above). Best-effort; skipped when already enterprise (idempotent).
-      if (zone.plan?.id !== 'enterprise') {
+      // For a pre-existing zone, set Enterprise only AFTER the link/adopt check
+      // confirmed it's ours — never change billing on a different-peer zone we
+      // reject above. (Pre-existing secondaries are normally already enterprise.)
+      if (!created && zone.plan?.id !== 'enterprise') {
         try {
           await cloudflare.setZonePlan(creds, zone.id);
         } catch (e) {

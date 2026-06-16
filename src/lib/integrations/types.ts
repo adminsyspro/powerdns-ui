@@ -69,6 +69,7 @@ export interface IntegrationZoneRow {
   zoneName: string;
   remoteZoneId: string | null;
   remoteType: string | null;
+  customNsSet: number | null;
   status: IntegrationZoneStatus;
   message: string | null;
   updatedAt: number;

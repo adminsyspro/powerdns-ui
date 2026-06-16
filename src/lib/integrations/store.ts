@@ -188,12 +188,12 @@ export function listIntegrationZones(integrationId: string, serverUrl: string): 
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, status, message, updated_at
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, status, message, updated_at
          FROM integration_zones WHERE integration_id = ? AND server_url = ? ORDER BY zone_name`
     )
     .all(integrationId, serverUrl) as Array<{
       integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
-      remote_type: string | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
+      remote_type: string | null; custom_ns_set: number | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
     }>;
   return rows.map((row) => ({
     integrationId: row.integration_id,
@@ -201,6 +201,7 @@ export function listIntegrationZones(integrationId: string, serverUrl: string): 
     zoneName: row.zone_name,
     remoteZoneId: row.remote_zone_id,
     remoteType: row.remote_type,
+    customNsSet: row.custom_ns_set,
     status: row.status,
     message: row.message,
     updatedAt: row.updated_at,
@@ -261,14 +262,14 @@ export function getIntegrationZone(
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, status, message, updated_at
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, status, message, updated_at
          FROM integration_zones
         WHERE integration_id = ? AND server_url = ? AND zone_name = ?`
     )
     .get(integrationId, serverUrl, zoneName) as
       | {
           integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
-          remote_type: string | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
+          remote_type: string | null; custom_ns_set: number | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
         }
       | undefined;
   if (!row) return undefined;
@@ -278,10 +279,37 @@ export function getIntegrationZone(
     zoneName: row.zone_name,
     remoteZoneId: row.remote_zone_id,
     remoteType: row.remote_type,
+    customNsSet: row.custom_ns_set,
     status: row.status,
     message: row.message,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * Stages a per-zone custom NS-set override (nsSet, or null = inherit) and flags
+ * the row for (re)application. Guarded so it only mutates a row that is still a
+ * healthy secondary link; returns false if no such row matched (caller treats it
+ * as a stale/ineligible conflict). The 'stale' status ensures the next sync
+ * re-provisions the zone if the immediate apply is skipped by the in-flight guard.
+ */
+export function markZoneCustomNsSetForApply(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  nsSet: number | null
+): boolean {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE integration_zones
+          SET custom_ns_set = ?, status = 'stale',
+              message = 'Applying custom NS set…', updated_at = unixepoch()
+        WHERE integration_id = ? AND server_url = ? AND zone_name = ?
+          AND status = 'ok' AND remote_type = 'secondary' AND remote_zone_id IS NOT NULL`
+    )
+    .run(nsSet, integrationId, serverUrl, zoneName);
+  return result.changes > 0;
 }
 
 /**

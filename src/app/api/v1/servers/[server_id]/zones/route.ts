@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     const zones = await response.json();
-    const filtered = filterZones(environment.id, zones);
+    const filtered = filterZones(environment, zones);
 
     logProxy(request, 200, { environment, startTime });
     return NextResponse.json(filtered);

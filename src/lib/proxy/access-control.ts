@@ -7,6 +7,9 @@ import type {
 } from '@/types/proxy';
 import type { RRSet } from '@/types/powerdns';
 
+/** Non-persistent permission id used for synthetic full-access permissions. Never stored. */
+export const FULL_ACCESS_PERM_ID = '__full_access__';
+
 /**
  * Find an active environment by its token SHA-512 hash.
  */
@@ -80,13 +83,37 @@ export function isZoneAllowed(environmentId: string, zoneName: string): ProxyZon
 }
 
 /**
+ * Resolve zone access for an environment.
+ * Full-access environments get a synthetic permission with no record rules
+ * (= all records allowed). Scoped environments fall back to the whitelist.
+ */
+export function resolveZoneAccess(
+  environment: ProxyEnvironmentRow,
+  zoneName: string
+): ProxyZonePermission | null {
+  if (environment.full_access === 1) {
+    return {
+      id: FULL_ACCESS_PERM_ID,
+      environmentId: environment.id,
+      zoneName,
+      acmeEnabled: false,
+      recordRules: [],
+    };
+  }
+  return isZoneAllowed(environment.id, zoneName);
+}
+
+/**
  * Filter a list of zones to only those the environment has access to.
  */
 export function filterZones<T extends { name?: string; id?: string }>(
-  environmentId: string,
+  environment: ProxyEnvironmentRow,
   zones: T[]
 ): T[] {
-  const permissions = getZonePermissions(environmentId);
+  // Full-access keys see every zone.
+  if (environment.full_access === 1) return zones;
+
+  const permissions = getZonePermissions(environment.id);
   const allowedNames = new Set(
     permissions.map((p) => p.zoneName.replace(/\.$/, ''))
   );

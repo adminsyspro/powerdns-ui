@@ -609,6 +609,7 @@ export default function IntegrationsPage() {
                 <TableHeader className="bg-slate-100 dark:bg-slate-800">
                   <TableRow>
                     <TableHead className="font-semibold">Zone</TableHead>
+                    <TableHead className="font-semibold">Cloudflare Type</TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
                     <TableHead className="font-semibold">Message</TableHead>
                     <TableHead className="font-semibold whitespace-nowrap">Updated</TableHead>
@@ -619,9 +620,20 @@ export default function IntegrationsPage() {
                   {paginatedZones.map((zone) => (
                     <TableRow key={zone.zoneName}>
                       <TableCell>
-                        <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
-                          {zone.zoneName.replace(/\.$/, '')}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain flex-shrink-0" />
+                          <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
+                            {zone.zoneName.replace(/\.$/, '')}
+                          </Link>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {zone.remoteType ? (
+                          <Badge variant="outline" className="capitalize">{zone.remoteType}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={ZONE_STATUS_BADGE[zone.status] || ''}>{zone.status}</Badge>

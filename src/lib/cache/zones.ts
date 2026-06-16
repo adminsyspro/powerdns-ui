@@ -88,6 +88,8 @@ export interface CachedZonesParams {
   scope?: 'forward' | 'reverse';
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** When set, restrict to these zone names (already lowercased). Empty array = no matches. */
+  replicatedNames?: string[];
 }
 
 export interface PaginatedZones {
@@ -141,6 +143,18 @@ export function getCachedZones(
     }
     conditions.push(`account IN (${allowedAccounts.map(() => '?').join(',')})`);
     values.push(...allowedAccounts);
+  }
+
+  // Cloudflare-coverage filter: restrict to the replicated zone names. Uses
+  // json_each so the set size is one bound parameter (no SQLITE_MAX_VARIABLE_NUMBER
+  // limit). Names are pre-lowercased by the caller; LOWER(name) makes it
+  // case-insensitive. AND-combined with the account scope above (no widening).
+  if (params.replicatedNames) {
+    if (params.replicatedNames.length === 0) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0, forwardTotal: 0, reverseTotal: 0 };
+    }
+    conditions.push('LOWER(name) IN (SELECT value FROM json_each(?))');
+    values.push(JSON.stringify(params.replicatedNames));
   }
 
   // Zone names are stored in PowerDNS canonical form (trailing dot). Match the

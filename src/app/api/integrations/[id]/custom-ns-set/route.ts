@@ -6,8 +6,9 @@ import { setZoneCustomNsSet } from '@/lib/integrations/sync';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// POST /api/integrations/[id]/custom-ns-set — set or clear (nsSet: null = inherit)
-// the custom NS set for one replicated zone, re-provisioning it immediately.
+// POST /api/integrations/[id]/custom-ns-set — set the custom NS set for one
+// replicated zone (nsSet: a set number) or switch it back to Cloudflare-default
+// nameservers (nsSet: null). Applied directly to Cloudflare.
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     requireAdmin(request);

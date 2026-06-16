@@ -13,7 +13,7 @@ import {
   upsertIntegrationZone,
   backfillIntegrationZoneType,
   deleteIntegrationZoneIfRemote,
-  markZoneCustomNsSetForApply,
+  setIntegrationZoneNsSet,
 } from './store';
 import type { IntegrationConfig, IntegrationCredentials, IntegrationRow } from './types';
 
@@ -219,15 +219,10 @@ async function provisionZone(
         }
       }
 
-      // Custom NS precedence (adopt-don't-touch):
-      //  1. an explicit per-zone override is forced, even on an existing zone
-      //     (the admin chose it deliberately; the UI confirms the registrar-alignment risk);
-      //  2. otherwise the integration's global policy applies ONLY to a zone we just
-      //     created — never overriding an existing/adopted zone's nameservers;
-      //  3. an existing zone with no override keeps its current Cloudflare NS.
-      if (existingLink?.customNsSet != null) {
-        await cloudflare.setZoneCustomNs(creds, zone.id, true, existingLink.customNsSet);
-      } else if (!zonePreExisted && config.customNsMode !== 'ignore') {
+      // Custom NS (adopt-don't-touch): the integration's global policy applies ONLY
+      // to a zone we just created — an existing/adopted zone keeps its current
+      // Cloudflare nameservers. Per-zone changes go through setZoneCustomNsSet.
+      if (!zonePreExisted && config.customNsMode !== 'ignore') {
         await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
       }
       await cloudflare.forceAxfr(creds, zone.id);
@@ -246,6 +241,9 @@ async function provisionZone(
         status: 'ok',
         message: warnings.length ? warnings.join('; ') : null,
       });
+      // Reflect the zone's actual custom NS set in the table (best-effort; the
+      // helper returns null on any error and never throws).
+      setIntegrationZoneNsSet(integration.id, serverUrl, zoneName, await cloudflare.getZoneCustomNs(creds, zone.id));
     } catch (e) {
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: currentRemoteId,
@@ -371,21 +369,21 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
         if (!link || link.status !== 'ok') {
           const fresh = getIntegration(integrationId);
           if (fresh) await provisionZone(fresh, creds, normalizedUrl, zone.name);
-        } else if (link.remoteType == null && link.remoteZoneId) {
-          // One-time backfill: a healthy link that predates the remote_type column.
-          // Fetch the Cloudflare zone type once and store it (status/message
-          // unchanged). Best-effort — skipped automatically once populated, so this
-          // never re-fetches on subsequent syncs.
-          const rz = link.remoteZoneId;
+        } else if (link.remoteZoneId) {
           const fresh = getIntegration(integrationId);
           if (fresh) {
             try {
-              const cfZone = await cloudflare.getZoneByName(creds, fresh.config.accountId, bareName(zone.name));
-              if (cfZone) {
-                backfillIntegrationZoneType(integrationId, normalizedUrl, zone.name, rz, cfZone.type);
+              // One-time backfill of the Cloudflare zone type (predates remote_type).
+              if (link.remoteType == null) {
+                const cfZone = await cloudflare.getZoneByName(creds, fresh.config.accountId, bareName(zone.name));
+                if (cfZone) backfillIntegrationZoneType(integrationId, normalizedUrl, zone.name, link.remoteZoneId, cfZone.type);
+              }
+              // Refresh the actual custom NS set for the table (secondary zones only).
+              if (link.remoteType === 'secondary') {
+                setIntegrationZoneNsSet(integrationId, normalizedUrl, zone.name, await cloudflare.getZoneCustomNs(creds, link.remoteZoneId));
               }
             } catch {
-              // Best-effort: leave remote_type null and retry on the next sync.
+              // Best-effort: leave values as-is and retry next sync.
             }
           }
         }
@@ -593,11 +591,11 @@ export async function forceZoneAxfr(integrationId: string, serverUrl: string, zo
 }
 
 /**
- * Sets (nsSet) or clears (null = inherit the integration default) the custom NS
- * set for one replicated zone, then re-applies it immediately by re-provisioning
- * that single zone. Only valid on a healthy secondary link of an integration
- * whose customNsMode is 'enable'. Returns a discriminated result so the route can
- * map failures to the right HTTP status.
+ * Sets the per-zone custom NS set: nsSet (a positive integer) enables that account
+ * custom-NS set on the zone; null switches it back to Cloudflare-default
+ * nameservers. Applied directly to Cloudflare and guarded by the per-zone
+ * provisioning lock so it can't race a concurrent sync. Records the new actual set
+ * for the table. Discriminated result maps to an HTTP status.
  */
 export async function setZoneCustomNsSet(
   integrationId: string,
@@ -611,23 +609,24 @@ export async function setZoneCustomNsSet(
   const normalizedUrl = normalizeUrl(serverUrl);
   const integration = getIntegration(integrationId);
   if (!integration) return { ok: false, status: 404, error: 'Integration not found' };
-  if (integration.config.customNsMode !== 'enable') {
-    return { ok: false, status: 409, error: 'Custom NS management is not enabled for this integration' };
-  }
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { ok: false, status: 409, error: 'Stored credentials are unreadable' };
-  if (!markZoneCustomNsSetForApply(integrationId, normalizedUrl, zoneName, nsSet)) {
+  const link = getIntegrationZone(integrationId, normalizedUrl, zoneName);
+  if (!link || link.status !== 'ok' || link.remoteType !== 'secondary' || !link.remoteZoneId) {
     return { ok: false, status: 409, error: 'Custom NS set can only be changed on a healthy secondary zone' };
   }
-  await provisionZone(integration, creds, normalizedUrl, zoneName);
-  const link = getIntegrationZone(integrationId, normalizedUrl, zoneName);
-  if (link && link.status === 'error') {
-    return { ok: false, status: 502, error: link.message || 'Failed to apply custom NS set at Cloudflare' };
+  const flightKey = inFlightKey(integrationId, normalizedUrl, zoneName);
+  if (provisioningInFlight.has(flightKey)) {
+    return { ok: false, status: 409, error: 'A sync is provisioning this zone — try again in a moment' };
   }
-  if (link && link.status === 'stale') {
-    // provisionZone was skipped because another provisioning flight for this zone
-    // is in progress; the override is staged and the next sync will apply it.
-    return { ok: false, status: 409, error: 'A sync is already provisioning this zone — the new NS set is staged and will be applied on the next sync' };
+  provisioningInFlight.add(flightKey);
+  try {
+    await cloudflare.setZoneCustomNs(creds, link.remoteZoneId, nsSet !== null, nsSet ?? 1);
+  } catch (e) {
+    return { ok: false, status: 502, error: e instanceof Error ? e.message : 'Failed to update custom NS at Cloudflare' };
+  } finally {
+    provisioningInFlight.delete(flightKey);
   }
+  setIntegrationZoneNsSet(integrationId, normalizedUrl, zoneName, nsSet);
   return { ok: true };
 }

@@ -137,20 +137,117 @@ export async function PATCH(
   }
 }
 
-// PUT /api/v1/servers/[server_id]/zones/[zone_id] — not allowed via proxy
-export async function PUT(request: NextRequest) {
-  logProxy(request, 403, { error: 'Zone metadata update not allowed' });
-  return NextResponse.json(
-    { error: 'Zone metadata update is not allowed through the proxy' },
-    { status: 403 }
-  );
+// PUT /api/v1/servers/[server_id]/zones/[zone_id] — update zone metadata (full-access only)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ server_id: string; zone_id: string }> }
+) {
+  const startTime = Date.now();
+  const auth = authenticateProxyRequest(request);
+  if (isAuthError(auth)) {
+    logProxy(request, 401, { startTime, error: 'Authentication failed' });
+    return auth;
+  }
+
+  const { environment, connection } = auth;
+  const { zone_id: rawZoneId } = await params;
+  const zone_id = canonicalize(rawZoneId);
+
+  if (environment.full_access !== 1) {
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone metadata update not allowed' });
+    return NextResponse.json(
+      { error: 'Zone metadata update is not allowed through the proxy' },
+      { status: 403 }
+    );
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    logProxy(request, 400, { environment, zone: zone_id, startTime, error: 'Invalid JSON' });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  try {
+    const response = await fetch(
+      `${connection.url}/api/v1/servers/localhost/zones/${encodeURIComponent(zone_id)}`,
+      {
+        method: 'PUT',
+        headers: { 'X-API-Key': connection.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const status = response.status;
+    logProxy(request, status, { environment, zone: zone_id, startTime, requestBody: JSON.stringify(body) });
+
+    if (status === 204) {
+      return new NextResponse(null, { status: 204 });
+    }
+    const data = await response.text();
+    return new NextResponse(data, {
+      status,
+      headers: { 'Content-Type': response.headers.get('content-type') || 'application/json' },
+    });
+  } catch (e) {
+    logProxy(request, 502, { environment, zone: zone_id, startTime, error: (e as Error).message, requestBody: JSON.stringify(body) });
+    return NextResponse.json(
+      { error: `Failed to connect to PowerDNS: ${(e as Error).message}` },
+      { status: 502 }
+    );
+  }
 }
 
-// DELETE /api/v1/servers/[server_id]/zones/[zone_id] — not allowed via proxy
-export async function DELETE(request: NextRequest) {
-  logProxy(request, 403, { error: 'Zone deletion not allowed' });
-  return NextResponse.json(
-    { error: 'Zone deletion is not allowed through the proxy' },
-    { status: 403 }
-  );
+// DELETE /api/v1/servers/[server_id]/zones/[zone_id] — delete a zone (full-access only)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ server_id: string; zone_id: string }> }
+) {
+  const startTime = Date.now();
+  const auth = authenticateProxyRequest(request);
+  if (isAuthError(auth)) {
+    logProxy(request, 401, { startTime, error: 'Authentication failed' });
+    return auth;
+  }
+
+  const { environment, connection } = auth;
+  const { zone_id: rawZoneId } = await params;
+  const zone_id = canonicalize(rawZoneId);
+
+  if (environment.full_access !== 1) {
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone deletion not allowed' });
+    return NextResponse.json(
+      { error: 'Zone deletion is not allowed through the proxy' },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const response = await fetch(
+      `${connection.url}/api/v1/servers/localhost/zones/${encodeURIComponent(zone_id)}`,
+      {
+        method: 'DELETE',
+        headers: { 'X-API-Key': connection.apiKey },
+      }
+    );
+
+    const status = response.status;
+    logProxy(request, status, { environment, zone: zone_id, startTime });
+
+    if (status === 204) {
+      return new NextResponse(null, { status: 204 });
+    }
+    const data = await response.text();
+    return new NextResponse(data, {
+      status,
+      headers: { 'Content-Type': response.headers.get('content-type') || 'application/json' },
+    });
+  } catch (e) {
+    logProxy(request, 502, { environment, zone: zone_id, startTime, error: (e as Error).message });
+    return NextResponse.json(
+      { error: `Failed to connect to PowerDNS: ${(e as Error).message}` },
+      { status: 502 }
+    );
+  }
 }

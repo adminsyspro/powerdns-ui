@@ -4,6 +4,7 @@ export interface ProxyEnvironment {
   description: string;
   tokenSha512: string;
   active: boolean;
+  fullAccess: boolean;
   zoneCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -31,6 +32,7 @@ export interface ProxyEnvironmentRow {
   description: string;
   token_sha512: string;
   active: number;
+  full_access: number;
   created_at: number;
   updated_at: number;
 }

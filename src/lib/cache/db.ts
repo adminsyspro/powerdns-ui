@@ -129,6 +129,7 @@ function initSchema(db: Database.Database) {
       description     TEXT DEFAULT '',
       token_sha512    TEXT NOT NULL,
       active          INTEGER NOT NULL DEFAULT 1,
+      full_access     INTEGER NOT NULL DEFAULT 0 CHECK(full_access IN (0,1)),
       created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -254,6 +255,15 @@ function initSchema(db: Database.Database) {
       ALTER TABLE proxy_environments_new RENAME TO proxy_environments;
       CREATE INDEX IF NOT EXISTS idx_proxy_env_token ON proxy_environments(token_sha512);
     `);
+  }
+
+  // Migration: add full_access to proxy_environments (run AFTER the server_id rebuild
+  // above, which recreates the table without this column). Additive ALTER cannot carry a
+  // CHECK in SQLite — the CHECK lives only in the canonical CREATE TABLE; code enforces
+  // `full_access === 1` strictly everywhere.
+  const proxyColsAfter = db.prepare("PRAGMA table_info(proxy_environments)").all() as Array<{ name: string }>;
+  if (!proxyColsAfter.map((c) => c.name).includes('full_access')) {
+    db.exec('ALTER TABLE proxy_environments ADD COLUMN full_access INTEGER NOT NULL DEFAULT 0');
   }
 
   // Migration: add request_body column to proxy_logs

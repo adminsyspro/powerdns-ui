@@ -703,13 +703,12 @@ export default function ZoneDetailPage() {
       <Card>
         <CardContent className="py-3">
           {/* Line 1: Zone switcher + NS + Expiration + Actions */}
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3 mb-3">
             <div className="flex items-center gap-3 flex-wrap min-w-0">
               <Button variant="ghost" size="icon" className="flex-shrink-0" asChild>
                 <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
               </Button>
               <ZoneSwitcher currentZoneId={zoneId} currentZoneReplicated={!!cfProxy?.linked} />
-              <ZoneTrafficSparklines zoneName={zoneId} />
               {lookup && lookup.ns.length > 0 && (
                 <>
                   <div className="w-px h-5 bg-border" />
@@ -753,6 +752,10 @@ export default function ZoneDetailPage() {
                   <span className="text-xs text-muted-foreground">{lookup.registrar}</span>
                 </>
               )}
+            </div>
+            {/* Middle: traffic sparklines fill all width between the left metadata and the action buttons (self-gates to empty when the zone is not replicated). */}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <ZoneTrafficSparklines zoneName={zoneId} />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <Tooltip>

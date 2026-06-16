@@ -35,12 +35,7 @@ export function ZoneTrafficSparklines({ zoneName }: { zoneName: string }) {
   if (!loaded || !state?.linked) return null;
 
   if (!state.available || !state.points || state.points.length === 0 || !state.totals) {
-    return (
-      <>
-        <div className="w-px h-5 bg-border" />
-        <span className="text-xs text-muted-foreground">No data</span>
-      </>
-    );
+    return <span className="text-xs text-muted-foreground">No data</span>;
   }
 
   const points = state.points;
@@ -59,19 +54,18 @@ export function ZoneTrafficSparklines({ zoneName }: { zoneName: string }) {
     { data: mk((p) => p.cachedBytes), total: t.cachedBytes, valueLabel: formatBytes(t.cachedBytes), label: 'Data cached', color: '#06b6d4' },
   ];
 
-  // One shrinkable, no-wrap container so the five charts share the available width
-  // and shrink together (responsive) instead of wrapping onto a new line.
+  // Fill the available width: the parent reserves a flex-1 middle zone between the
+  // zone switcher and the action buttons. The five charts share that width via
+  // equal flex-1 columns, so they adapt to any screen — wider → wider charts,
+  // narrower → narrower — and never wrap.
   return (
-    <>
-      <div className="w-px h-5 bg-border flex-shrink-0" />
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        {metrics.map((m, i) => (
-          <React.Fragment key={m.label}>
-            {i > 0 ? <div className="w-px h-5 bg-border flex-shrink-0" /> : null}
-            <Sparkline points={m.data} total={m.total} valueLabel={m.valueLabel} label={m.label} color={m.color} dataKey="v" fluid />
-          </React.Fragment>
-        ))}
-      </div>
-    </>
+    <div className="flex w-full min-w-0 items-center gap-3">
+      {metrics.map((m, i) => (
+        <React.Fragment key={m.label}>
+          {i > 0 ? <div className="w-px h-5 bg-border flex-shrink-0" /> : null}
+          <Sparkline points={m.data} total={m.total} valueLabel={m.valueLabel} label={m.label} color={m.color} dataKey="v" fluid />
+        </React.Fragment>
+      ))}
+    </div>
   );
 }

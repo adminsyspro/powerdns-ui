@@ -721,19 +721,20 @@ export default function ProxyPage() {
 
                 <div className="flex items-center justify-between rounded-md border p-3">
                   <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Full access</Label>
+                    <Label htmlFor="env-full-access" className="text-sm font-medium">Full access</Label>
                     <p className="text-xs text-muted-foreground">
-                      Accès à toutes les zones + création / modification / suppression. Aucune permission par zone.
+                      Access to all zones, including creating, updating and deleting them. No per-zone permissions.
                     </p>
                   </div>
                   <Switch
+                    id="env-full-access"
                     checked={envForm.fullAccess}
                     onCheckedChange={(checked) => setEnvForm({ ...envForm, fullAccess: checked })}
                   />
                 </div>
                 {envForm.fullAccess && (
                   <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-                    Cette clé a un accès complet à toutes les zones du serveur (CRUD), y compris la création et la suppression. À réserver à des applications de confiance.
+                    This key has full access to every zone on the server (CRUD), including creation and deletion. Reserve it for trusted applications.
                   </div>
                 )}
                 {/* Inline zones */}

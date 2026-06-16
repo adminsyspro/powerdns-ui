@@ -110,7 +110,7 @@ export default function ZonesPage() {
     scope,
     sortBy,
     sortOrder,
-    replicated: cloudflareOnly && cloudflareEnabled,
+    replicated: (cloudflareOnly && cloudflareEnabled) || undefined,
   });
 
   // Reset to page 1 when filters change

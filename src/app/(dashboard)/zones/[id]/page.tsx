@@ -695,6 +695,7 @@ export default function ZoneDetailPage() {
                 <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
               </Button>
               <ZoneSwitcher currentZoneId={zoneId} currentZoneReplicated={!!cfProxy?.linked} />
+              <ZoneTrafficSparkline zoneName={zoneId} />
               {lookup && lookup.ns.length > 0 && (
                 <>
                   <div className="w-px h-5 bg-border" />
@@ -706,7 +707,6 @@ export default function ZoneDetailPage() {
                   </div>
                 </>
               )}
-              <ZoneTrafficSparkline zoneName={zoneId} />
               {lookup?.expiration && (
                 <>
                   <div className="w-px h-5 bg-border" />

@@ -432,7 +432,7 @@ export default function ZonesPage() {
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/integrations/cloudflare-icon.svg" alt="" className="h-4 w-4 object-contain" />
-            Cloudflare only
+            <span>Cloudflare only</span>
           </label>
         ) : undefined}
         actions={

@@ -421,13 +421,22 @@ export default function IntegrationsPage() {
     if (!selectedId) return;
     const id = selectedId;
     const nsSet = value === '__inherit__' ? null : Number(value);
+    const bareName = zoneName.replace(/\.$/, '');
     setNsSetPending(zoneName);
     try {
-      const ok = await confirm({
-        title: 'Change custom NS set',
-        description: `Changing the custom nameserver set for "${zoneName.replace(/\.$/, '')}" updates the zone's nameservers at Cloudflare. This can break resolution if they are not aligned with the NS delegation at your registrar. Continue?`,
-        confirmLabel: 'Change NS set',
-      });
+      const ok = await confirm(
+        nsSet === null
+          ? {
+              title: 'Stop overriding the NS set',
+              description: `Stop overriding the custom nameserver set for "${bareName}"? This zone keeps its current Cloudflare nameservers — the integration default only applies to newly created zones.`,
+              confirmLabel: 'Stop overriding',
+            }
+          : {
+              title: 'Change custom NS set',
+              description: `Changing the custom nameserver set for "${bareName}" updates the zone's nameservers at Cloudflare. This can break resolution if they are not aligned with the NS delegation at your registrar. Continue?`,
+              confirmLabel: 'Change NS set',
+            }
+      );
       if (!ok) {
         await loadDetail(id);
         return;
@@ -689,7 +698,7 @@ export default function IntegrationsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__inherit__">Default (set {selected.config.customNsSet})</SelectItem>
+                              <SelectItem value="__inherit__">Inherit — keep current Cloudflare NS</SelectItem>
                               {detailNsSets.map((s) => (
                                 <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.join(', ')}>
                                   Set {s.set}

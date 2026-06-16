@@ -454,6 +454,19 @@ export async function fetchZoneAnalytics(zone: string) {
   return apiRequest<ZoneAnalytics>(`/api/integrations/zone-analytics?zone=${encodeURIComponent(zone)}`);
 }
 
+export interface ZonesAnalytics {
+  analytics: Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }>;
+}
+
+// Batch Cloudflare unique-visitors for many zones (the replicated rows of a
+// zones-table page). POST avoids URL-length limits on long zone lists.
+export async function fetchZonesAnalytics(zones: string[]) {
+  return apiRequest<ZonesAnalytics>('/api/integrations/zones-analytics', {
+    method: 'POST',
+    body: JSON.stringify({ zones }),
+  });
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

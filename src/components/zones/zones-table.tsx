@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/select';
 import type { ZoneListItem, ZoneKind } from '@/types/powerdns';
 import { getZoneKindColor, formatSerial, formatRelativeTime, copyToClipboard } from '@/lib/utils';
+import { Sparkline } from '@/components/zones/sparkline';
 
 interface ZonesTableProps {
   zones: ZoneListItem[];
@@ -88,6 +89,9 @@ interface ZonesTableProps {
   // Normalized (lowercase, no trailing dot) names of zones replicated to
   // Cloudflare as a secondary — flags them with the orange cloud + a column.
   replicatedZones?: Set<string>;
+  // Per-zone Cloudflare unique-visitors analytics, keyed by the EXACT zone.name
+  // (the value the page sent to the batch endpoint). undefined = still loading.
+  analyticsByZone?: Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }>;
 }
 
 // A zone's lookup key into the replicated-zones set (DNS is case-insensitive
@@ -129,6 +133,7 @@ export function ZonesTable({
   onSelectionChange,
   onBulkDelete,
   replicatedZones,
+  analyticsByZone,
   scopeFilter,
 }: ZonesTableProps) {
   // Selection state
@@ -357,13 +362,14 @@ export function ZonesTable({
               <TableHead><SortHeader column="dnssec">DNSSEC</SortHeader></TableHead>
               <TableHead><SortHeader column="account">Account</SortHeader></TableHead>
               <TableHead>Cloudflare Secondary</TableHead>
+              <TableHead>Unique visitors (30d)</TableHead>
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   <div className="flex items-center justify-center">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -371,7 +377,7 @@ export function ZonesTable({
               </TableRow>
             ) : displayedZones.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Globe className="h-8 w-8 text-muted-foreground" />
                     <p className="text-muted-foreground">No zones found</p>
@@ -430,6 +436,17 @@ export function ZonesTable({
                       </Tooltip>
                     ) : (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {!isReplicated ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : analyticsByZone === undefined ? (
+                      <div className="h-8 w-[110px] animate-pulse rounded bg-muted" />
+                    ) : analyticsByZone[zone.name]?.available && analyticsByZone[zone.name]?.points?.length ? (
+                      <Sparkline points={analyticsByZone[zone.name]!.points!} total={analyticsByZone[zone.name]!.total ?? 0} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No data</span>
                     )}
                   </TableCell>
                   <TableCell>

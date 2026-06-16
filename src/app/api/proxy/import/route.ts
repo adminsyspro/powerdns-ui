@@ -13,6 +13,7 @@ interface ProxyConfigZone {
 interface ProxyConfigEnvironment {
   name: string;
   token_sha512: string;
+  full_access?: boolean;
   zones?: ProxyConfigZone[];
 }
 
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
   }
 
   const insertEnv = db.prepare(
-    `INSERT INTO proxy_environments (id, name, description, token_sha512)
-     VALUES (?, ?, ?, ?)`
+    `INSERT INTO proxy_environments (id, name, description, token_sha512, full_access)
+     VALUES (?, ?, ?, ?, ?)`
   );
   const insertZone = db.prepare(
     `INSERT INTO proxy_zone_permissions (id, environment_id, zone_name, acme_enabled)
@@ -82,10 +83,12 @@ export async function POST(request: NextRequest) {
       }
 
       const envId = crypto.randomUUID();
-      insertEnv.run(envId, env.name, '', env.token_sha512);
+      const isFull = env.full_access === true;
+      insertEnv.run(envId, env.name, '', env.token_sha512, isFull ? 1 : 0);
       summary.environments++;
 
-      if (env.zones && Array.isArray(env.zones)) {
+      // Invariant: a full-access env owns NO zone permissions — skip any imported zones.
+      if (!isFull && env.zones && Array.isArray(env.zones)) {
         for (const zone of env.zones) {
           if (!zone.name) continue;
 

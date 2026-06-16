@@ -5,13 +5,17 @@ import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
-// Pure presentational unique-visitors sparkline: a small Cloudflare-orange area
-// chart + the compact total, with an optional caption label. Used by the zone
-// header and the zones-table column.
-export function Sparkline({ points, total, label }: {
-  points: Array<{ date: string; uniques: number }>;
+// Pure presentational sparkline: a small area chart + a value (compact total or an
+// explicit `valueLabel`), with an optional caption label. `dataKey` selects which
+// numeric field of each point to plot; `color` themes stroke + fill. Used by the
+// zones-table column (defaults) and the zone-header traffic strip (per-metric).
+export function Sparkline({ points, total, label, color = '#f6821f', dataKey = 'uniques', valueLabel }: {
+  points: Array<Record<string, number | string>>;
   total: number;
   label?: string;
+  color?: string;
+  dataKey?: string;
+  valueLabel?: string;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -20,9 +24,9 @@ export function Sparkline({ points, total, label }: {
           <AreaChart data={points} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
             <Area
               type="monotone"
-              dataKey="uniques"
-              stroke="#f6821f"
-              fill="#f6821f"
+              dataKey={dataKey}
+              stroke={color}
+              fill={color}
               fillOpacity={0.15}
               strokeWidth={1.5}
               dot={false}
@@ -32,7 +36,7 @@ export function Sparkline({ points, total, label }: {
         </ResponsiveContainer>
       </div>
       <div className="flex flex-col leading-tight">
-        <span className="text-sm font-medium">{compact.format(total)}</span>
+        <span className="text-sm font-medium">{valueLabel ?? compact.format(total)}</span>
         {label ? <span className="text-[10px] text-muted-foreground">{label}</span> : null}
       </div>
     </div>

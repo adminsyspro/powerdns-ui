@@ -461,6 +461,28 @@ export async function fetchZoneAnalytics(zone: string) {
   return apiRequest<ZoneAnalytics>(`/api/integrations/zone-analytics?zone=${encodeURIComponent(zone)}`);
 }
 
+export interface ZoneTrafficPoint {
+  date: string;
+  uniques: number;
+  requests: number;
+  cachedRequests: number;
+  bytes: number;
+  cachedBytes: number;
+}
+
+export interface ZoneTraffic {
+  linked: boolean;
+  available?: boolean;
+  points?: ZoneTrafficPoint[];
+  totals?: { uniques: number; requests: number; cachedRequests: number; bytes: number; cachedBytes: number };
+}
+
+// Five-metric Cloudflare traffic (30d daily) for one replicated zone — drives the
+// zone-header sparkline strip. The endpoint self-reports linked/available state.
+export async function fetchZoneTraffic(zone: string) {
+  return apiRequest<ZoneTraffic>(`/api/integrations/zone-traffic?zone=${encodeURIComponent(zone)}`);
+}
+
 export interface ZonesAnalytics {
   analytics: Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }>;
 }

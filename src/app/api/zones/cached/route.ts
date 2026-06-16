@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getCachedZones } from '@/lib/cache/zones';
+import { listReplicatedZoneNames } from '@/lib/integrations/sync';
 import { getAuthContextFromHeaders, requireAuth, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 
-// GET /api/zones/cached?page=1&pageSize=25&search=&kind=&dnssec=&sortBy=name&sortOrder=asc
+// GET /api/zones/cached?page=1&pageSize=25&search=&kind=&dnssec=&sortBy=name&sortOrder=asc&replicated=true
 export async function GET(request: NextRequest) {
   try {
     const ctx = requireAuth(getAuthContextFromHeaders(request));
@@ -11,6 +12,12 @@ export async function GET(request: NextRequest) {
 
     const conn = getConnectionFromRequest(request);
     const { searchParams } = new URL(request.url);
+
+    // Cloudflare-coverage filter: resolve the replicated names server-side (do not
+    // trust client-supplied names). AND-combined with `allowed` in getCachedZones.
+    const replicatedNames = searchParams.get('replicated') === 'true'
+      ? listReplicatedZoneNames(conn.url).map((n) => n.toLowerCase())
+      : undefined;
 
     const scopeParam = searchParams.get('scope');
     const result = getCachedZones(conn.url, {
@@ -22,6 +29,7 @@ export async function GET(request: NextRequest) {
       scope: scopeParam === 'forward' || scopeParam === 'reverse' ? scopeParam : undefined,
       sortBy: searchParams.get('sortBy') || undefined,
       sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || undefined,
+      replicatedNames,
     }, allowed);
 
     return NextResponse.json(result);

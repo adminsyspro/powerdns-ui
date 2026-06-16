@@ -409,6 +409,8 @@ export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string
 export interface CfAccountCustomNs {
   ns_name: string;
   ns_set: number;
+  // A/AAAA records Cloudflare reports for this custom nameserver (the real IPs).
+  dns_records?: Array<{ type?: 'A' | 'AAAA'; value?: string }>;
 }
 
 /** Lists the account-level custom nameservers (each entry belongs to a set). */

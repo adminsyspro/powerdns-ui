@@ -287,36 +287,9 @@ export function getIntegrationZone(
 }
 
 /**
- * Stages a per-zone custom NS-set override (nsSet, or null = inherit) and flags
- * the row for (re)application. Guarded so it only mutates a row that is still a
- * healthy secondary link; returns false if no such row matched (caller treats it
- * as a stale/ineligible conflict). The 'stale' status ensures the next sync
- * re-provisions the zone if the immediate apply is skipped by the in-flight guard.
- */
-export function markZoneCustomNsSetForApply(
-  integrationId: string,
-  serverUrl: string,
-  zoneName: string,
-  nsSet: number | null
-): boolean {
-  const db = getDb();
-  const result = db
-    .prepare(
-      `UPDATE integration_zones
-          SET custom_ns_set = ?, status = 'stale',
-              message = 'Applying custom NS set…', updated_at = unixepoch()
-        WHERE integration_id = ? AND server_url = ? AND zone_name = ?
-          AND status = 'ok' AND remote_type = 'secondary' AND remote_zone_id IS NOT NULL`
-    )
-    .run(nsSet, integrationId, serverUrl, zoneName);
-  return result.changes > 0;
-}
-
-/**
  * Records the zone's actual custom NS set (a set number, or null for
  * Cloudflare-default nameservers). Plain UPDATE keyed on the row — never inserts,
- * so it cannot resurrect a deleted link; a no-op if the row is gone. Unlike
- * markZoneCustomNsSetForApply it does not touch status.
+ * so it cannot resurrect a deleted link; a no-op if the row is gone.
  */
 export function setIntegrationZoneNsSet(
   integrationId: string,

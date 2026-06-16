@@ -385,6 +385,13 @@ export async function forceIntegrationAxfr(id: string, zoneName: string) {
   });
 }
 
+export async function setIntegrationZoneCustomNsSet(id: string, zoneName: string, nsSet: number | null) {
+  return apiRequest<{ ok: boolean }>(`/api/integrations/${encodeURIComponent(id)}/custom-ns-set`, {
+    method: 'POST',
+    body: JSON.stringify({ zoneName, nsSet }),
+  });
+}
+
 export async function purgeIntegrationOrphan(id: string, zoneName: string) {
   return apiRequest<{ ok: boolean }>(`/api/integrations/${encodeURIComponent(id)}/purge-orphan`, {
     method: 'POST',

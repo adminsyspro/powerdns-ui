@@ -10,6 +10,7 @@ import {
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
 import { DnssecDialog } from '@/components/zones/dnssec-dialog';
+import { ZoneTrafficSparkline } from '@/components/zones/zone-traffic-sparkline';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -705,6 +706,7 @@ export default function ZoneDetailPage() {
                   </div>
                 </>
               )}
+              <ZoneTrafficSparkline zoneName={zoneId} />
               {lookup?.expiration && (
                 <>
                   <div className="w-px h-5 bg-border" />

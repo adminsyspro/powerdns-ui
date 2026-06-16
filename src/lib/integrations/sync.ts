@@ -13,6 +13,7 @@ import {
   upsertIntegrationZone,
   backfillIntegrationZoneType,
   deleteIntegrationZoneIfRemote,
+  markZoneCustomNsSetForApply,
 } from './store';
 import type { IntegrationConfig, IntegrationCredentials, IntegrationRow } from './types';
 
@@ -589,4 +590,39 @@ export async function forceZoneAxfr(integrationId: string, serverUrl: string, zo
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'force AXFR failed' };
   }
+}
+
+/**
+ * Sets (nsSet) or clears (null = inherit the integration default) the custom NS
+ * set for one replicated zone, then re-applies it immediately by re-provisioning
+ * that single zone. Only valid on a healthy secondary link of an integration
+ * whose customNsMode is 'enable'. Returns a discriminated result so the route can
+ * map failures to the right HTTP status.
+ */
+export async function setZoneCustomNsSet(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  nsSet: number | null
+): Promise<{ ok: true } | { ok: false; status: 400 | 404 | 409 | 502; error: string }> {
+  if (nsSet !== null && (!Number.isInteger(nsSet) || nsSet <= 0)) {
+    return { ok: false, status: 400, error: 'nsSet must be a positive integer or null' };
+  }
+  const normalizedUrl = normalizeUrl(serverUrl);
+  const integration = getIntegration(integrationId);
+  if (!integration) return { ok: false, status: 404, error: 'Integration not found' };
+  if (integration.config.customNsMode !== 'enable') {
+    return { ok: false, status: 409, error: 'Custom NS management is not enabled for this integration' };
+  }
+  const creds = getIntegrationCredentials(integrationId);
+  if (!creds) return { ok: false, status: 409, error: 'Stored credentials are unreadable' };
+  if (!markZoneCustomNsSetForApply(integrationId, normalizedUrl, zoneName, nsSet)) {
+    return { ok: false, status: 409, error: 'Custom NS set can only be changed on a healthy secondary zone' };
+  }
+  await provisionZone(integration, creds, normalizedUrl, zoneName);
+  const link = getIntegrationZone(integrationId, normalizedUrl, zoneName);
+  if (link && link.status === 'error') {
+    return { ok: false, status: 502, error: link.message || 'Failed to apply custom NS set at Cloudflare' };
+  }
+  return { ok: true };
 }

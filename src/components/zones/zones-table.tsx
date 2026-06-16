@@ -17,6 +17,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  BarChart3,
 } from 'lucide-react';
 import {
   Table,
@@ -41,6 +42,7 @@ import {
 import type { ZoneListItem, ZoneKind } from '@/types/powerdns';
 import { getZoneKindColor, formatSerial, formatRelativeTime, copyToClipboard } from '@/lib/utils';
 import { Sparkline } from '@/components/zones/sparkline';
+import { DnsAnalyticsDialog } from '@/components/zones/dns-analytics-dialog';
 
 interface ZonesTableProps {
   zones: ZoneListItem[];
@@ -144,6 +146,7 @@ export function ZonesTable({
   cloudflareFilter,
 }: ZonesTableProps) {
   const colCount = cloudflareEnabled ? 9 : 7;
+  const [dnsZone, setDnsZone] = React.useState<string | null>(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -465,6 +468,16 @@ export function ZonesTable({
                   )}
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      {isReplicated && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDnsZone(zone.name)} aria-label="DNS analytics">
+                              <BarChart3 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>DNS analytics</TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
@@ -577,6 +590,7 @@ export function ZonesTable({
         </div>
       )}
     </div>
+      <DnsAnalyticsDialog zone={dnsZone} open={!!dnsZone} onOpenChange={(o) => { if (!o) setDnsZone(null); }} />
     </TooltipProvider>
   );
 }

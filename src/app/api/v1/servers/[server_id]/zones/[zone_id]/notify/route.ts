@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
-import { isZoneAllowed } from '@/lib/proxy/access-control';
+import { resolveZoneAccess } from '@/lib/proxy/access-control';
 
 function canonicalize(name: string): string {
   return name.endsWith('.') ? name : `${name}.`;
@@ -22,7 +22,7 @@ export async function PUT(
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
 
-  const zonePerm = isZoneAllowed(environment.id, zone_id);
+  const zonePerm = resolveZoneAccess(environment, zone_id);
   if (!zonePerm) {
     logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone not allowed' });
     return NextResponse.json({ error: 'Zone not allowed' }, { status: 403 });

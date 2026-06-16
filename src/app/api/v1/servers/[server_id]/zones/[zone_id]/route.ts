@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
-import { isZoneAllowed, filterRRSets, validatePatchPayload } from '@/lib/proxy/access-control';
+import { resolveZoneAccess, filterRRSets, validatePatchPayload } from '@/lib/proxy/access-control';
 
 /** Ensure a DNS name ends with a dot (canonical/FQDN form required by PowerDNS) */
 function canonicalize(name: string): string {
@@ -23,7 +23,7 @@ export async function GET(
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
 
-  const zonePerm = isZoneAllowed(environment.id, zone_id);
+  const zonePerm = resolveZoneAccess(environment, zone_id);
   if (!zonePerm) {
     logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone not allowed' });
     return NextResponse.json({ error: 'Zone not allowed' }, { status: 403 });
@@ -76,7 +76,7 @@ export async function PATCH(
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
 
-  const zonePerm = isZoneAllowed(environment.id, zone_id);
+  const zonePerm = resolveZoneAccess(environment, zone_id);
   if (!zonePerm) {
     logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone not allowed' });
     return NextResponse.json({ error: 'Zone not allowed' }, { status: 403 });

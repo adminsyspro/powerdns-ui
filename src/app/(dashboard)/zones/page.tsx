@@ -131,7 +131,9 @@ export default function ZonesPage() {
       .map((z) => z.name),
     [groupFilteredZones, replicatedZones],
   );
-  const replicatedNamesKey = replicatedAnalyticsNames.join(',');
+  // Include the active connection id: analytics are scoped by the active-connection
+  // header, so switching to another connection with the same zone names must refetch.
+  const replicatedNamesKey = `${activeConnection?.id ?? ''}|${replicatedAnalyticsNames.join(',')}`;
 
   React.useEffect(() => {
     setAnalyticsByZone(undefined);

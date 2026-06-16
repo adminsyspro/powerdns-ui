@@ -24,7 +24,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const body = await request.json();
     const zoneName = typeof body.zoneName === 'string' ? body.zoneName : '';
     if (!zoneName) return NextResponse.json({ error: 'zoneName is required' }, { status: 400 });
-    const nsSet = body.nsSet === null ? null : Number(body.nsSet);
+    if (body.nsSet !== null && typeof body.nsSet !== 'number') {
+      return NextResponse.json({ error: 'nsSet must be a number or null' }, { status: 400 });
+    }
+    const nsSet: number | null = body.nsSet;
     const result = await setZoneCustomNsSet(id, conn.url, zoneName, nsSet);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json({ ok: true });

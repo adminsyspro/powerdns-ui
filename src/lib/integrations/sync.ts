@@ -170,6 +170,7 @@ async function provisionZone(
       if (zone.type !== 'secondary') {
         upsertIntegrationZone(integration.id, serverUrl, zoneName, {
           remoteZoneId: zone.id,
+          remoteType: zone.type,
           status: 'error',
           message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
         });
@@ -206,6 +207,7 @@ async function provisionZone(
         if (!linkedPeers.includes(peerId)) {
           upsertIntegrationZone(integration.id, serverUrl, zoneName, {
             remoteZoneId: zone.id,
+            remoteType: zone.type,
             status: 'error',
             message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
           });
@@ -228,6 +230,7 @@ async function provisionZone(
       }
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,
+        remoteType: zone.type,
         status: 'ok',
         message: warnings.length ? warnings.join('; ') : null,
       });

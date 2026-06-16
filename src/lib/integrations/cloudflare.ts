@@ -396,8 +396,12 @@ export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string
   try {
     await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
   } catch (e) {
-    // 404 = the zone is already gone, which is the desired end state.
-    if (e instanceof CloudflareError && e.status === 404) return;
+    // Both mean the zone is already gone, which is the desired end state:
+    // HTTP 404, or Cloudflare code 1001 "Invalid zone identifier" (returned as
+    // HTTP 400 once the id no longer resolves — e.g. the zone was also deleted
+    // manually at Cloudflare). Treating 1001 as success lets a stuck orphan be
+    // removed locally instead of looping on "Remote deletion failed — will retry".
+    if (e instanceof CloudflareError && (e.status === 404 || e.codes.includes(1001))) return;
     throw e;
   }
 }

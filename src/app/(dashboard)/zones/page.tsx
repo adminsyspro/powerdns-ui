@@ -8,6 +8,7 @@ import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZonesTable } from '@/components/zones/zones-table';
 import { CreateZoneDialog } from '@/components/zones/create-zone-dialog';
@@ -50,6 +51,7 @@ export default function ZonesPage() {
   // in the table. Normalized to bare lowercase names for lookup.
   const [replicatedZones, setReplicatedZones] = React.useState<Set<string>>(new Set());
   const loadReplicatedZones = React.useCallback(async () => {
+    setReplicatedZones(new Set()); // drop previous connection's coverage immediately
     const result = await api.fetchReplicatedZoneNames();
     const names = (result.data?.zones || []).map((n) => n.toLowerCase().replace(/\.$/, ''));
     setReplicatedZones(new Set(names));
@@ -90,6 +92,15 @@ export default function ZonesPage() {
   const [sortBy, setSortBy] = React.useState('serial');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
 
+  // Cloudflare UI is shown only when there is coverage visible to this user.
+  const cloudflareEnabled = replicatedZones.size > 0;
+  const [cloudflareOnly, setCloudflareOnly] = React.useState(false);
+  // If coverage disappears (e.g. connection switch) while the filter is on, drop it
+  // so a hidden checkbox can't leave an active server filter.
+  React.useEffect(() => {
+    if (!cloudflareEnabled && cloudflareOnly) { setCloudflareOnly(false); setPage(1); }
+  }, [cloudflareEnabled, cloudflareOnly]);
+
   const { data, error, isLoading, refetch } = useCachedZones({
     page,
     pageSize,
@@ -99,6 +110,7 @@ export default function ZonesPage() {
     scope,
     sortBy,
     sortOrder,
+    replicated: cloudflareOnly && cloudflareEnabled,
   });
 
   // Reset to page 1 when filters change
@@ -109,6 +121,7 @@ export default function ZonesPage() {
   const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(1); };
   const handleGroupFilterChange = (v: string) => { setGroupFilter(v); setPage(1); };
   const handleScopeChange = (v: string) => { setScope(v as 'forward' | 'reverse'); setPage(1); };
+  const handleCloudflareOnlyChange = (v: boolean) => { setCloudflareOnly(v); setPage(1); };
 
   // Client-side group filter applied on top of the server-fetched page
   const groupFilteredZones = React.useMemo(() => {
@@ -409,6 +422,19 @@ export default function ZonesPage() {
         onBulkDelete={handleBulkDelete}
         replicatedZones={replicatedZones}
         analyticsByZone={analyticsByZone}
+        cloudflareEnabled={cloudflareEnabled}
+        cloudflareFilter={cloudflareEnabled ? (
+          <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
+            <Checkbox
+              checked={cloudflareOnly}
+              onCheckedChange={(c) => handleCloudflareOnlyChange(c === true)}
+              aria-label="Show only Cloudflare-covered zones"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/integrations/cloudflare-icon.svg" alt="" className="h-4 w-4 object-contain" />
+            Cloudflare only
+          </label>
+        ) : undefined}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isSyncing || isLoading}>

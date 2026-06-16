@@ -648,3 +648,87 @@ export async function setRecordProxied(
     body: { proxied },
   });
 }
+
+export interface ZoneTrafficPoint {
+  date: string;
+  uniques: number;
+  requests: number;
+  cachedRequests: number;
+  bytes: number;
+  cachedBytes: number;
+}
+
+export interface ZoneTrafficData {
+  points: ZoneTrafficPoint[];
+  totals: { uniques: number; requests: number; cachedRequests: number; bytes: number; cachedBytes: number };
+}
+
+/**
+ * Daily traffic for a zone over the last `days` days, via the Cloudflare GraphQL
+ * httpRequests1dGroups dataset — five metrics in one request: unique visitors,
+ * total requests, cached requests, bytes served, cached bytes. Returns null on any
+ * failure (token lacks Analytics:Read, GraphQL errors, no proxied HTTP traffic,
+ * request fails) so callers render "No data". Verified live 2026-06-16.
+ */
+export async function getZoneTraffic(
+  creds: IntegrationCredentials,
+  cfZoneId: string,
+  days = 30
+): Promise<ZoneTrafficData | null> {
+  const until = new Date();
+  const since = new Date(until.getTime() - (days - 1) * 86_400_000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const query = `query Traffic($zoneTag: string!, $since: Date!, $until: Date!) {
+    viewer {
+      zones(filter: { zoneTag: $zoneTag }) {
+        httpRequests1dGroups(limit: ${days + 1}, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) {
+          dimensions { date }
+          uniq { uniques }
+          sum { requests cachedRequests bytes cachedBytes }
+        }
+      }
+    }
+  }`;
+  type Group = {
+    dimensions: { date: string };
+    uniq?: { uniques?: number };
+    sum?: { requests?: number; cachedRequests?: number; bytes?: number; cachedBytes?: number };
+  };
+  try {
+    await acquireCfSlot();
+    const response = await fetch(CF_GRAPHQL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { zoneTag: cfZoneId, since: fmt(since), until: fmt(until) } }),
+    });
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      data?: { viewer?: { zones?: Array<{ httpRequests1dGroups?: Group[] }> } };
+      errors?: unknown[];
+    };
+    if (Array.isArray(json.errors) && json.errors.length > 0) return null;
+    const groups = json.data?.viewer?.zones?.[0]?.httpRequests1dGroups;
+    if (!Array.isArray(groups)) return null;
+    const points: ZoneTrafficPoint[] = groups.map((g) => ({
+      date: g.dimensions.date,
+      uniques: g.uniq?.uniques ?? 0,
+      requests: g.sum?.requests ?? 0,
+      cachedRequests: g.sum?.cachedRequests ?? 0,
+      bytes: g.sum?.bytes ?? 0,
+      cachedBytes: g.sum?.cachedBytes ?? 0,
+    }));
+    const totals = points.reduce(
+      (acc, p) => ({
+        uniques: acc.uniques + p.uniques,
+        requests: acc.requests + p.requests,
+        cachedRequests: acc.cachedRequests + p.cachedRequests,
+        bytes: acc.bytes + p.bytes,
+        cachedBytes: acc.cachedBytes + p.cachedBytes,
+      }),
+      { uniques: 0, requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0 }
+    );
+    return { points, totals };
+  } catch {
+    return null;
+  }
+}

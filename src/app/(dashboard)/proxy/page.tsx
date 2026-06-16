@@ -1130,6 +1130,15 @@ export default function ProxyPage() {
                     <TableRow>
                       <TableCell colSpan={7} className="bg-muted/30 p-0">
                         <div className="p-4 space-y-3">
+                          {env.fullAccess ? (
+                            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                              <h3 className="text-sm font-semibold">Full access</h3>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                This key has full access to all zones (read/write) and can create and delete zones. Per-zone permissions do not apply.
+                              </p>
+                            </div>
+                          ) : (
+                          <>
                           <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold">Zone Permissions</h3>
                             <Button size="sm" onClick={() => openAddZone(env.id)}>
@@ -1191,6 +1200,8 @@ export default function ProxyPage() {
                             </Table>
                           ) : (
                             <p className="text-sm text-muted-foreground py-2">No zone permissions configured. Add zones to grant API access.</p>
+                          )}
+                          </>
                           )}
                         </div>
                       </TableCell>

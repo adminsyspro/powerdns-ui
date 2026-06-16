@@ -254,10 +254,15 @@ export async function getZoneUniqueVisitors(
   const until = new Date();
   const since = new Date(until.getTime() - (days - 1) * 86_400_000);
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const query = `query Uniques($zoneTag: String!, $since: Date!, $until: Date!, $limit: Int!) {
+  // Cloudflare's GraphQL schema uses custom scalars: zoneTag is `string`
+  // (not the built-in String) and date_geq/date_leq are `Date`. `limit` must be
+  // a literal (Cloudflare types it as uint64, which a built-in Int variable does
+  // not satisfy), so it is inlined — days is a controlled integer. Getting these
+  // wrong fails query validation, which would surface as errors → null → "No data".
+  const query = `query Uniques($zoneTag: string!, $since: Date!, $until: Date!) {
     viewer {
       zones(filter: { zoneTag: $zoneTag }) {
-        httpRequests1dGroups(limit: $limit, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) {
+        httpRequests1dGroups(limit: ${days + 1}, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) {
           dimensions { date }
           uniq { uniques }
         }
@@ -271,7 +276,7 @@ export async function getZoneUniqueVisitors(
       headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
-        variables: { zoneTag: cfZoneId, since: fmt(since), until: fmt(until), limit: days + 1 },
+        variables: { zoneTag: cfZoneId, since: fmt(since), until: fmt(until) },
       }),
     });
     if (!response.ok) return null;

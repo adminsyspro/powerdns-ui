@@ -474,6 +474,44 @@ export async function fetchZonesAnalytics(zones: string[]) {
   });
 }
 
+export type DnsAnalyticsRange = '24h' | '7d' | '30d';
+
+export interface DnsBreakdownItem {
+  label: string;
+  sublabel?: string;
+  count: number;
+}
+
+export interface ZoneDnsAnalytics {
+  linked: boolean;
+  available?: boolean;
+  range?: DnsAnalyticsRange;
+  series?: Array<{ ts: string; count: number }>;
+  totalQueries?: number;
+  avgQps?: number;
+  avgProcessingMs?: number | null;
+  breakdowns?: {
+    queryName: DnsBreakdownItem[];
+    dnsRecord: DnsBreakdownItem[];
+    responseCode: DnsBreakdownItem[];
+    recordType: DnsBreakdownItem[];
+    dataCenter: DnsBreakdownItem[];
+    sourceIp: DnsBreakdownItem[];
+    destinationIp: DnsBreakdownItem[];
+    transport: DnsBreakdownItem[];
+    ipVersion: DnsBreakdownItem[];
+  };
+}
+
+// Cloudflare DNS analytics for one replicated zone over the given range. The
+// endpoint self-reports linked/available state; the modal renders "No data" when
+// unavailable.
+export async function fetchZoneDnsAnalytics(zone: string, range: DnsAnalyticsRange) {
+  return apiRequest<ZoneDnsAnalytics>(
+    `/api/integrations/zone-dns-analytics?zone=${encodeURIComponent(zone)}&range=${range}`
+  );
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

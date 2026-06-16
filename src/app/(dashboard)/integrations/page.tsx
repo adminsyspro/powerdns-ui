@@ -646,6 +646,23 @@ export default function IntegrationsPage() {
             </Button>
           </CardHeader>
           <CardContent>
+            {detailNsSets.length > 0 && (
+              <div className="mb-4 rounded-md border bg-muted/30 p-3">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">Custom NS sets</p>
+                <div className="space-y-1.5">
+                  {detailNsSets.map((s) => (
+                    <div key={s.set} className="flex gap-3 text-sm">
+                      <span className="font-medium whitespace-nowrap">Set {s.set}</span>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {s.nameservers.map((ns) => (
+                          <div key={ns} className="break-all">{ns}</div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {detail.connectionMissing ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
                 This integration&apos;s PowerDNS connection is missing or was deleted — edit the integration to rebind it to a connection.

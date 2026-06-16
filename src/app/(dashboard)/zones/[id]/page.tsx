@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
-  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings, Send,
+  Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings, Send, BarChart3,
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
 import { DnssecDialog } from '@/components/zones/dnssec-dialog';
 import { ZoneTrafficSparkline } from '@/components/zones/zone-traffic-sparkline';
+import { DnsAnalyticsDialog } from '@/components/zones/dns-analytics-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -288,6 +289,7 @@ export default function ZoneDetailPage() {
   const { sync } = useZoneSync();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [dnssecOpen, setDnssecOpen] = React.useState(false);
+  const [dnsAnalyticsOpen, setDnsAnalyticsOpen] = React.useState(false);
 
   // Cloudflare orange-cloud state when the zone is replicated via an
   // integration. Keys: `${bare lowercase name}|${TYPE}`.
@@ -756,6 +758,16 @@ export default function ZoneDetailPage() {
                 </TooltipTrigger>
                 <TooltipContent>DNSSEC</TooltipContent>
               </Tooltip>
+              {cfProxy?.linked && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setDnsAnalyticsOpen(true)} aria-label="DNS analytics">
+                      <BarChart3 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>DNS analytics</TooltipContent>
+                </Tooltip>
+              )}
               {/* NOTIFY is an outbound primary→secondary action, so it only applies to Master zones. Slave zones pull from their master via AXFR instead; Native and catalog zones (Producer/Consumer) have no replicas to notify. */}
               {zone.kind === 'Master' && (
                 <Tooltip>
@@ -885,6 +897,9 @@ export default function ZoneDetailPage() {
           }}
         />
       )}
+
+      {/* DNS Analytics Dialog */}
+      <DnsAnalyticsDialog zone={zoneId} open={dnsAnalyticsOpen} onOpenChange={setDnsAnalyticsOpen} />
 
       {/* Record Form Dialog */}
       <RecordFormDialog

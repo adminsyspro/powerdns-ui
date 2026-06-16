@@ -69,6 +69,8 @@ export interface IntegrationZoneRow {
   zoneName: string;
   remoteZoneId: string | null;
   remoteType: string | null;
+  // The zone's actual custom NS set at Cloudflare (refreshed at sync). null =
+  // Cloudflare-default nameservers (no custom set), or not yet read.
   customNsSet: number | null;
   status: IntegrationZoneStatus;
   message: string | null;

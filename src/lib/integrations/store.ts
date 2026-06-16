@@ -313,6 +313,25 @@ export function markZoneCustomNsSetForApply(
 }
 
 /**
+ * Records the zone's actual custom NS set (a set number, or null for
+ * Cloudflare-default nameservers). Plain UPDATE keyed on the row — never inserts,
+ * so it cannot resurrect a deleted link; a no-op if the row is gone. Unlike
+ * markZoneCustomNsSetForApply it does not touch status.
+ */
+export function setIntegrationZoneNsSet(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  nsSet: number | null
+): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE integration_zones SET custom_ns_set = ?, updated_at = unixepoch()
+      WHERE integration_id = ? AND server_url = ? AND zone_name = ?`
+  ).run(nsSet, integrationId, serverUrl, zoneName);
+}
+
+/**
  * Flags every healthy link of an integration (all servers — the peer is an
  * account-level object) so the next sync relinks them after peer/TSIG
  * settings changed.

@@ -226,6 +226,33 @@ export function upsertIntegrationZone(
   ).run(integrationId, serverUrl, zoneName, state.remoteZoneId ?? null, state.remoteType ?? null, state.status, state.message ?? null);
 }
 
+/**
+ * Conditionally backfill the Cloudflare zone type for a still-healthy link.
+ * Writes remote_type ONLY when the row still matches the snapshot the caller
+ * acted on (same remoteZoneId, still 'ok', type not yet set). This is an UPDATE
+ * (never an upsert), so it cannot re-insert a row deleted mid-flight, and the
+ * WHERE guard prevents restoring an obsolete 'ok' state if the row changed
+ * (purged, marked stale, re-provisioned) during the async Cloudflare lookup.
+ * Returns true if a row was updated.
+ */
+export function backfillIntegrationZoneType(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  remoteZoneId: string,
+  remoteType: string
+): boolean {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE integration_zones SET remote_type = ?
+        WHERE integration_id = ? AND server_url = ? AND zone_name = ?
+          AND remote_zone_id = ? AND status = 'ok' AND remote_type IS NULL`
+    )
+    .run(remoteType, integrationId, serverUrl, zoneName, remoteZoneId);
+  return result.changes > 0;
+}
+
 export function getIntegrationZone(
   integrationId: string,
   serverUrl: string,

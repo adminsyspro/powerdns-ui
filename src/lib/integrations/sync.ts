@@ -11,6 +11,7 @@ import {
   listIntegrationZones,
   updateIntegration,
   upsertIntegrationZone,
+  backfillIntegrationZoneType,
   deleteIntegrationZoneIfRemote,
 } from './store';
 import type { IntegrationConfig, IntegrationCredentials, IntegrationRow } from './types';
@@ -364,17 +365,13 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
           // Fetch the Cloudflare zone type once and store it (status/message
           // unchanged). Best-effort — skipped automatically once populated, so this
           // never re-fetches on subsequent syncs.
+          const rz = link.remoteZoneId;
           const fresh = getIntegration(integrationId);
           if (fresh) {
             try {
               const cfZone = await cloudflare.getZoneByName(creds, fresh.config.accountId, bareName(zone.name));
               if (cfZone) {
-                upsertIntegrationZone(integrationId, normalizedUrl, zone.name, {
-                  remoteZoneId: link.remoteZoneId,
-                  remoteType: cfZone.type,
-                  status: 'ok',
-                  message: link.message,
-                });
+                backfillIntegrationZoneType(integrationId, normalizedUrl, zone.name, rz, cfZone.type);
               }
             } catch {
               // Best-effort: leave remote_type null and retry on the next sync.

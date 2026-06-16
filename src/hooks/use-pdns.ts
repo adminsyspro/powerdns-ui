@@ -97,7 +97,7 @@ export function useCachedZones(params: api.CachedZonesParams) {
   const conn = useConnectionSync();
   return useFetch<api.PaginatedZonesResponse>(
     () => api.fetchCachedZones(params),
-    [conn?.id, params.page, params.pageSize, params.search, params.kind, params.dnssec, params.scope, params.sortBy, params.sortOrder],
+    [conn?.id, params.page, params.pageSize, params.search, params.kind, params.dnssec, params.scope, params.sortBy, params.sortOrder, params.replicated],
     !!conn
   );
 }

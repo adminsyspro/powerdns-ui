@@ -517,6 +517,7 @@ export interface CachedZonesParams {
   scope?: 'forward' | 'reverse';
   sortBy?: string;
   sortOrder?: string;
+  replicated?: boolean;
 }
 
 export async function fetchCachedZones(params: CachedZonesParams) {

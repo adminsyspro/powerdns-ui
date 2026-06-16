@@ -153,7 +153,8 @@ async function provisionZone(
     // edit, transient Cloudflare outage) doesn't lose the working reference.
     // Once the retry has found/created a (possibly different) remote zone,
     // that id supersedes the old one — even on the failure path.
-    let currentRemoteId = getIntegrationZone(integration.id, serverUrl, zoneName)?.remoteZoneId ?? null;
+    const existingLink = getIntegrationZone(integration.id, serverUrl, zoneName);
+    let currentRemoteId = existingLink?.remoteZoneId ?? null;
     upsertIntegrationZone(integration.id, serverUrl, zoneName, {
       remoteZoneId: currentRemoteId,
       status: 'provisioning',
@@ -164,6 +165,7 @@ async function provisionZone(
       const peerId = await ensurePeerOnce(integration, creds);
 
       let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
+      const zonePreExisted = Boolean(zone);
       if (!zone) {
         zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
       }
@@ -216,7 +218,15 @@ async function provisionZone(
         }
       }
 
-      if (config.customNsMode !== 'ignore') {
+      // Custom NS precedence (adopt-don't-touch):
+      //  1. an explicit per-zone override is forced, even on an existing zone
+      //     (the admin chose it deliberately; the UI confirms the registrar-alignment risk);
+      //  2. otherwise the integration's global policy applies ONLY to a zone we just
+      //     created — never overriding an existing/adopted zone's nameservers;
+      //  3. an existing zone with no override keeps its current Cloudflare NS.
+      if (existingLink?.customNsSet != null) {
+        await cloudflare.setZoneCustomNs(creds, zone.id, true, existingLink.customNsSet);
+      } else if (!zonePreExisted && config.customNsMode !== 'ignore') {
         await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
       }
       await cloudflare.forceAxfr(creds, zone.id);

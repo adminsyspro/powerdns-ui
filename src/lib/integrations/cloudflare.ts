@@ -352,6 +352,128 @@ export async function getZonesUniqueVisitors(
   return result;
 }
 
+export interface DnsBreakdownItem {
+  label: string;
+  sublabel?: string;
+  count: number;
+}
+
+export interface ZoneDnsAnalyticsData {
+  series: Array<{ ts: string; count: number }>;
+  totalQueries: number;
+  avgProcessingMs: number | null;
+  breakdowns: {
+    queryName: DnsBreakdownItem[];
+    dnsRecord: DnsBreakdownItem[];
+    responseCode: DnsBreakdownItem[];
+    recordType: DnsBreakdownItem[];
+    dataCenter: DnsBreakdownItem[];
+    sourceIp: DnsBreakdownItem[];
+    destinationIp: DnsBreakdownItem[];
+    transport: DnsBreakdownItem[];
+    ipVersion: DnsBreakdownItem[];
+  };
+}
+
+export type DnsAnalyticsRange = '24h' | '7d' | '30d';
+
+// Range → window length, the GraphQL time-bucket dimension, and the exact series
+// row count (inlined as a literal because Cloudflare types `limit` as uint64).
+// Bucket counts verified live: 24h→96, 7d→168; 744 = 31×24 (safe upper bound for 30d).
+const DNS_RANGE_CFG: Record<DnsAnalyticsRange, { ms: number; bucket: string; seriesLimit: number }> = {
+  '24h': { ms: 24 * 3_600_000, bucket: 'datetimeFifteenMinutes', seriesLimit: 96 },
+  '7d': { ms: 7 * 86_400_000, bucket: 'datetimeHour', seriesLimit: 168 },
+  '30d': { ms: 30 * 86_400_000, bucket: 'datetimeHour', seriesLimit: 744 },
+};
+
+/**
+ * Per-zone DNS analytics over `range`, via one aliased Cloudflare GraphQL request
+ * to the dnsAnalyticsAdaptiveGroups dataset. Returns a timeseries (total queries
+ * per time bucket), total + average processing time (Cloudflare reports
+ * microseconds → converted to ms), and the top-10 ranked breakdowns. Returns null
+ * on any failure (token lacks Analytics:Read, GraphQL errors, no data, network
+ * error) so callers render "No data" rather than erroring.
+ */
+export async function getZoneDnsAnalytics(
+  creds: IntegrationCredentials,
+  cfZoneId: string,
+  range: DnsAnalyticsRange
+): Promise<ZoneDnsAnalyticsData | null> {
+  if (!/^[a-f0-9]{32}$/i.test(cfZoneId)) return null;
+  const cfg = DNS_RANGE_CFG[range];
+  const until = new Date();
+  const since = new Date(until.getTime() - cfg.ms);
+  // Shared filter; `limit` is inlined per alias (uint64), like getZoneUniqueVisitors.
+  const F = `filter: { datetime_geq: $s, datetime_leq: $u }`;
+  const top = (alias: string, dims: string) =>
+    `${alias}: dnsAnalyticsAdaptiveGroups(limit: 10, ${F}, orderBy: [count_DESC]) { count dimensions { ${dims} } }`;
+  const query = `query Dns($zt: string!, $s: Time!, $u: Time!) {
+    viewer { zones(filter: { zoneTag: $zt }) {
+      series: dnsAnalyticsAdaptiveGroups(limit: ${cfg.seriesLimit}, ${F}, orderBy: [${cfg.bucket}_ASC]) { count dimensions { ${cfg.bucket} } }
+      stats: dnsAnalyticsAdaptiveGroups(limit: 1, ${F}) { count avg { processingTimeUs } }
+      ${top('byName', 'queryName')}
+      ${top('byRecord', 'queryName queryType')}
+      ${top('byRcode', 'responseCode')}
+      ${top('byType', 'queryType')}
+      ${top('byColo', 'coloName')}
+      ${top('bySrc', 'sourceIP')}
+      ${top('byDst', 'destinationIP')}
+      ${top('byProto', 'protocol')}
+      ${top('byIpv', 'ipVersion')}
+    } }
+  }`;
+
+  type Dims = Record<string, string | number | null | undefined>;
+  type Row = { count?: number; avg?: { processingTimeUs?: number | null } | null; dimensions?: Dims };
+  try {
+    await acquireCfSlot();
+    const response = await fetch(CF_GRAPHQL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        variables: { zt: cfZoneId, s: since.toISOString(), u: until.toISOString() },
+      }),
+    });
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      data?: { viewer?: { zones?: Array<Record<string, Row[] | undefined>> } };
+      errors?: unknown[];
+    };
+    if (Array.isArray(json.errors) && json.errors.length > 0) return null;
+    const z = json.data?.viewer?.zones?.[0];
+    if (!z) return null;
+
+    const series = (z.series ?? []).map((r) => ({
+      ts: String(r.dimensions?.[cfg.bucket] ?? ''),
+      count: r.count ?? 0,
+    }));
+    const s = z.stats?.[0];
+    const totalQueries = s?.count ?? 0;
+    const us = s?.avg?.processingTimeUs;
+    const avgProcessingMs = typeof us === 'number' ? us / 1000 : null;
+
+    return {
+      series,
+      totalQueries,
+      avgProcessingMs,
+      breakdowns: {
+        queryName: (z.byName ?? []).map((r) => ({ label: String(r.dimensions?.queryName ?? '—'), count: r.count ?? 0 })),
+        dnsRecord: (z.byRecord ?? []).map((r) => ({ label: String(r.dimensions?.queryName ?? '—'), sublabel: String(r.dimensions?.queryType ?? ''), count: r.count ?? 0 })),
+        responseCode: (z.byRcode ?? []).map((r) => ({ label: String(r.dimensions?.responseCode ?? '—'), count: r.count ?? 0 })),
+        recordType: (z.byType ?? []).map((r) => ({ label: String(r.dimensions?.queryType ?? '—'), count: r.count ?? 0 })),
+        dataCenter: (z.byColo ?? []).map((r) => ({ label: String(r.dimensions?.coloName ?? '—'), count: r.count ?? 0 })),
+        sourceIp: (z.bySrc ?? []).map((r) => ({ label: String(r.dimensions?.sourceIP ?? '—'), count: r.count ?? 0 })),
+        destinationIp: (z.byDst ?? []).map((r) => ({ label: String(r.dimensions?.destinationIP ?? '—'), count: r.count ?? 0 })),
+        transport: (z.byProto ?? []).map((r) => ({ label: String(r.dimensions?.protocol ?? '—'), count: r.count ?? 0 })),
+        ipVersion: (z.byIpv ?? []).map((r) => ({ label: `IPv${Number(r.dimensions?.ipVersion ?? 0)}`, count: r.count ?? 0 })),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function createSecondaryZone(
   creds: IntegrationCredentials,
   accountId: string,

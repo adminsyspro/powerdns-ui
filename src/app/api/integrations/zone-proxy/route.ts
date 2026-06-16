@@ -1,30 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionFromRequest } from '@/lib/pdns-proxy';
-import {
-  getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones,
-  AuthzError, authzErrorResponse,
-} from '@/lib/auth/authz';
-import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { findZoneLink } from '@/lib/integrations/sync';
 import { getIntegrationCredentials } from '@/lib/integrations/store';
 import { listDnsRecords, setRecordProxied } from '@/lib/integrations/cloudflare';
+import { canonZone, authorizeZone } from '@/lib/integrations/zone-auth';
 
 // Cloudflare can only proxy these record types.
 const PROXYABLE_TYPES = new Set(['A', 'AAAA', 'CNAME']);
-
-function canonZone(zone: string): string {
-  return zone.endsWith('.') ? zone : `${zone}.`;
-}
-
-function authorizeZone(request: NextRequest, zoneName: string, action: 'read' | 'write-zone') {
-  const ctx = requireAuth(getAuthContextFromHeaders(request));
-  const conn = getConnectionFromRequest(request);
-  const account = getZoneAccountByIdAndServer(conn.url, zoneName);
-  if (account === null && !canSeeAllZones(ctx.role)) {
-    throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
-  }
-  requireZoneAccess(ctx, { account: account ?? '' }, action);
-}
 
 // GET /api/integrations/zone-proxy?zone=example.com.
 // Returns whether the zone is replicated to Cloudflare and, if so, the

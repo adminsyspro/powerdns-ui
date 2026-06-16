@@ -59,14 +59,19 @@ export function ZoneTrafficSparklines({ zoneName }: { zoneName: string }) {
     { data: mk((p) => p.cachedBytes), total: t.cachedBytes, valueLabel: formatBytes(t.cachedBytes), label: 'Data cached', color: '#06b6d4' },
   ];
 
+  // One shrinkable, no-wrap container so the five charts share the available width
+  // and shrink together (responsive) instead of wrapping onto a new line.
   return (
     <>
-      {metrics.map((m) => (
-        <React.Fragment key={m.label}>
-          <div className="w-px h-5 bg-border" />
-          <Sparkline points={m.data} total={m.total} valueLabel={m.valueLabel} label={m.label} color={m.color} dataKey="v" />
-        </React.Fragment>
-      ))}
+      <div className="w-px h-5 bg-border flex-shrink-0" />
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {metrics.map((m, i) => (
+          <React.Fragment key={m.label}>
+            {i > 0 ? <div className="w-px h-5 bg-border flex-shrink-0" /> : null}
+            <Sparkline points={m.data} total={m.total} valueLabel={m.valueLabel} label={m.label} color={m.color} dataKey="v" fluid />
+          </React.Fragment>
+        ))}
+      </div>
     </>
   );
 }

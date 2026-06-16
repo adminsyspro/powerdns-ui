@@ -48,6 +48,7 @@ interface ProxyEnvironment {
   description: string;
   tokenSha512: string;
   active: boolean;
+  fullAccess: boolean;
   zoneCount: number;
   zones?: ZonePermission[];
   createdAt: string;
@@ -73,7 +74,7 @@ export default function ProxyPage() {
     allowedRecords: string[];
   }
   const emptyZone = (): EnvFormZone => ({ zoneName: '', acmeEnabled: false, allowedRecords: [] });
-  const [envForm, setEnvForm] = React.useState<{ name: string; description: string; zones: EnvFormZone[] }>({ name: '', description: '', zones: [] });
+  const [envForm, setEnvForm] = React.useState<{ name: string; description: string; fullAccess: boolean; zones: EnvFormZone[] }>({ name: '', description: '', fullAccess: false, zones: [] });
   const [envError, setEnvError] = React.useState('');
 
   // Token display dialog
@@ -189,10 +190,11 @@ export default function ProxyPage() {
       : '/api/proxy/environments';
     const method = editingEnv ? 'PUT' : 'POST';
 
-    const payload: Record<string, unknown> = { name: envForm.name, description: envForm.description };
+    const payload: Record<string, unknown> = { name: envForm.name, description: envForm.description, fullAccess: envForm.fullAccess };
 
-    // Include zones — auto-detect regex patterns (contain * or other regex chars)
-    if (envForm.zones.length > 0 || editingEnv) {
+    // Include zones — auto-detect regex patterns (contain * or other regex chars).
+    // Full-access keys own no zone permissions, so never send a zones array for them.
+    if (!envForm.fullAccess && (envForm.zones.length > 0 || editingEnv)) {
       payload.zones = envForm.zones
         .filter((z) => z.zoneName.trim())
         .map((z) => {
@@ -239,7 +241,7 @@ export default function ProxyPage() {
     const editedId = editingEnv?.id;
     setEnvDialogOpen(false);
     setEditingEnv(null);
-    setEnvForm({ name: '', description: '', zones: [] });
+    setEnvForm({ name: '', description: '', fullAccess: false, zones: [] });
     fetchEnvironments();
     if (editedId) fetchEnvDetails(editedId);
   };
@@ -268,9 +270,9 @@ export default function ProxyPage() {
           }),
         };
       });
-      setEnvForm({ name: env.name, description: env.description || '', zones });
+      setEnvForm({ name: env.name, description: env.description || '', fullAccess: env.fullAccess, zones: env.fullAccess ? [] : zones });
     } else {
-      setEnvForm({ name: env.name, description: env.description || '', zones: [] });
+      setEnvForm({ name: env.name, description: env.description || '', fullAccess: env.fullAccess, zones: [] });
     }
 
     setEnvDialogOpen(true);
@@ -682,7 +684,7 @@ export default function ProxyPage() {
           {/* Add environment button */}
           <Dialog open={envDialogOpen} onOpenChange={(open) => { setEnvDialogOpen(open); if (!open) { setEditingEnv(null); setEnvError(''); } }}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditingEnv(null); setEnvForm({ name: '', description: '', zones: [] }); }}>
+              <Button onClick={() => { setEditingEnv(null); setEnvForm({ name: '', description: '', fullAccess: false, zones: [] }); }}>
                 <Plus className="mr-2 h-4 w-4" />Add API Access
               </Button>
             </DialogTrigger>
@@ -717,7 +719,25 @@ export default function ProxyPage() {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Full access</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Accès à toutes les zones + création / modification / suppression. Aucune permission par zone.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={envForm.fullAccess}
+                    onCheckedChange={(checked) => setEnvForm({ ...envForm, fullAccess: checked })}
+                  />
+                </div>
+                {envForm.fullAccess && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+                    Cette clé a un accès complet à toutes les zones du serveur (CRUD), y compris la création et la suppression. À réserver à des applications de confiance.
+                  </div>
+                )}
                 {/* Inline zones */}
+                {!envForm.fullAccess && (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <Label className="text-base font-semibold">Zones</Label>
@@ -849,6 +869,7 @@ export default function ProxyPage() {
                       );
                     })}
                   </div>
+                )}
 
                 <DialogFooter>
                   <Button type="submit">{editingEnv ? 'Update' : 'Create'}</Button>
@@ -1022,7 +1043,11 @@ export default function ProxyPage() {
                     <TableCell className="font-medium">{env.name}</TableCell>
                     <TableCell className="text-muted-foreground">{env.description || '—'}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{env.zoneCount}</Badge>
+                      {env.fullAccess ? (
+                        <Badge variant="destructive">Full access</Badge>
+                      ) : (
+                        <Badge variant="secondary">{env.zoneCount}</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {env.active ? (

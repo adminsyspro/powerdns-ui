@@ -190,7 +190,7 @@ export default function IntegrationsPage() {
 
   // Custom-NS sets available on the Cloudflare account (loaded on demand for
   // the set selector; needs the account id plus a token — typed or stored).
-  const [nsSets, setNsSets] = React.useState<Array<{ set: number; nameservers: string[] }> | null>(null);
+  const [nsSets, setNsSets] = React.useState<Array<{ set: number; nameservers: Array<{ host: string; ip: string | null }> }> | null>(null);
   const [nsSetsError, setNsSetsError] = React.useState<string | null>(null);
   const [nsSetsLoading, setNsSetsLoading] = React.useState(false);
   const canLoadNsSets = Boolean(form.accountId.trim() && (form.apiToken.trim() || editing));
@@ -464,7 +464,7 @@ export default function IntegrationsPage() {
   // NS sets for the detail-panel per-zone selector — independent of the dialog's
   // nsSets (which is form-scoped and cleared when the dialog closes). Loaded by
   // integrationId whenever the selected integration manages custom NS.
-  const [detailNsSets, setDetailNsSets] = React.useState<Array<{ set: number; nameservers: string[] }>>([]);
+  const [detailNsSets, setDetailNsSets] = React.useState<Array<{ set: number; nameservers: Array<{ host: string; ip: string | null }> }>>([]);
   const [nsSetPending, setNsSetPending] = React.useState<string | null>(null);
   React.useEffect(() => {
     const acct = selected?.config.accountId;
@@ -653,11 +653,9 @@ export default function IntegrationsPage() {
                   {detailNsSets.map((s) => (
                     <div key={s.set} className="flex gap-3 text-sm">
                       <span className="font-medium whitespace-nowrap">Set {s.set}</span>
-                      <div className="font-mono text-xs text-muted-foreground">
-                        {s.nameservers.map((ns) => (
-                          <div key={ns} className="break-all">{ns}</div>
-                        ))}
-                      </div>
+                      <span className="font-mono text-xs text-muted-foreground break-all">
+                        {s.nameservers.map((n) => (n.ip ? `${n.host} (${n.ip})` : n.host)).join(', ')}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -717,7 +715,7 @@ export default function IntegrationsPage() {
                             <SelectContent>
                               <SelectItem value="__default__">NS Cloudflare Default</SelectItem>
                               {detailNsSets.map((s) => (
-                                <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.join(', ')}>
+                                <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.map((n) => n.host).join(', ')}>
                                   Set {s.set}
                                 </SelectItem>
                               ))}
@@ -975,7 +973,7 @@ export default function IntegrationsPage() {
                         <SelectContent>
                           {nsSets.map(({ set, nameservers }) => (
                             <SelectItem key={set} value={String(set)}>
-                              Set {set} — {nameservers.map((ns) => ns.replace(/\.$/, '')).join(', ')}
+                              Set {set} — {nameservers.map((n) => n.host.replace(/\.$/, '')).join(', ')}
                             </SelectItem>
                           ))}
                           {/* Preserve a configured set that no longer exists on the account

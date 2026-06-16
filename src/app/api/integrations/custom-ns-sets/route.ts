@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration, getIntegrationCredentials } from '@/lib/integrations/store';
 import { listAccountCustomNs } from '@/lib/integrations/cloudflare';
+import { resolve4 } from 'dns/promises';
 
 // POST /api/integrations/custom-ns-sets — list the custom nameserver sets of
 // a Cloudflare account, for the set selector in the integration dialog.
@@ -31,9 +32,28 @@ export async function POST(request: NextRequest) {
         list.push(entry.ns_name);
         bySets.set(entry.ns_set, list);
       }
+      // Resolve each unique nameserver's IPv4 (A) record once, in parallel.
+      // Best-effort: a failed lookup yields null and never fails the request.
+      const uniqueHosts = [...new Set(entries.map((e) => e.ns_name))];
+      const ipByHost = new Map<string, string | null>();
+      await Promise.all(
+        uniqueHosts.map(async (host) => {
+          try {
+            const ips = await resolve4(host);
+            ipByHost.set(host, ips[0] ?? null);
+          } catch {
+            ipByHost.set(host, null);
+          }
+        })
+      );
       const sets = [...bySets.entries()]
         .sort((a, b) => a[0] - b[0])
-        .map(([set, nameservers]) => ({ set, nameservers: nameservers.sort((a, b) => a.localeCompare(b)) }));
+        .map(([set, nameservers]) => ({
+          set,
+          nameservers: nameservers
+            .sort((a, b) => a.localeCompare(b))
+            .map((host) => ({ host, ip: ipByHost.get(host) ?? null })),
+        }));
       return NextResponse.json({ sets });
     } catch (e) {
       return NextResponse.json(

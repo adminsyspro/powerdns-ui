@@ -416,7 +416,7 @@ export async function fetchIntegrationStats() {
 }
 
 export async function fetchCustomNsSets(input: { accountId: string; apiToken?: string; integrationId?: string }) {
-  return apiRequest<{ sets: Array<{ set: number; nameservers: string[] }> }>(
+  return apiRequest<{ sets: Array<{ set: number; nameservers: Array<{ host: string; ip: string | null }> }> }>(
     '/api/integrations/custom-ns-sets',
     { method: 'POST', body: JSON.stringify(input) }
   );

@@ -420,16 +420,16 @@ export default function IntegrationsPage() {
   const handleSetNsSet = async (zoneName: string, value: string) => {
     if (!selectedId) return;
     const id = selectedId;
-    const nsSet = value === '__inherit__' ? null : Number(value);
+    const nsSet = value === '__default__' ? null : Number(value);
     const bareName = zoneName.replace(/\.$/, '');
     setNsSetPending(zoneName);
     try {
       const ok = await confirm(
         nsSet === null
           ? {
-              title: 'Stop overriding the NS set',
-              description: `Stop overriding the custom nameserver set for "${bareName}"? This zone keeps its current Cloudflare nameservers — the integration default only applies to newly created zones.`,
-              confirmLabel: 'Stop overriding',
+              title: 'Switch to Cloudflare-default NS',
+              description: `Switch "${bareName}" back to Cloudflare-default nameservers (disable its custom NS set)? This changes the zone's nameservers at Cloudflare and can break resolution if the registrar still points at a custom set.`,
+              confirmLabel: 'Use Cloudflare default',
             }
           : {
               title: 'Change custom NS set',
@@ -468,7 +468,7 @@ export default function IntegrationsPage() {
   const [nsSetPending, setNsSetPending] = React.useState<string | null>(null);
   React.useEffect(() => {
     const acct = selected?.config.accountId;
-    if (!selectedId || !acct || selected?.config.customNsMode !== 'enable') {
+    if (!selectedId || !acct) {
       setDetailNsSets([]);
       return;
     }
@@ -688,17 +688,17 @@ export default function IntegrationsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {selected?.config.customNsMode === 'enable' && zone.status === 'ok' && zone.remoteType === 'secondary' ? (
+                        {zone.status === 'ok' && zone.remoteType === 'secondary' ? (
                           <Select
-                            value={zone.customNsSet != null ? String(zone.customNsSet) : '__inherit__'}
+                            value={zone.customNsSet != null ? String(zone.customNsSet) : '__default__'}
                             onValueChange={(value) => handleSetNsSet(zone.zoneName, value)}
                             disabled={nsSetPending === zone.zoneName}
                           >
-                            <SelectTrigger className="w-[150px] h-8">
+                            <SelectTrigger className="w-[180px] h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__inherit__">Inherit — keep current Cloudflare NS</SelectItem>
+                              <SelectItem value="__default__">NS Cloudflare Default</SelectItem>
                               {detailNsSets.map((s) => (
                                 <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.join(', ')}>
                                   Set {s.set}

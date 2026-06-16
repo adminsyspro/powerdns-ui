@@ -624,5 +624,10 @@ export async function setZoneCustomNsSet(
   if (link && link.status === 'error') {
     return { ok: false, status: 502, error: link.message || 'Failed to apply custom NS set at Cloudflare' };
   }
+  if (link && link.status === 'stale') {
+    // provisionZone was skipped because another provisioning flight for this zone
+    // is in progress; the override is staged and the next sync will apply it.
+    return { ok: false, status: 409, error: 'A sync is already provisioning this zone — the new NS set is staged and will be applied on the next sync' };
+  }
   return { ok: true };
 }

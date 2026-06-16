@@ -421,17 +421,17 @@ export default function IntegrationsPage() {
     if (!selectedId) return;
     const id = selectedId;
     const nsSet = value === '__inherit__' ? null : Number(value);
-    const ok = await confirm({
-      title: 'Change custom NS set',
-      description: `Changing the custom nameserver set for "${zoneName.replace(/\.$/, '')}" updates the zone's nameservers at Cloudflare. This can break resolution if they are not aligned with the NS delegation at your registrar. Continue?`,
-      confirmLabel: 'Change NS set',
-    });
-    if (!ok) {
-      await loadDetail(id);
-      return;
-    }
     setNsSetPending(zoneName);
     try {
+      const ok = await confirm({
+        title: 'Change custom NS set',
+        description: `Changing the custom nameserver set for "${zoneName.replace(/\.$/, '')}" updates the zone's nameservers at Cloudflare. This can break resolution if they are not aligned with the NS delegation at your registrar. Continue?`,
+        confirmLabel: 'Change NS set',
+      });
+      if (!ok) {
+        await loadDetail(id);
+        return;
+      }
       const result = await api.setIntegrationZoneCustomNsSet(id, zoneName, nsSet);
       if (result.error) setError(result.error);
       await loadDetail(id);

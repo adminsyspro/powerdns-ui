@@ -417,6 +417,25 @@ export default function IntegrationsPage() {
     else await loadDetail(selectedId);
   };
 
+  const handleSetNsSet = async (zoneName: string, value: string) => {
+    if (!selectedId) return;
+    const nsSet = value === '__inherit__' ? null : Number(value);
+    const ok = await confirm({
+      title: 'Change custom NS set',
+      description: `Changing the custom nameserver set for "${zoneName.replace(/\.$/, '')}" updates the zone's nameservers at Cloudflare. This can break resolution if they are not aligned with the NS delegation at your registrar. Continue?`,
+      confirmLabel: 'Change NS set',
+    });
+    if (!ok) {
+      await loadDetail(selectedId);
+      return;
+    }
+    setNsSetPending(zoneName);
+    const result = await api.setIntegrationZoneCustomNsSet(selectedId, zoneName, nsSet);
+    if (result.error) setError(result.error);
+    await loadDetail(selectedId);
+    setNsSetPending(null);
+  };
+
   const handleToggleActive = async (integration: IntegrationRow) => {
     await api.updateIntegrationApi(integration.id, { active: !integration.active });
     await load();
@@ -428,6 +447,25 @@ export default function IntegrationsPage() {
     });
 
   const selected = integrations.find((i) => i.id === selectedId) ?? null;
+
+  // NS sets for the detail-panel per-zone selector — independent of the dialog's
+  // nsSets (which is form-scoped and cleared when the dialog closes). Loaded by
+  // integrationId whenever the selected integration manages custom NS.
+  const [detailNsSets, setDetailNsSets] = React.useState<Array<{ set: number; nameservers: string[] }>>([]);
+  const [nsSetPending, setNsSetPending] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const acct = selected?.config.accountId;
+    if (!selectedId || !acct || selected?.config.customNsMode !== 'enable') {
+      setDetailNsSets([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const result = await api.fetchCustomNsSets({ accountId: acct, integrationId: selectedId });
+      if (!cancelled) setDetailNsSets(result.data?.sets ?? []);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedId, selected?.config.customNsMode, selected?.config.accountId]);
 
   const zonesTotalPages = Math.max(1, Math.ceil((detail?.zones.length ?? 0) / zonesPageSize));
   const paginatedZones = detail
@@ -610,6 +648,7 @@ export default function IntegrationsPage() {
                   <TableRow>
                     <TableHead className="font-semibold">Zone</TableHead>
                     <TableHead className="font-semibold">Cloudflare Type</TableHead>
+                    <TableHead className="font-semibold">NS set</TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
                     <TableHead className="font-semibold">Message</TableHead>
                     <TableHead className="font-semibold whitespace-nowrap">Updated</TableHead>
@@ -631,6 +670,29 @@ export default function IntegrationsPage() {
                       <TableCell>
                         {zone.remoteType ? (
                           <Badge variant="outline" className="capitalize">{zone.remoteType}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {selected?.config.customNsMode === 'enable' && zone.status === 'ok' && zone.remoteType === 'secondary' ? (
+                          <Select
+                            value={zone.customNsSet != null ? String(zone.customNsSet) : '__inherit__'}
+                            onValueChange={(value) => handleSetNsSet(zone.zoneName, value)}
+                            disabled={nsSetPending === zone.zoneName}
+                          >
+                            <SelectTrigger className="w-[150px] h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__inherit__">Default (set {selected.config.customNsSet})</SelectItem>
+                              {detailNsSets.map((s) => (
+                                <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.join(', ')}>
+                                  Set {s.set}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

@@ -419,6 +419,7 @@ export default function IntegrationsPage() {
 
   const handleSetNsSet = async (zoneName: string, value: string) => {
     if (!selectedId) return;
+    const id = selectedId;
     const nsSet = value === '__inherit__' ? null : Number(value);
     const ok = await confirm({
       title: 'Change custom NS set',
@@ -426,14 +427,17 @@ export default function IntegrationsPage() {
       confirmLabel: 'Change NS set',
     });
     if (!ok) {
-      await loadDetail(selectedId);
+      await loadDetail(id);
       return;
     }
     setNsSetPending(zoneName);
-    const result = await api.setIntegrationZoneCustomNsSet(selectedId, zoneName, nsSet);
-    if (result.error) setError(result.error);
-    await loadDetail(selectedId);
-    setNsSetPending(null);
+    try {
+      const result = await api.setIntegrationZoneCustomNsSet(id, zoneName, nsSet);
+      if (result.error) setError(result.error);
+      await loadDetail(id);
+    } finally {
+      setNsSetPending(null);
+    }
   };
 
   const handleToggleActive = async (integration: IntegrationRow) => {

@@ -118,6 +118,33 @@ export default function ZonesPage() {
     return items.filter((z) => z.account === groupFilter);
   }, [data?.items, groupFilter]);
 
+  // Batch Cloudflare unique-visitors for the replicated zones among the rendered
+  // rows. undefined = loading (table shows skeletons). Keyed by exact zone.name.
+  const [analyticsByZone, setAnalyticsByZone] = React.useState<
+    Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }> | undefined
+  >(undefined);
+
+  // Exact names (trailing-dot canonical, as stored) of replicated rendered rows.
+  const replicatedAnalyticsNames = React.useMemo(
+    () => groupFilteredZones
+      .filter((z) => replicatedZones.has(z.name.toLowerCase().replace(/\.$/, '')))
+      .map((z) => z.name),
+    [groupFilteredZones, replicatedZones],
+  );
+  const replicatedNamesKey = replicatedAnalyticsNames.join(',');
+
+  React.useEffect(() => {
+    setAnalyticsByZone(undefined);
+    if (replicatedAnalyticsNames.length === 0) { setAnalyticsByZone({}); return; }
+    let cancelled = false;
+    api.fetchZonesAnalytics(replicatedAnalyticsNames).then((result) => {
+      if (cancelled) return;
+      setAnalyticsByZone(result.data?.analytics ?? {});
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replicatedNamesKey]);
+
   const handleRefresh = async () => {
     await sync();
     refetch();
@@ -379,6 +406,7 @@ export default function ZonesPage() {
         isGlobalSearching={isGlobalSearching}
         onBulkDelete={handleBulkDelete}
         replicatedZones={replicatedZones}
+        analyticsByZone={analyticsByZone}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isSyncing || isLoading}>

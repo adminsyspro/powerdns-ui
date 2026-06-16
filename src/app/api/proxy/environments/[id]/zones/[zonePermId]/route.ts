@@ -35,6 +35,14 @@ export async function PUT(
   const { id, zonePermId } = await params;
   const db = getDb();
 
+  const env = db.prepare('SELECT full_access FROM proxy_environments WHERE id = ?').get(id) as { full_access: number } | undefined;
+  if (env?.full_access === 1) {
+    return NextResponse.json(
+      { error: 'Environment is full-access; zone permissions do not apply' },
+      { status: 409 }
+    );
+  }
+
   const existing = db.prepare(
     'SELECT * FROM proxy_zone_permissions WHERE id = ? AND environment_id = ?'
   ).get(zonePermId, id) as ProxyZonePermissionRow | undefined;
@@ -104,6 +112,14 @@ export async function DELETE(
 
   const { id, zonePermId } = await params;
   const db = getDb();
+
+  const env = db.prepare('SELECT full_access FROM proxy_environments WHERE id = ?').get(id) as { full_access: number } | undefined;
+  if (env?.full_access === 1) {
+    return NextResponse.json(
+      { error: 'Environment is full-access; zone permissions do not apply' },
+      { status: 409 }
+    );
+  }
 
   const existing = db.prepare(
     'SELECT id FROM proxy_zone_permissions WHERE id = ? AND environment_id = ?'

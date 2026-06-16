@@ -36,9 +36,15 @@ export async function POST(
 
   const { id } = await params;
   const db = getDb();
-  const env = db.prepare('SELECT id FROM proxy_environments WHERE id = ?').get(id);
+  const env = db.prepare('SELECT id, full_access FROM proxy_environments WHERE id = ?').get(id) as { id: string; full_access: number } | undefined;
   if (!env) {
     return NextResponse.json({ error: 'Environment not found' }, { status: 404 });
+  }
+  if (env.full_access === 1) {
+    return NextResponse.json(
+      { error: 'Environment is full-access; zone permissions do not apply' },
+      { status: 409 }
+    );
   }
 
   const body = await request.json();

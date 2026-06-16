@@ -181,12 +181,14 @@ async function provisionZone(
         return;
       }
 
-      // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so a
-      // zone linked to a peer is necessarily Enterprise. setZonePlan only runs
-      // when the zone is NOT enterprise — which therefore can't be a foreign
-      // working secondary — so upgrading it here, before the Enterprise-only
-      // linkZoneToPeer, is always safe. Best-effort; idempotent (skip if enterprise).
-      if (zone.plan?.id !== 'enterprise') {
+      // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so an
+      // existing zone we adopt is necessarily already Enterprise — never try to set
+      // its plan. Doing so on an adopted zone surfaces a spurious "10000:
+      // Authentication error" when the integration token lacks billing permission
+      // (e.g. an account-owned token whose zone listing omits `plan`, so the
+      // enterprise check below can't short-circuit). Only a zone we just created
+      // may need the upgrade, before the Enterprise-only linkZoneToPeer. Best-effort.
+      if (!zonePreExisted && zone.plan?.id !== 'enterprise') {
         try {
           await cloudflare.setZonePlan(creds, zone.id);
         } catch (e) {

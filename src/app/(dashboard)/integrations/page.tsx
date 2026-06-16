@@ -478,7 +478,7 @@ export default function IntegrationsPage() {
       if (!cancelled) setDetailNsSets(result.data?.sets ?? []);
     })();
     return () => { cancelled = true; };
-  }, [selectedId, selected?.config.customNsMode, selected?.config.accountId]);
+  }, [selectedId, selected?.config.accountId]);
 
   const zonesTotalPages = Math.max(1, Math.ceil((detail?.zones.length ?? 0) / zonesPageSize));
   const paginatedZones = detail

@@ -359,6 +359,27 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
         if (!link || link.status !== 'ok') {
           const fresh = getIntegration(integrationId);
           if (fresh) await provisionZone(fresh, creds, normalizedUrl, zone.name);
+        } else if (link.remoteType == null && link.remoteZoneId) {
+          // One-time backfill: a healthy link that predates the remote_type column.
+          // Fetch the Cloudflare zone type once and store it (status/message
+          // unchanged). Best-effort — skipped automatically once populated, so this
+          // never re-fetches on subsequent syncs.
+          const fresh = getIntegration(integrationId);
+          if (fresh) {
+            try {
+              const cfZone = await cloudflare.getZoneByName(creds, fresh.config.accountId, bareName(zone.name));
+              if (cfZone) {
+                upsertIntegrationZone(integrationId, normalizedUrl, zone.name, {
+                  remoteZoneId: link.remoteZoneId,
+                  remoteType: cfZone.type,
+                  status: 'ok',
+                  message: link.message,
+                });
+              }
+            } catch {
+              // Best-effort: leave remote_type null and retry on the next sync.
+            }
+          }
         }
         state.processed++;
       }

@@ -441,6 +441,19 @@ export async function fetchReplicatedZoneNames() {
   return apiRequest<{ zones: string[] }>('/api/integrations/replicated-zones');
 }
 
+export interface ZoneAnalytics {
+  linked: boolean;
+  available?: boolean;
+  points?: Array<{ date: string; uniques: number }>;
+  total?: number;
+}
+
+// Cloudflare unique-visitors (HTTP, 30d daily) for one zone — drives the header
+// traffic sparkline. The endpoint self-reports linked/available state.
+export async function fetchZoneAnalytics(zone: string) {
+  return apiRequest<ZoneAnalytics>(`/api/integrations/zone-analytics?zone=${encodeURIComponent(zone)}`);
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

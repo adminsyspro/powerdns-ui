@@ -29,6 +29,7 @@ export async function GET(
     description: row.description,
     tokenSha512: row.token_sha512,
     active: row.active === 1,
+    fullAccess: row.full_access === 1,
     zones,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     updatedAt: new Date(row.updated_at * 1000).toISOString(),
@@ -73,6 +74,13 @@ export async function PUT(
     fields.push('active = ?');
     values.push(body.active ? 1 : 0);
   }
+  if (body.fullAccess !== undefined) {
+    fields.push('full_access = ?');
+    values.push(body.fullAccess ? 1 : 0);
+  }
+
+  // Resulting full-access state: explicit body value if provided, else current row value.
+  const willBeFull = body.fullAccess !== undefined ? body.fullAccess === true : existing.full_access === 1;
 
   fields.push('updated_at = unixepoch()');
   values.push(id);
@@ -87,8 +95,11 @@ export async function PUT(
   const transaction = db.transaction(() => {
     db.prepare(`UPDATE proxy_environments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 
-    // Replace zones if provided
-    if (body.zones !== undefined && Array.isArray(body.zones)) {
+    // Invariant: a full-access env owns NO zone permissions. Purge them and skip re-insert.
+    if (willBeFull) {
+      db.prepare('DELETE FROM proxy_record_rules WHERE zone_perm_id IN (SELECT id FROM proxy_zone_permissions WHERE environment_id = ?)').run(id);
+      db.prepare('DELETE FROM proxy_zone_permissions WHERE environment_id = ?').run(id);
+    } else if (body.zones !== undefined && Array.isArray(body.zones)) {
       // Delete existing zones and rules
       db.prepare('DELETE FROM proxy_record_rules WHERE zone_perm_id IN (SELECT id FROM proxy_zone_permissions WHERE environment_id = ?)').run(id);
       db.prepare('DELETE FROM proxy_zone_permissions WHERE environment_id = ?').run(id);
@@ -123,6 +134,7 @@ export async function PUT(
     description: updated.description,
     tokenSha512: updated.token_sha512,
     active: updated.active === 1,
+    fullAccess: updated.full_access === 1,
     zones,
     createdAt: new Date(updated.created_at * 1000).toISOString(),
     updatedAt: new Date(updated.updated_at * 1000).toISOString(),

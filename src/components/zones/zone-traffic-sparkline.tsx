@@ -1,11 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import * as api from '@/lib/api';
 import type { ZoneAnalytics } from '@/lib/api';
-
-const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+import { Sparkline } from '@/components/zones/sparkline';
 
 // Cloudflare-orange traffic sparkline (unique visitors, 30d). Self-gating: it
 // renders nothing for non-replicated zones (and while loading), a muted
@@ -39,28 +37,7 @@ export function ZoneTrafficSparkline({ zoneName }: { zoneName: string }) {
   return (
     <>
       <div className="w-px h-5 bg-border" />
-      <div className="flex items-center gap-2">
-        <div className="h-8 w-[110px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={state.points} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
-              <Area
-                type="monotone"
-                dataKey="uniques"
-                stroke="#f6821f"
-                fill="#f6821f"
-                fillOpacity={0.15}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-medium">{compact.format(state.total ?? 0)}</span>
-          <span className="text-[10px] text-muted-foreground">unique visitors · 30d</span>
-        </div>
-      </div>
+      <Sparkline points={state.points} total={state.total ?? 0} label="unique visitors · 30d" />
     </>
   );
 }

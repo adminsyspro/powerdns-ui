@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       }
       const sets = [...bySets.entries()]
         .sort((a, b) => a[0] - b[0])
-        .map(([set, nameservers]) => ({ set, nameservers: nameservers.sort() }));
+        .map(([set, nameservers]) => ({ set, nameservers: nameservers.sort((a, b) => a.localeCompare(b)) }));
       return NextResponse.json({ sets });
     } catch (e) {
       return NextResponse.json(

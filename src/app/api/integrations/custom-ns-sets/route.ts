@@ -4,6 +4,19 @@ import { getIntegration, getIntegrationCredentials } from '@/lib/integrations/st
 import { listAccountCustomNs } from '@/lib/integrations/cloudflare';
 import { resolve4 } from 'dns/promises';
 
+// Bounded IPv4 lookup: first A record, or null on error/timeout — so a slow or
+// blackholed nameserver can't stall the response. Lookups run in parallel, so the
+// whole request waits at most `timeoutMs`.
+async function resolveIpv4(host: string, timeoutMs = 2000): Promise<string | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    resolve4(host)
+      .then((ips) => resolve(ips[0] ?? null))
+      .catch(() => resolve(null))
+      .finally(() => clearTimeout(timer));
+  });
+}
+
 // POST /api/integrations/custom-ns-sets — list the custom nameserver sets of
 // a Cloudflare account, for the set selector in the integration dialog.
 // Credentials come from an existing integration (integrationId) or, during
@@ -33,17 +46,13 @@ export async function POST(request: NextRequest) {
         bySets.set(entry.ns_set, list);
       }
       // Resolve each unique nameserver's IPv4 (A) record once, in parallel.
-      // Best-effort: a failed lookup yields null and never fails the request.
+      // Best-effort and time-bounded: a failed or slow lookup yields null and
+      // never stalls the request (see resolveIpv4).
       const uniqueHosts = [...new Set(entries.map((e) => e.ns_name))];
       const ipByHost = new Map<string, string | null>();
       await Promise.all(
         uniqueHosts.map(async (host) => {
-          try {
-            const ips = await resolve4(host);
-            ipByHost.set(host, ips[0] ?? null);
-          } catch {
-            ipByHost.set(host, null);
-          }
+          ipByHost.set(host, await resolveIpv4(host));
         })
       );
       const sets = [...bySets.entries()]

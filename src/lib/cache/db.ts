@@ -212,6 +212,7 @@ function initSchema(db: Database.Database) {
       server_url      TEXT NOT NULL,
       zone_name       TEXT NOT NULL,
       remote_zone_id  TEXT DEFAULT NULL,
+      remote_type     TEXT DEFAULT NULL,
       status          TEXT NOT NULL,
       message         TEXT DEFAULT NULL,
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -285,6 +286,12 @@ function initSchema(db: Database.Database) {
     if (def) {
       db.prepare('UPDATE integrations SET connection_id = ? WHERE connection_id IS NULL').run(def.id);
     }
+  }
+
+  // Migration: add remote_type to integration_zones (the Cloudflare-side zone type).
+  const izCols = db.prepare("PRAGMA table_info(integration_zones)").all() as Array<{ name: string }>;
+  if (!izCols.map((c) => c.name).includes('remote_type')) {
+    db.exec('ALTER TABLE integration_zones ADD COLUMN remote_type TEXT DEFAULT NULL');
   }
 
   // Migration: extend users.role CHECK to include 'Customer', users.auth_type

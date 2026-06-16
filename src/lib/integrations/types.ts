@@ -68,6 +68,7 @@ export interface IntegrationZoneRow {
   serverUrl: string;
   zoneName: string;
   remoteZoneId: string | null;
+  remoteType: string | null;
   status: IntegrationZoneStatus;
   message: string | null;
   updatedAt: number;

@@ -238,62 +238,6 @@ export interface ZoneUniqueVisitors {
   total: number;
 }
 
-/**
- * Daily unique HTTP visitors for a zone over the last `days` days, via the
- * Cloudflare GraphQL Analytics API (httpRequests1dGroups → uniq.uniques).
- * The window is the last `days` calendar days ending today (today's point may
- * be partial). Returns null when analytics are unavailable — token lacks
- * Account Analytics:Read, the zone has no proxied HTTP traffic, GraphQL returns
- * errors, or the request fails — so callers render "No data" rather than erroring.
- */
-export async function getZoneUniqueVisitors(
-  creds: IntegrationCredentials,
-  cfZoneId: string,
-  days = 30
-): Promise<ZoneUniqueVisitors | null> {
-  const until = new Date();
-  const since = new Date(until.getTime() - (days - 1) * 86_400_000);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  // Cloudflare's GraphQL schema uses custom scalars: zoneTag is `string`
-  // (not the built-in String) and date_geq/date_leq are `Date`. `limit` must be
-  // a literal (Cloudflare types it as uint64, which a built-in Int variable does
-  // not satisfy), so it is inlined — days is a controlled integer. Getting these
-  // wrong fails query validation, which would surface as errors → null → "No data".
-  const query = `query Uniques($zoneTag: string!, $since: Date!, $until: Date!) {
-    viewer {
-      zones(filter: { zoneTag: $zoneTag }) {
-        httpRequests1dGroups(limit: ${days + 1}, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) {
-          dimensions { date }
-          uniq { uniques }
-        }
-      }
-    }
-  }`;
-  try {
-    await acquireCfSlot();
-    const response = await fetch(CF_GRAPHQL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query,
-        variables: { zoneTag: cfZoneId, since: fmt(since), until: fmt(until) },
-      }),
-    });
-    if (!response.ok) return null;
-    const json = (await response.json()) as {
-      data?: { viewer?: { zones?: Array<{ httpRequests1dGroups?: Array<{ dimensions: { date: string }; uniq: { uniques: number } }> }> } };
-      errors?: unknown[];
-    };
-    if (Array.isArray(json.errors) && json.errors.length > 0) return null;
-    const groups = json.data?.viewer?.zones?.[0]?.httpRequests1dGroups;
-    if (!Array.isArray(groups)) return null;
-    const points = groups.map((g) => ({ date: g.dimensions.date, uniques: g.uniq?.uniques ?? 0 }));
-    const total = points.reduce((sum, p) => sum + p.uniques, 0);
-    return { points, total };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Daily unique HTTP visitors for MANY zones (one integration's zones) over the
@@ -403,7 +347,7 @@ export async function getZoneDnsAnalytics(
   const cfg = DNS_RANGE_CFG[range];
   const until = new Date();
   const since = new Date(until.getTime() - cfg.ms);
-  // Shared filter; `limit` is inlined per alias (uint64), like getZoneUniqueVisitors.
+  // Shared filter; `limit` is inlined per alias (uint64), like getZoneTraffic.
   const F = `filter: { datetime_geq: $s, datetime_leq: $u }`;
   const top = (alias: string, dims: string) =>
     `${alias}: dnsAnalyticsAdaptiveGroups(limit: 10, ${F}, orderBy: [count_DESC]) { count dimensions { ${dims} } }`;

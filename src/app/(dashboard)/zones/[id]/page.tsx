@@ -298,6 +298,7 @@ export default function ZoneDetailPage() {
     integrationName?: string;
     byKey: Record<string, { proxied: boolean; proxiable: boolean }>;
   } | null>(null);
+  const [dnsReplicated, setDnsReplicated] = React.useState(false);
   const [cfBusyKey, setCfBusyKey] = React.useState<string | null>(null);
   const loadCfProxy = React.useCallback(async () => {
     const result = await api.fetchZoneProxyState(zoneId);
@@ -312,6 +313,17 @@ export default function ZoneDetailPage() {
     }
   }, [zoneId]);
   React.useEffect(() => { loadCfProxy(); }, [loadCfProxy]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    api.fetchReplicatedZoneNames().then((res) => {
+      if (cancelled) return;
+      const norm = (n: string) => n.toLowerCase().replace(/\.$/, '');
+      const set = new Set((res.data?.zones ?? []).map(norm));
+      setDnsReplicated(set.has(norm(zoneId)));
+    });
+    return () => { cancelled = true; };
+  }, [zoneId]);
 
   const handleCloudToggle = React.useCallback(async (name: string, type: string, proxied: boolean) => {
     const key = `${name.toLowerCase().replace(/\.$/, '')}|${type}`;
@@ -758,7 +770,7 @@ export default function ZoneDetailPage() {
                 </TooltipTrigger>
                 <TooltipContent>DNSSEC</TooltipContent>
               </Tooltip>
-              {cfProxy?.linked && (
+              {dnsReplicated && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setDnsAnalyticsOpen(true)} aria-label="DNS analytics">

@@ -76,7 +76,7 @@ export async function PUT(
   }
   if (body.fullAccess !== undefined) {
     fields.push('full_access = ?');
-    values.push(body.fullAccess ? 1 : 0);
+    values.push(body.fullAccess === true ? 1 : 0);
   }
 
   // Resulting full-access state: explicit body value if provided, else current row value.

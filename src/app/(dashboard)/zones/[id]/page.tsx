@@ -10,7 +10,7 @@ import {
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
 import { DnssecDialog } from '@/components/zones/dnssec-dialog';
-import { ZoneTrafficSparkline } from '@/components/zones/zone-traffic-sparkline';
+import { ZoneTrafficSparklines } from '@/components/zones/zone-traffic-sparklines';
 import { DnsAnalyticsDialog } from '@/components/zones/dns-analytics-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -709,16 +709,25 @@ export default function ZoneDetailPage() {
                 <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
               </Button>
               <ZoneSwitcher currentZoneId={zoneId} currentZoneReplicated={!!cfProxy?.linked} />
-              <ZoneTrafficSparkline zoneName={zoneId} />
+              <ZoneTrafficSparklines zoneName={zoneId} />
               {lookup && lookup.ns.length > 0 && (
                 <>
                   <div className="w-px h-5 bg-border" />
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    {lookup.ns.map((ns) => (
-                      <Badge key={ns} variant="outline" className="font-mono text-[11px] font-normal py-0">{ns}</Badge>
-                    ))}
-                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-center gap-1.5 text-xs cursor-default">
+                        <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="text-muted-foreground">{lookup.ns.length} NS</span>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="flex flex-col gap-1">
+                        {lookup.ns.map((ns) => (
+                          <span key={ns} className="font-mono text-[11px]">{ns}</span>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
                 </>
               )}
               {lookup?.expiration && (

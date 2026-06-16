@@ -51,11 +51,16 @@ export default function ZonesPage() {
   // in the table. Normalized to bare lowercase names for lookup.
   const [replicatedZones, setReplicatedZones] = React.useState<Set<string>>(new Set());
   const loadReplicatedZones = React.useCallback(async () => {
-    setReplicatedZones(new Set()); // drop previous connection's coverage immediately
     const result = await api.fetchReplicatedZoneNames();
     const names = (result.data?.zones || []).map((n) => n.toLowerCase().replace(/\.$/, ''));
     setReplicatedZones(new Set(names));
   }, []);
+  // Drop the previous connection's coverage immediately ONLY when the connection
+  // actually changes — not on a same-connection refresh (Sync), which would
+  // momentarily empty the set and trip the auto-reset, losing an active filter.
+  React.useEffect(() => {
+    setReplicatedZones(new Set());
+  }, [activeConnection?.id]);
   React.useEffect(() => {
     if (!activeConnection) return;
     loadReplicatedZones();

@@ -467,6 +467,25 @@ export async function setZoneCustomNs(
   });
 }
 
+/**
+ * Reads a zone's current custom nameserver set. Returns the set number when the
+ * zone uses an account custom-NS set, or null for Cloudflare-default nameservers.
+ * Best-effort: any error or missing field yields null (callers treat null as
+ * "Cloudflare default / unknown" and never break on it).
+ */
+export async function getZoneCustomNs(creds: IntegrationCredentials, cfZoneId: string): Promise<number | null> {
+  try {
+    const settings = await cf<{ nameservers?: { type?: string; ns_set?: number } }>(
+      creds.apiToken,
+      `/zones/${cfZoneId}/dns_settings`
+    );
+    const nsSet = settings.nameservers?.ns_set;
+    return typeof nsSet === 'number' ? nsSet : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---- DNS records (proxy / orange cloud) ----
 
 export interface CfDnsRecord {

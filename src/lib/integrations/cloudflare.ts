@@ -295,6 +295,63 @@ export async function getZoneUniqueVisitors(
   }
 }
 
+/**
+ * Daily unique HTTP visitors for MANY zones (one integration's zones) over the
+ * last `days` days, via a single aliased Cloudflare GraphQL query per chunk.
+ * Each zone is queried in its own aliased `zones(filter:{zoneTag})` block (z0,
+ * z1, …) so results map back by alias — no dependency on `zoneTag` being a
+ * selectable output field, and no reliance on result ordering. Returns a
+ * Map<cfZoneId, {points,total}> (ids with no data are absent), or null on any
+ * failure so the caller degrades the whole batch to "No data".
+ */
+export async function getZonesUniqueVisitors(
+  creds: IntegrationCredentials,
+  cfZoneIds: string[],
+  days = 30
+): Promise<Map<string, ZoneUniqueVisitors> | null> {
+  const ids = cfZoneIds.filter((id) => /^[a-f0-9]{32}$/i.test(id));
+  if (ids.length === 0) return new Map();
+  const until = new Date();
+  const since = new Date(until.getTime() - (days - 1) * 86_400_000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const CHUNK = 50;
+  const result = new Map<string, ZoneUniqueVisitors>();
+
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const blocks = chunk.map((id, n) =>
+      `z${n}: zones(filter: { zoneTag: "${id}" }) { httpRequests1dGroups(limit: ${days + 1}, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) { dimensions { date } uniq { uniques } } }`
+    ).join('\n');
+    const query = `query Uniques($since: Date!, $until: Date!) { viewer { ${blocks} } }`;
+    try {
+      await acquireCfSlot();
+      const response = await fetch(CF_GRAPHQL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { since: fmt(since), until: fmt(until) } }),
+      });
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        data?: { viewer?: Record<string, Array<{ httpRequests1dGroups?: Array<{ dimensions: { date: string }; uniq: { uniques: number } }> }>> };
+        errors?: unknown[];
+      };
+      if (Array.isArray(json.errors) && json.errors.length > 0) return null;
+      const viewer = json.data?.viewer;
+      if (!viewer) return null;
+      chunk.forEach((id, n) => {
+        const groups = viewer[`z${n}`]?.[0]?.httpRequests1dGroups;
+        if (!Array.isArray(groups)) return;
+        const points = groups.map((g) => ({ date: g.dimensions.date, uniques: g.uniq?.uniques ?? 0 }));
+        const total = points.reduce((sum, p) => sum + p.uniques, 0);
+        result.set(id, { points, total });
+      });
+    } catch {
+      return null;
+    }
+  }
+  return result;
+}
+
 export async function createSecondaryZone(
   creds: IntegrationCredentials,
   accountId: string,

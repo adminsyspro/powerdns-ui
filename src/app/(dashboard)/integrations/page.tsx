@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -522,11 +522,13 @@ export default function IntegrationsPage() {
   // Category filter: null = Tous.
   type CategoryFilter = 'adopt' | 'create' | 'cf-only' | 'tracked' | null;
   const [categoryFilter, setCategoryFilter] = React.useState<CategoryFilter>(null);
+  const [zoneSearch, setZoneSearch] = React.useState('');
 
   // Reset selection and filter when switching integrations.
   React.useEffect(() => {
     setSelectedZones(new Set());
     setCategoryFilter(null);
+    setZoneSearch('');
     setBatchProgress(null);
     setRowErrors({});
   }, [selectedId]);
@@ -630,10 +632,15 @@ export default function IntegrationsPage() {
 
   const previewRows = preview?.rows ?? [];
 
-  // Category filter applied before pagination.
-  const filteredRows = categoryFilter
-    ? previewRows.filter((r) => r.previewState === categoryFilter)
-    : previewRows;
+  // Category filter + domain search applied before pagination.
+  const filteredRows = React.useMemo(() => {
+    const q = zoneSearch.trim().toLowerCase();
+    return previewRows.filter(
+      (r) =>
+        (categoryFilter ? r.previewState === categoryFilter : true) &&
+        (q === '' || r.zoneName.toLowerCase().includes(q)),
+    );
+  }, [previewRows, categoryFilter, zoneSearch]);
 
   const zonesTotalPages = Math.max(1, Math.ceil(filteredRows.length / zonesPageSize));
   const paginatedZones = filteredRows.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize);
@@ -642,8 +649,8 @@ export default function IntegrationsPage() {
     if (zonesPage > zonesTotalPages) setZonesPage(zonesTotalPages);
   }, [zonesPage, zonesTotalPages]);
 
-  // Reset to page 1 when filter changes.
-  React.useEffect(() => { setZonesPage(1); }, [categoryFilter]);
+  // Reset to page 1 when filter or search changes.
+  React.useEffect(() => { setZonesPage(1); }, [categoryFilter, zoneSearch]);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -908,24 +915,36 @@ export default function IntegrationsPage() {
                   {preview.counts.unknown > 0 && <span className="text-amber-700 dark:text-amber-300">{preview.counts.unknown} CF inconnu</span>}
                 </div>
               )}
-              {/* Category filter */}
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {([
-                  [null,      'Tous'],
-                  ['adopt',   'À adopter'],
-                  ['create',  'À créer'],
-                  ['cf-only', 'CF seulement'],
-                  ['tracked', 'Suivis'],
-                ] as Array<[CategoryFilter, string]>).map(([value, label]) => (
-                  <button
-                    key={String(value)}
-                    type="button"
-                    onClick={() => setCategoryFilter(value)}
-                    className={`rounded-full border px-3 py-0.5 text-xs transition-colors ${categoryFilter === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              {/* Category filter + domain search */}
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    [null,      'Tous'],
+                    ['adopt',   'À adopter'],
+                    ['create',  'À créer'],
+                    ['cf-only', 'CF seulement'],
+                    ['tracked', 'Suivis'],
+                  ] as Array<[CategoryFilter, string]>).map(([value, label]) => (
+                    <button
+                      key={String(value)}
+                      type="button"
+                      onClick={() => setCategoryFilter(value)}
+                      className={`rounded-full border px-3 py-0.5 text-xs transition-colors ${categoryFilter === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={zoneSearch}
+                    onChange={(e) => setZoneSearch(e.target.value)}
+                    placeholder="Rechercher un domaine…"
+                    aria-label="Rechercher un domaine"
+                    className="pl-8"
+                  />
+                </div>
               </div>
               <Table>
                 <TableHeader className="bg-slate-100 dark:bg-slate-800">

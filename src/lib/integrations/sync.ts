@@ -16,7 +16,7 @@ import {
   setIntegrationZoneNsSet,
   setIntegrationZoneManaged,
 } from './store';
-import type { IntegrationConfig, IntegrationCredentials, IntegrationRow, IntegrationZoneRow } from './types';
+import type { IntegrationConfig, IntegrationCredentials, IntegrationRow, IntegrationZoneRow, IntegrationZoneStatus } from './types';
 
 /**
  * Reconcile engine: makes the provider side match the scoped PowerDNS zones.
@@ -414,6 +414,19 @@ function reserveSync(
   return { ok: true, ctx: { integrationId, serverUrl: normalizedUrl, creds, state, zones, known, allowDeletion } };
 }
 
+/** Should a reconcile re-flag this known link as orphan? Pinned (manual) links are never orphaned. */
+export function shouldReReflagOrphan(
+  link: { zoneName: string; status: IntegrationZoneStatus; managed: 'auto' | 'manual' },
+  scopedNames: Set<string>,
+): boolean {
+  return (
+    !scopedNames.has(link.zoneName) &&
+    link.status !== 'orphan' &&
+    link.status !== 'error' &&
+    link.managed !== 'manual'
+  );
+}
+
 // The reconcile body. Resolves when the pass is complete.
 async function runReconcile(ctx: ReconcileContext): Promise<void> {
   const { integrationId, serverUrl: normalizedUrl, creds, state, zones, known } = ctx;
@@ -426,7 +439,7 @@ async function runReconcile(ctx: ReconcileContext): Promise<void> {
       // grace), but NEVER 'error' rows: those are provisioning refusals (e.g. an
       // existing non-secondary CF zone, or one linked to a different peer) that
       // the integration does not own and must never auto-delete or purge.
-      if (!scopedNames.has(link.zoneName) && link.status !== 'orphan' && link.status !== 'error') {
+      if (shouldReReflagOrphan(link, scopedNames)) {
         upsertIntegrationZone(integrationId, normalizedUrl, link.zoneName, {
           remoteZoneId: link.remoteZoneId,
           status: 'orphan',
@@ -505,6 +518,7 @@ async function deleteAgedOrphans(
       l.status === 'orphan' &&
       l.remoteZoneId &&
       !scopedNames.has(l.zoneName) &&
+      l.managed !== 'manual' &&
       nowSec - l.updatedAt >= retentionSec
   );
   if (candidates.length === 0) return;

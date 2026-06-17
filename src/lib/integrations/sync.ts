@@ -15,7 +15,7 @@ import {
   deleteIntegrationZoneIfRemote,
   setIntegrationZoneNsSet,
 } from './store';
-import type { IntegrationConfig, IntegrationCredentials, IntegrationRow } from './types';
+import type { IntegrationConfig, IntegrationCredentials, IntegrationRow, IntegrationZoneRow } from './types';
 
 /**
  * Reconcile engine: makes the provider side match the scoped PowerDNS zones.
@@ -101,6 +101,11 @@ export function listScopedZoneNames(serverUrl: string, config: IntegrationConfig
   return scopedZones(serverUrl, config).map((zone) => zone.name);
 }
 
+/** In-scope PowerDNS zones with their account (for the preview union). */
+export function listScopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name: string; account: string }> {
+  return scopedZones(serverUrl, config);
+}
+
 function zoneInScope(config: IntegrationConfig, kind: string, account: string, zoneName: string): boolean {
   if (config.scope === 'zones') return config.zones.includes(zoneName.toLowerCase());
   if (kind !== 'Master') return false;
@@ -139,6 +144,121 @@ async function ensurePeerOnce(integration: IntegrationRow, creds: IntegrationCre
   return peerId;
 }
 
+// The actual provisioning work. Caller MUST already hold the in-flight key for
+// (integration.id, serverUrl, zoneName) — this function does NOT re-check or
+// re-add the reserve, so provisionZone and provisionOneZone can share the body.
+async function provisionZoneLocked(
+  integration: IntegrationRow,
+  creds: IntegrationCredentials,
+  serverUrl: string,
+  zoneName: string
+): Promise<void> {
+  // A stale/errored link being retried may already know its remote zone id;
+  // keep it through the provisioning states so a failed retry (bad peer
+  // edit, transient Cloudflare outage) doesn't lose the working reference.
+  // Once the retry has found/created a (possibly different) remote zone,
+  // that id supersedes the old one — even on the failure path.
+  const existingLink = getIntegrationZone(integration.id, serverUrl, zoneName);
+  let currentRemoteId = existingLink?.remoteZoneId ?? null;
+  upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+    remoteZoneId: currentRemoteId,
+    status: 'provisioning',
+  });
+  try {
+    const config = integration.config;
+    const warnings: string[] = [];
+    const peerId = await ensurePeerOnce(integration, creds);
+
+    let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
+    const zonePreExisted = Boolean(zone);
+    if (!zone) {
+      zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
+    }
+    currentRemoteId = zone.id;
+    if (zone.type !== 'secondary') {
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+        remoteZoneId: zone.id,
+        remoteType: zone.type,
+        status: 'error',
+        message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
+      });
+      return;
+    }
+
+    // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so an
+    // existing zone we adopt is necessarily already Enterprise — never try to set
+    // its plan. Doing so on an adopted zone surfaces a spurious "10000:
+    // Authentication error" when the integration token lacks billing permission
+    // (e.g. an account-owned token whose zone listing omits `plan`, so the
+    // enterprise check below can't short-circuit). Only a zone we just created
+    // may need the upgrade, before the Enterprise-only linkZoneToPeer. Best-effort.
+    if (!zonePreExisted && zone.plan?.id !== 'enterprise') {
+      try {
+        await cloudflare.setZonePlan(creds, zone.id);
+      } catch (e) {
+        warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+      }
+    }
+
+    try {
+      await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
+    } catch (e) {
+      // Cloudflare error 409: the zone already has an incoming transfer
+      // config (pre-existing manual setup). Adopt it ONLY when that config
+      // actually points at our peer — a conflict with a different peer must
+      // stay visible, otherwise the zone would silently keep transferring
+      // from the wrong source while being reported ok.
+      const alreadyLinked =
+        e instanceof cloudflare.CloudflareError &&
+        (e.codes.includes(409) || /already linked/i.test(e.message));
+      if (!alreadyLinked) throw e;
+      const incoming = await cloudflare.getZoneIncoming(creds, zone.id);
+      const linkedPeers = incoming?.peers ?? [];
+      if (!linkedPeers.includes(peerId)) {
+        upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+          remoteZoneId: zone.id,
+          remoteType: zone.type,
+          status: 'error',
+          message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
+        });
+        return;
+      }
+    }
+
+    // Custom NS (adopt-don't-touch): the integration's global policy applies ONLY
+    // to a zone we just created — an existing/adopted zone keeps its current
+    // Cloudflare nameservers. Per-zone changes go through setZoneCustomNsSet.
+    if (!zonePreExisted && config.customNsMode !== 'ignore') {
+      await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
+    }
+    await cloudflare.forceAxfr(creds, zone.id);
+    // Enforce the configured override state both ways (enabling and disabling),
+    // so a toggle re-provision propagates to Cloudflare. Best-effort.
+    try {
+      await cloudflare.setSecondaryOverride(creds, zone.id, config.secondaryOverride);
+    } catch (e) {
+      warnings.push(
+        `Secondary DNS override not ${config.secondaryOverride ? 'enabled' : 'disabled'}: ${e instanceof Error ? e.message : 'unknown error'}`
+      );
+    }
+    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+      remoteZoneId: zone.id,
+      remoteType: zone.type,
+      status: 'ok',
+      message: warnings.length ? warnings.join('; ') : null,
+    });
+    // Reflect the zone's actual custom NS set in the table (best-effort; the
+    // helper returns null on any error and never throws).
+    setIntegrationZoneNsSet(integration.id, serverUrl, zoneName, await cloudflare.getZoneCustomNs(creds, zone.id));
+  } catch (e) {
+    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+      remoteZoneId: currentRemoteId,
+      status: 'error',
+      message: e instanceof Error ? e.message : 'provisioning failed',
+    });
+  }
+}
+
 async function provisionZone(
   integration: IntegrationRow,
   creds: IntegrationCredentials,
@@ -148,114 +268,52 @@ async function provisionZone(
   const flightKey = inFlightKey(integration.id, serverUrl, zoneName);
   if (provisioningInFlight.has(flightKey)) return; // another path is provisioning this zone
   provisioningInFlight.add(flightKey);
+  try { await provisionZoneLocked(integration, creds, serverUrl, zoneName); }
+  finally { provisioningInFlight.delete(flightKey); }
+}
+
+export type ProvisionOneResult =
+  | { ok: true; row: IntegrationZoneRow }
+  | { ok: false; status: 400 | 404 | 409; error: string };
+
+/**
+ * Atomically provisions a single in-scope zone for a manual sync. Owns the
+ * in-flight reserve itself (synchronous check+add → no TOCTOU), so a duplicate
+ * click or a concurrent big sync gets a clean 409 instead of a transient row.
+ */
+export async function provisionOneZone(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+): Promise<ProvisionOneResult> {
+  const integration = getIntegration(integrationId);
+  if (!integration) return { ok: false, status: 404, error: 'Integration not found' };
+  if (!integration.active) return { ok: false, status: 400, error: 'Integration is inactive' };
+  const creds = getIntegrationCredentials(integrationId);
+  if (!creds) return { ok: false, status: 400, error: 'Stored credentials are unreadable' };
+  const normalizedUrl = normalizeUrl(serverUrl);
+
+  if (getSyncState(integrationId, normalizedUrl).running) {
+    return { ok: false, status: 409, error: 'A full sync is running — try again when it finishes' };
+  }
+  const inScope = scopedZones(normalizedUrl, integration.config).some(
+    (z) => z.name.replace(/\.$/, '').toLowerCase() === zoneName.replace(/\.$/, '').toLowerCase(),
+  );
+  if (!inScope) return { ok: false, status: 409, error: 'Zone is not in the integration PowerDNS scope' };
+
+  const flightKey = inFlightKey(integrationId, normalizedUrl, zoneName);
+  if (provisioningInFlight.has(flightKey)) {
+    return { ok: false, status: 409, error: 'This zone is already being provisioned — try again in a moment' };
+  }
+  provisioningInFlight.add(flightKey);
   try {
-    // A stale/errored link being retried may already know its remote zone id;
-    // keep it through the provisioning states so a failed retry (bad peer
-    // edit, transient Cloudflare outage) doesn't lose the working reference.
-    // Once the retry has found/created a (possibly different) remote zone,
-    // that id supersedes the old one — even on the failure path.
-    const existingLink = getIntegrationZone(integration.id, serverUrl, zoneName);
-    let currentRemoteId = existingLink?.remoteZoneId ?? null;
-    upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-      remoteZoneId: currentRemoteId,
-      status: 'provisioning',
-    });
-    try {
-      const config = integration.config;
-      const warnings: string[] = [];
-      const peerId = await ensurePeerOnce(integration, creds);
-
-      let zone = await cloudflare.getZoneByName(creds, config.accountId, bareName(zoneName));
-      const zonePreExisted = Boolean(zone);
-      if (!zone) {
-        zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
-      }
-      currentRemoteId = zone.id;
-      if (zone.type !== 'secondary') {
-        upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-          remoteZoneId: zone.id,
-          remoteType: zone.type,
-          status: 'error',
-          message: `Zone exists at Cloudflare with type "${zone.type}" (expected secondary) — not touching it`,
-        });
-        return;
-      }
-
-      // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so an
-      // existing zone we adopt is necessarily already Enterprise — never try to set
-      // its plan. Doing so on an adopted zone surfaces a spurious "10000:
-      // Authentication error" when the integration token lacks billing permission
-      // (e.g. an account-owned token whose zone listing omits `plan`, so the
-      // enterprise check below can't short-circuit). Only a zone we just created
-      // may need the upgrade, before the Enterprise-only linkZoneToPeer. Best-effort.
-      if (!zonePreExisted && zone.plan?.id !== 'enterprise') {
-        try {
-          await cloudflare.setZonePlan(creds, zone.id);
-        } catch (e) {
-          warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
-        }
-      }
-
-      try {
-        await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
-      } catch (e) {
-        // Cloudflare error 409: the zone already has an incoming transfer
-        // config (pre-existing manual setup). Adopt it ONLY when that config
-        // actually points at our peer — a conflict with a different peer must
-        // stay visible, otherwise the zone would silently keep transferring
-        // from the wrong source while being reported ok.
-        const alreadyLinked =
-          e instanceof cloudflare.CloudflareError &&
-          (e.codes.includes(409) || /already linked/i.test(e.message));
-        if (!alreadyLinked) throw e;
-        const incoming = await cloudflare.getZoneIncoming(creds, zone.id);
-        const linkedPeers = incoming?.peers ?? [];
-        if (!linkedPeers.includes(peerId)) {
-          upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-            remoteZoneId: zone.id,
-            remoteType: zone.type,
-            status: 'error',
-            message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
-          });
-          return;
-        }
-      }
-
-      // Custom NS (adopt-don't-touch): the integration's global policy applies ONLY
-      // to a zone we just created — an existing/adopted zone keeps its current
-      // Cloudflare nameservers. Per-zone changes go through setZoneCustomNsSet.
-      if (!zonePreExisted && config.customNsMode !== 'ignore') {
-        await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
-      }
-      await cloudflare.forceAxfr(creds, zone.id);
-      // Enforce the configured override state both ways (enabling and disabling),
-      // so a toggle re-provision propagates to Cloudflare. Best-effort.
-      try {
-        await cloudflare.setSecondaryOverride(creds, zone.id, config.secondaryOverride);
-      } catch (e) {
-        warnings.push(
-          `Secondary DNS override not ${config.secondaryOverride ? 'enabled' : 'disabled'}: ${e instanceof Error ? e.message : 'unknown error'}`
-        );
-      }
-      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-        remoteZoneId: zone.id,
-        remoteType: zone.type,
-        status: 'ok',
-        message: warnings.length ? warnings.join('; ') : null,
-      });
-      // Reflect the zone's actual custom NS set in the table (best-effort; the
-      // helper returns null on any error and never throws).
-      setIntegrationZoneNsSet(integration.id, serverUrl, zoneName, await cloudflare.getZoneCustomNs(creds, zone.id));
-    } catch (e) {
-      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
-        remoteZoneId: currentRemoteId,
-        status: 'error',
-        message: e instanceof Error ? e.message : 'provisioning failed',
-      });
-    }
+    await provisionZoneLocked(integration, creds, normalizedUrl, zoneName);
   } finally {
     provisioningInFlight.delete(flightKey);
   }
+  const row = getIntegrationZone(integrationId, normalizedUrl, zoneName);
+  if (!row) return { ok: false, status: 404, error: 'Provisioning produced no zone row' };
+  return { ok: true, row };
 }
 
 // Deletion in-flight guard, separate from provisioning, keyed the same way.

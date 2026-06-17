@@ -153,3 +153,67 @@ function staleOrNull(entry: CfCacheEntry | undefined, e: unknown): CachedCfZones
   }
   return { zones: null, fetchedAt: null, stale: false, error };
 }
+
+// ---------------------------------------------------------------------------
+// High-level preview builder: union of PDNS scope, CF zones, and tracked state
+// ---------------------------------------------------------------------------
+
+import { listZones } from './cloudflare';
+import { getIntegration, getIntegrationCredentials, listIntegrationZones } from './store';
+import { getConnectionById } from './connections';
+import { normalizeUrl } from '@/lib/cache/zones';
+import { listScopedZones, getSyncState } from './sync';
+import type { IntegrationSyncState } from './sync';
+
+export interface ZonePreview {
+  rows: ZonePreviewRow[];
+  sync: IntegrationSyncState;
+  cf: { fetchedAt: number | null; stale: boolean; error: string | null };
+  counts: { adopt: number; create: number; cfOnly: number; tracked: number; unknown: number };
+  connectionMissing: boolean;
+}
+
+export async function buildZonePreview(
+  integrationId: string,
+  opts: { refresh?: boolean } = {},
+): Promise<ZonePreview | null> {
+  const integration = getIntegration(integrationId);
+  if (!integration) return null;
+  const conn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
+  const emptyCounts = { adopt: 0, create: 0, cfOnly: 0, tracked: 0, unknown: 0 };
+
+  if (!conn) {
+    return {
+      rows: [], sync: getSyncState(integrationId, ''),
+      cf: { fetchedAt: null, stale: false, error: 'No PowerDNS connection bound' },
+      counts: emptyCounts, connectionMissing: true,
+    };
+  }
+  const serverUrl = normalizeUrl(conn.url);
+  const sync = getSyncState(integrationId, serverUrl);
+  const tracked = listIntegrationZones(integrationId, serverUrl);
+  const pdns = listScopedZones(serverUrl, integration.config);
+
+  const creds = getIntegrationCredentials(integrationId);
+  let cf: CachedCfZones = { zones: null, fetchedAt: null, stale: false, error: null };
+  if (creds) {
+    cf = await getCachedCfZones(
+      `${integrationId}:${integration.config.accountId}`,
+      () => listZones(creds, integration.config.accountId),
+      { refresh: opts.refresh },
+    );
+  } else {
+    cf = { zones: null, fetchedAt: null, stale: false, error: 'Stored credentials are unreadable' };
+  }
+
+  const rows = computePreviewRows(pdns, cf.zones, tracked);
+  const counts = { ...emptyCounts };
+  for (const r of rows) {
+    if (r.previewState === 'adopt') counts.adopt++;
+    else if (r.previewState === 'create') counts.create++;
+    else if (r.previewState === 'cf-only') counts.cfOnly++;
+    else if (r.previewState === 'tracked') counts.tracked++;
+    else counts.unknown++;
+  }
+  return { rows, sync, cf: { fetchedAt: cf.fetchedAt, stale: cf.stale, error: cf.error }, counts, connectionMissing: false };
+}

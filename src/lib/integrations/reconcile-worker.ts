@@ -3,24 +3,12 @@ import { listIntegrations } from './store';
 import { getConnectionById, type StoredConnection } from './connections';
 import { runSync } from './sync';
 import { acquireLease } from './worker-lease';
-import { fetchZonesFromPdns } from '@/lib/pdns-proxy';
-import { syncZonesToCache } from '@/lib/cache/zones';
+import { refreshZonesCache } from '@/lib/cache/refresh-zones';
 import type { IntegrationRow } from './types';
 
 const INTERVAL_MS = Math.max(30_000, Number(process.env.INTEGRATION_RECONCILE_INTERVAL_MS) || 300_000);
 const OWNER = `${process.pid}-${randomUUID()}`;
 const LEASE_TTL_MS = INTERVAL_MS * 3;
-
-async function refreshConnectionCache(conn: StoredConnection): Promise<boolean> {
-  try {
-    const zones = await fetchZonesFromPdns(conn.url, conn.apiKey);
-    syncZonesToCache(conn.url, zones as Parameters<typeof syncZonesToCache>[1]);
-    return true;
-  } catch (e) {
-    console.warn(`[reconcile] cache refresh failed for ${conn.name}: ${e instanceof Error ? e.message : e}`);
-    return false;
-  }
-}
 
 async function runCycle(): Promise<void> {
   if (!acquireLease(OWNER, LEASE_TTL_MS)) return; // another process owns the loop
@@ -37,7 +25,7 @@ async function runCycle(): Promise<void> {
   for (const [connectionId, integrations] of byConnection) {
     const conn = getConnectionById(connectionId);
     if (!conn) continue; // connection deleted — skip until re-bound
-    if (!(await refreshConnectionCache(conn))) continue;
+    if (!(await refreshZonesCache(conn.url, conn.apiKey))) continue;
     for (const integration of integrations) {
       // runSync is a no-op when a manual sync is already running for this pair.
       await runSync(integration.id, conn.url, { allowDeletion: true });

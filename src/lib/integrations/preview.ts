@@ -4,7 +4,8 @@ import type { IntegrationZoneRow, IntegrationZoneStatus } from './types';
 import { getIntegration, getIntegrationCredentials, listIntegrationZones } from './store';
 import { getConnectionById } from './connections';
 import { normalizeUrl } from '@/lib/cache/zones';
-import { listScopedZones, getSyncState } from './sync';
+import { refreshZonesCache } from '@/lib/cache/refresh-zones';
+import { listMasterZones, getSyncState } from './sync';
 import type { IntegrationSyncState } from './sync';
 
 export type ZonePreviewState = 'tracked' | 'adopt' | 'create' | 'cf-only' | 'unknown';
@@ -12,7 +13,7 @@ export type ZonePreviewState = 'tracked' | 'adopt' | 'create' | 'cf-only' | 'unk
 export interface ZonePreviewRow {
   zoneName: string;
   previewState: ZonePreviewState;
-  inPdnsScope: boolean;
+  inPdns: boolean;
   account: string | null;
   cfPresent: boolean;
   cfType: string | null;
@@ -48,23 +49,23 @@ export function computePreviewRows(
     const pdns = pdnsByKey.get(key);
     const cf = cfByKey?.get(key) ?? null;
     const tr = trackedByKey.get(key);
-    const inPdnsScope = Boolean(pdns);
+    const inPdns = Boolean(pdns);
     const cfPresent = Boolean(cf);
 
     let previewState: ZonePreviewState;
     if (tr) previewState = 'tracked';
-    else if (inPdnsScope && cfByKey === null) previewState = 'unknown';
-    else if (inPdnsScope && cfPresent) previewState = 'adopt';
-    else if (inPdnsScope) previewState = 'create';
+    else if (inPdns && cfByKey === null) previewState = 'unknown';
+    else if (inPdns && cfPresent) previewState = 'adopt';
+    else if (inPdns) previewState = 'create';
     else previewState = 'cf-only';
 
     const status = tr?.status;
-    const syncable = inPdnsScope && status !== 'provisioning';
+    const syncable = inPdns && status !== 'provisioning';
 
     rows.push({
       zoneName: pdns?.name ?? tr?.zoneName ?? cf?.name ?? key,
       previewState,
-      inPdnsScope,
+      inPdns,
       account: pdns?.account ?? null,
       cfPresent,
       cfType: cf?.type ?? tr?.remoteType ?? null,
@@ -168,6 +169,7 @@ export interface ZonePreview {
   rows: ZonePreviewRow[];
   sync: IntegrationSyncState;
   cf: { fetchedAt: number | null; stale: boolean; error: string | null };
+  pdns: { fetchedAt: number | null; stale: boolean; error: string | null };
   counts: { adopt: number; create: number; cfOnly: number; tracked: number; unknown: number };
   connectionMissing: boolean;
 }
@@ -185,13 +187,20 @@ export async function buildZonePreview(
     return {
       rows: [], sync: getSyncState(integrationId, ''),
       cf: { fetchedAt: null, stale: false, error: 'No PowerDNS connection bound' },
+      pdns: { fetchedAt: null, stale: false, error: null },
       counts: emptyCounts, connectionMissing: true,
     };
   }
   const serverUrl = normalizeUrl(conn.url);
   const sync = getSyncState(integrationId, serverUrl);
   const tracked = listIntegrationZones(integrationId, serverUrl);
-  const pdns = listScopedZones(serverUrl, integration.config);
+
+  let pdnsError: string | null = null;
+  if (opts.refresh) {
+    const ok = await refreshZonesCache(conn.url, conn.apiKey);
+    if (!ok) pdnsError = 'PowerDNS zone refresh failed — showing cached zones';
+  }
+  const pdns = listMasterZones(serverUrl);
 
   const creds = getIntegrationCredentials(integrationId);
   let cf: CachedCfZones = { zones: null, fetchedAt: null, stale: false, error: null };
@@ -214,5 +223,10 @@ export async function buildZonePreview(
     else if (r.previewState === 'tracked') counts.tracked++;
     else counts.unknown++;
   }
-  return { rows, sync, cf: { fetchedAt: cf.fetchedAt, stale: cf.stale, error: cf.error }, counts, connectionMissing: false };
+  return {
+    rows, sync,
+    cf: { fetchedAt: cf.fetchedAt, stale: cf.stale, error: cf.error },
+    pdns: { fetchedAt: Date.now(), stale: Boolean(pdnsError), error: pdnsError },
+    counts, connectionMissing: false,
+  };
 }

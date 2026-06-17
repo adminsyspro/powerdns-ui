@@ -547,10 +547,10 @@ export default function IntegrationsPage() {
         cfPresent: r.cfPresent,
         cfType: r.cfType,
         cfZoneId: r.cfZoneId,
-        inPdnsScope: r.inPdnsScope,
+        inPdns: r.inPdns,
         account: r.account,
         // recompute syncable
-        syncable: r.inPdnsScope && row.status !== 'provisioning',
+        syncable: r.inPdns && row.status !== 'provisioning',
       };
     });
     // recompute counts
@@ -971,7 +971,7 @@ export default function IntegrationsPage() {
                           <div className="flex items-center gap-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain flex-shrink-0" />
-                            {zone.inPdnsScope ? (
+                            {zone.inPdns ? (
                               <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
                                 {zone.zoneName.replace(/\.$/, '')}
                               </Link>

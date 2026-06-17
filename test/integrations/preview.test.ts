@@ -8,19 +8,19 @@ const cf = (name: string, type = 'secondary'): CfZone =>
 const tracked = (zoneName: string, status: IntegrationZoneRow['status']): IntegrationZoneRow =>
   ({ zoneName, remoteZoneId: 'r', remoteType: 'secondary', customNsSet: null, status, message: null, updatedAt: 1 });
 
-// adopt: in PDNS scope + present in CF, untracked
+// adopt: in PDNS + present in CF, untracked
 let rows = computePreviewRows([{ name: 'a.com.', account: 'x' }], [cf('a.com')], []);
 assert.equal(rows.length, 1);
 assert.equal(rows[0].previewState, 'adopt');
 assert.equal(rows[0].syncable, true);
 assert.equal(rows[0].cfType, 'secondary');
 
-// create: in scope, absent from CF
+// create: in PDNS, absent from CF
 rows = computePreviewRows([{ name: 'b.com.', account: 'x' }], [], []);
 assert.equal(rows[0].previewState, 'create');
 assert.equal(rows[0].syncable, true);
 
-// cf-only: present in CF, not in scope
+// cf-only: present in CF, not in PDNS
 rows = computePreviewRows([], [cf('c.com')], []);
 assert.equal(rows[0].previewState, 'cf-only');
 assert.equal(rows[0].syncable, false);

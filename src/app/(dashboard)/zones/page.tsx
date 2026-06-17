@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Plus, Download, Upload, RefreshCw, AlertCircle, Server, Clock, Search, Globe, FileText, MessageSquare } from 'lucide-react';
+import { PageTitle } from '@/components/layout/page-title';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
@@ -273,10 +274,7 @@ export default function ZonesPage() {
   if (!activeConnection) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Zones</h1>
-          <p className="text-muted-foreground">Manage your DNS zones and domains</p>
-        </div>
+        <PageTitle title="Zones" />
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
           <CardContent className="flex items-center justify-between py-6">
             <div className="flex items-center gap-3">
@@ -297,10 +295,9 @@ export default function ZonesPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="Zones" />
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Zones</h1>
         <div className="flex items-center gap-3 text-muted-foreground">
-          <p className="text-sm">Manage your DNS zones and domains</p>
           {syncStatus && syncStatus.lastSyncAt > 0 && (
             <span className="flex items-center gap-1 text-xs">
               <Clock className="h-3 w-3" />

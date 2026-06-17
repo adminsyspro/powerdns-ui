@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
+import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -655,18 +656,8 @@ export default function IntegrationsPage() {
   return (
     <TooltipProvider delayDuration={300}>
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-8 w-8 object-contain" />
-            Cloudflare
-          </h1>
-          <p className="text-muted-foreground">
-            DNS zone replication to Cloudflare — secondary DNS (AXFR), automatic zone provisioning,
-            custom nameservers and per-record proxy (cache/WAF)
-          </p>
-        </div>
+      <PageTitle title="Integrations" />
+      <div className="flex items-start justify-end gap-4 flex-wrap">
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />New integration
         </Button>

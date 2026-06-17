@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { PageTitle } from '@/components/layout/page-title';
 import { Globe, ArrowRight, Shield, Activity, Server, AlertCircle, Loader2, Radio, AlertTriangle, Wifi } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -63,10 +64,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your PowerDNS infrastructure</p>
-      </div>
+      <PageTitle title="Dashboard" />
 
       {!activeConnection && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">

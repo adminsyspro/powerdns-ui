@@ -37,7 +37,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-700 dark:border-border bg-slate-900 text-slate-100 dark:bg-background dark:text-foreground px-6">
       {/* Left: Server Selector */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
         {connections.length > 0 && (
           <Select
             value={activeConnection?.id || ''}
@@ -59,7 +59,7 @@ export function Header() {
         {pageTitle && (
           <>
             <div className="hidden h-6 w-px bg-slate-700 dark:bg-border sm:block" aria-hidden />
-            <h1 className="truncate text-base font-semibold text-slate-100 dark:text-foreground">{pageTitle}</h1>
+            <h1 className="min-w-0 truncate text-base font-semibold text-slate-100 dark:text-foreground">{pageTitle}</h1>
           </>
         )}
       </div>

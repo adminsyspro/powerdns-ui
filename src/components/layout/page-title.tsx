@@ -8,6 +8,7 @@ export function PageTitle({ title }: { title: string }) {
   const setTitle = usePageTitleStore((s) => s.setTitle);
   React.useEffect(() => {
     setTitle(title);
+    return () => setTitle('');
   }, [title, setTitle]);
   return null;
 }

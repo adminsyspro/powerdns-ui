@@ -990,7 +990,7 @@ export default function IntegrationsPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {(zone.cfPresent || zone.remoteZoneId)
-                              ? <Cloud className="h-4 w-4 text-orange-500 flex-shrink-0" aria-label="Cloudflare" />
+                              ? <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 flex-shrink-0" />
                               : <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-label="PowerDNS only" />}
                             {zone.inPdns ? (
                               <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">

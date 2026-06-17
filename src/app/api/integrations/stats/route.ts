@@ -18,17 +18,25 @@ export async function GET(request: NextRequest) {
       const scopedNames = new Set(listScopedZoneNames(serverUrl, integration.config));
       const links = listIntegrationZones(integration.id, serverUrl);
 
-      // Status counts are intersected with the CURRENT scope: after a scope
-      // change, links not yet re-marked by a sync would otherwise inflate
-      // ok/error counts beyond the scope (e.g. coverage above 100%). Links
-      // outside the scope count as orphans regardless of stored status.
+      // KPI counts are bounded to the CURRENT configured scope (the coverage
+      // target): after a scope change, links not yet re-marked by a sync would
+      // otherwise inflate ok/error beyond the scope. Rules per link:
+      //   - status 'orphan'            → orphan (genuinely orphaned)
+      //   - in scope                   → its real status (auto or pinned alike)
+      //   - out of scope + manual pin  → EXCLUDED from every KPI bucket: it is
+      //       deliberately outside the configured scope (and never orphaned by
+      //       the worker), so counting it would make coverage (ok/scope) exceed
+      //       100%. It still appears in the preview table, just not in the KPIs.
+      //   - out of scope + auto        → orphan
       const counts: Record<IntegrationZoneStatus, number> = {
         ok: 0, provisioning: 0, stale: 0, error: 0, orphan: 0,
       };
       let lastActivity: number | null = null;
       for (const link of links) {
-        if (link.status === 'orphan' || !scopedNames.has(link.zoneName)) counts.orphan++;
-        else counts[link.status]++;
+        if (link.status === 'orphan') counts.orphan++;
+        else if (scopedNames.has(link.zoneName)) counts[link.status]++;
+        else if (link.managed === 'manual') { /* out-of-scope pin: outside the scope KPIs */ }
+        else counts.orphan++;
         if (lastActivity === null || link.updatedAt > lastActivity) lastActivity = link.updatedAt;
       }
 

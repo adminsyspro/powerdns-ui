@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Cloud, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, Send, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
@@ -645,6 +646,7 @@ export default function IntegrationsPage() {
   React.useEffect(() => { setZonesPage(1); }, [categoryFilter]);
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -788,7 +790,7 @@ export default function IntegrationsPage() {
             <div>
               <CardTitle className="text-base">Replicated zones — {selected.name}</CardTitle>
               <CardDescription>
-                {previewRows.length} domaine(s) en scope
+                {previewRows.length} domaine(s)
                 {preview?.sync.finishedAt && !preview.sync.running && ` — last sync ${formatDate(preview.sync.finishedAt)}`}
               </CardDescription>
             </div>
@@ -868,6 +870,17 @@ export default function IntegrationsPage() {
                 )}
               </div>
             )}
+            {/* PDNS refresh error banner */}
+            {preview?.pdns?.error && (
+              <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3">
+                <span>PowerDNS : données en cache (rafraîchissement échoué)</span>
+                {selectedId && (
+                  <Button variant="outline" size="sm" disabled={previewLoading} onClick={() => loadPreview(selectedId, true)}>
+                    Réessayer
+                  </Button>
+                )}
+              </div>
+            )}
             {(preview?.connectionMissing ?? detail.connectionMissing) ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
                 This integration&apos;s PowerDNS connection is missing or was deleted — edit the integration to rebind it to a connection.
@@ -881,7 +894,7 @@ export default function IntegrationsPage() {
               <p className="text-sm text-destructive py-4">{previewError}</p>
             ) : previewRows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">
-                Aucun domaine en scope
+                Aucune zone Master en PowerDNS
               </p>
             ) : (
               <>
@@ -920,11 +933,11 @@ export default function IntegrationsPage() {
                     <TableHead className="w-[40px]">
                       <Checkbox
                         checked={
-                          filteredRows.filter((r) => r.syncable).length > 0 &&
-                          filteredRows.filter((r) => r.syncable).every((r) => selectedZones.has(r.zoneName))
+                          paginatedZones.filter((r) => r.syncable).length > 0 &&
+                          paginatedZones.filter((r) => r.syncable).every((r) => selectedZones.has(r.zoneName))
                         }
                         onCheckedChange={(checked) => {
-                          const syncable = filteredRows.filter((r) => r.syncable).map((r) => r.zoneName);
+                          const syncable = paginatedZones.filter((r) => r.syncable).map((r) => r.zoneName);
                           setSelectedZones((prev) => {
                             const next = new Set(prev);
                             if (checked) { syncable.forEach((n) => next.add(n)); }
@@ -932,7 +945,7 @@ export default function IntegrationsPage() {
                             return next;
                           });
                         }}
-                        aria-label="Sélectionner tous les domaines synchronisables"
+                        aria-label="Sélectionner tous les domaines synchronisables de cette page"
                       />
                     </TableHead>
                     <TableHead className="font-semibold">Zone</TableHead>
@@ -969,8 +982,9 @@ export default function IntegrationsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain flex-shrink-0" />
+                            {(zone.cfPresent || zone.remoteZoneId)
+                              ? <Cloud className="h-4 w-4 text-orange-500 flex-shrink-0" aria-label="Cloudflare" />
+                              : <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-label="PowerDNS only" />}
                             {zone.inPdns ? (
                               <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
                                 {zone.zoneName.replace(/\.$/, '')}
@@ -1026,31 +1040,61 @@ export default function IntegrationsPage() {
                           {isTracked && zone.updatedAt ? formatDate(zone.updatedAt) : '—'}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1 flex-nowrap">
                             {/* Sync / Re-sync button */}
                             {zone.syncable ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={syncRunning || isSyncing || batchProgress !== null}
-                                onClick={() => handleSyncZone(zone.zoneName)}
-                              >
-                                {isSyncing ? (
-                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                ) : null}
-                                {isTracked ? 'Re-sync' : 'Sync'}
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    disabled={syncRunning || isSyncing || batchProgress !== null}
+                                    onClick={() => handleSyncZone(zone.zoneName)}
+                                    aria-label={isTracked ? 'Re-sync' : 'Sync'}
+                                  >
+                                    {isSyncing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <CloudUpload className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{isTracked ? 'Re-sync' : 'Sync'}</TooltipContent>
+                              </Tooltip>
                             ) : null}
                             {/* Force AXFR for tracked non-orphan zones */}
                             {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && (
-                              <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
-                                <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => handleForceAxfr(zone.zoneName)}
+                                    aria-label="Force AXFR"
+                                  >
+                                    <RefreshCw className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Force AXFR</TooltipContent>
+                              </Tooltip>
                             )}
                             {isTracked && zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
-                              <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
-                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 text-destructive"
+                                    onClick={() => handlePurgeOrphan(zone.zoneName)}
+                                    aria-label="Purge"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Purge</TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         </TableCell>
@@ -1347,5 +1391,6 @@ export default function IntegrationsPage() {
 
       <ConfirmDialog />
     </div>
+    </TooltipProvider>
   );
 }

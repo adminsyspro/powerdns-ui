@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useServerConnectionStore } from '@/stores';
 import { ServerStatsBlock } from '@/components/servers/server-stats-block';
+import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
 import * as api from '@/lib/api';
 import type { ServerConnection } from '@/types/powerdns';
@@ -85,11 +86,8 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Server Connections</h1>
-          <p className="text-muted-foreground">Manage your PowerDNS server connections</p>
-        </div>
+      <PageTitle title="Servers" />
+      <div className="flex items-center justify-end">
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
             <Button>

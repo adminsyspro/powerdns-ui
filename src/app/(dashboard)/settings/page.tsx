@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useUIPreferencesStore } from '@/stores';
 import * as api from '@/lib/api';
+import { PageTitle } from '@/components/layout/page-title';
 import { normalizeNameserverPools } from '@/lib/ns-pools';
 import type { NameserverPool } from '@/lib/ns-pools';
 
@@ -289,10 +290,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">Manage application and authentication settings</p>
-      </div>
+      <PageTitle title="Settings" />
 
       <Tabs defaultValue="appearance" className="space-y-4">
         <TabsList>

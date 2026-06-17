@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores';
 import { User, Mail, Shield, Clock, KeyRound, Save, Loader2 } from 'lucide-react';
+import { PageTitle } from '@/components/layout/page-title';
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore();
@@ -116,10 +117,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
-        <p className="text-muted-foreground">Manage your account information</p>
-      </div>
+      <PageTitle title="Profile" />
 
       {/* User overview */}
       <Card>

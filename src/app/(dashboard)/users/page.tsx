@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { formatDate } from '@/lib/utils';
 import type { UserRole } from '@/types/powerdns';
+import { PageTitle } from '@/components/layout/page-title';
 
 interface UserData {
   id: string;
@@ -249,16 +250,13 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="Users" />
       {forceLogoutSuccess && (
         <div className="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900 dark:text-green-200">
           {forceLogoutSuccess}
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-muted-foreground">Manage user accounts and permissions</p>
-        </div>
+      <div className="flex items-center justify-end">
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingUser(null); setError(''); } }}>
           <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Add User</Button></DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

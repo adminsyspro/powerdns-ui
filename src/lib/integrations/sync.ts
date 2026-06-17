@@ -248,14 +248,19 @@ async function provisionZoneLocked(
       await cloudflare.setZoneCustomNs(creds, zone.id, config.customNsMode === 'enable', config.customNsSet || 1);
     }
     await cloudflare.forceAxfr(creds, zone.id);
-    // Enforce the configured override state both ways (enabling and disabling),
-    // so a toggle re-provision propagates to Cloudflare. Best-effort.
+    // Proxying records on a secondary zone requires BOTH secondary_overrides and
+    // Universal SSL. Always enable them (idempotent, best-effort) on every provision
+    // — automatic (provisionZone) and manual (provisionOneZone) both reach here.
+    // Never disable: a re-sync (e.g. an NS-set change) must not turn off proxying.
     try {
-      await cloudflare.setSecondaryOverride(creds, zone.id, config.secondaryOverride);
+      await cloudflare.setSecondaryOverride(creds, zone.id, true);
     } catch (e) {
-      warnings.push(
-        `Secondary DNS override not ${config.secondaryOverride ? 'enabled' : 'disabled'}: ${e instanceof Error ? e.message : 'unknown error'}`
-      );
+      warnings.push(`Secondary DNS override not enabled: ${e instanceof Error ? e.message : 'unknown error'}`);
+    }
+    try {
+      await cloudflare.setUniversalSSL(creds, zone.id, true);
+    } catch (e) {
+      warnings.push(`Universal SSL not enabled: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
     upsertIntegrationZone(integration.id, serverUrl, zoneName, {
       remoteZoneId: zone.id,

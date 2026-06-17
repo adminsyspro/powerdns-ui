@@ -39,9 +39,6 @@ export interface IntegrationConfig {
   customNsSet: number;
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;
-  // Enable Cloudflare "Secondary DNS override" (secondary_overrides) so records
-  // on a secondary zone can be proxied — required for the proxy feature.
-  secondaryOverride: boolean;
   // What to do remotely when the PowerDNS zone disappears.
   deleteMode: 'never' | 'manual' | 'auto';
   // Hours an orphan link is kept before auto-deletion (deleteMode: 'auto').

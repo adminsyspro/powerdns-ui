@@ -519,6 +519,15 @@ export async function setSecondaryOverride(
   });
 }
 
+/** Enables/disables Universal SSL (edge certificate) — required for the proxy to
+ *  terminate TLS on proxied (orange-cloud) records. */
+export async function setUniversalSSL(creds: IntegrationCredentials, cfZoneId: string, enabled: boolean): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/ssl/universal/settings`, {
+    method: 'PATCH',
+    body: { enabled },
+  });
+}
+
 /**
  * Enables/disables the account-level custom nameservers for a zone (the
  * "Custom Nameservers" sets configured on the Cloudflare account).

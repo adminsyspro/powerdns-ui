@@ -22,6 +22,7 @@ import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
 import type { IntegrationRow, IntegrationZoneRow, IntegrationConfig } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
+import type { ZonePreview } from '@/lib/integrations/preview';
 
 // Available providers. The framework is provider-based: add an entry here
 // (plus a lib/integrations/<provider>.ts implementation) to surface a new one.
@@ -45,6 +46,13 @@ const ZONE_STATUS_BADGE: Record<string, string> = {
   stale: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   orphan: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+};
+
+const PREVIEW_STATE_BADGE: Record<string, { label: string; className: string }> = {
+  adopt:    { label: 'À adopter',   className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  create:   { label: 'À créer',     className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' },
+  'cf-only':{ label: 'CF seulement',className: 'bg-muted text-muted-foreground' },
+  unknown:  { label: 'CF inconnu',  className: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' },
 };
 
 interface FormState {
@@ -165,6 +173,9 @@ export default function IntegrationsPage() {
   const [stats, setStats] = React.useState<api.IntegrationStats | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<{ connectionMissing: boolean; zones: IntegrationZoneRow[]; sync: IntegrationSyncState } | null>(null);
+  const [preview, setPreview] = React.useState<ZonePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [testResult, setTestResult] = React.useState<{ id: string; ok: boolean; message: string } | null>(null);
@@ -262,29 +273,48 @@ export default function IntegrationsPage() {
   React.useEffect(() => { load(); }, [load]);
 
   const loadDetail = React.useCallback(async (id: string) => {
-    const [result, statsResult] = await Promise.all([
+    const [result, statsResult, previewResult] = await Promise.all([
       api.fetchIntegrationDetail(id),
       api.fetchIntegrationStats(),
+      api.fetchIntegrationPreview(id),
     ]);
     if (result.data) setDetail({ connectionMissing: result.data.connectionMissing, zones: result.data.zones, sync: result.data.sync });
     if (statsResult.data) setStats(statsResult.data);
+    if (previewResult.data) {
+      setPreview(previewResult.data);
+      setPreviewError(null);
+    } else {
+      setPreviewError(previewResult.error ?? 'Échec du chargement de l\'aperçu');
+    }
+  }, []);
+
+  const loadPreview = React.useCallback(async (id: string, refresh = false) => {
+    setPreviewLoading(true);
+    const result = await api.fetchIntegrationPreview(id, refresh);
+    if (result.data) {
+      setPreview(result.data);
+      setPreviewError(null);
+    } else {
+      setPreviewError(result.error ?? 'Échec du chargement de l\'aperçu');
+    }
+    setPreviewLoading(false);
   }, []);
 
   React.useEffect(() => {
     if (selectedId) loadDetail(selectedId);
-    else setDetail(null);
+    else { setDetail(null); setPreview(null); setPreviewError(null); }
   }, [selectedId, loadDetail]);
 
   // Reset to the first page when switching integrations.
   React.useEffect(() => { setZonesPage(1); }, [selectedId]);
 
-  // Poll while a sync runs.
-  const syncRunning = detail?.sync.running ?? false;
+  // Poll while a sync runs — source sync state from preview.
+  const syncRunning = preview?.sync.running ?? false;
   React.useEffect(() => {
     if (!syncRunning || !selectedId) return;
-    const timer = setInterval(() => loadDetail(selectedId), 2000);
+    const timer = setInterval(() => loadPreview(selectedId), 2000);
     return () => clearInterval(timer);
-  }, [syncRunning, selectedId, loadDetail]);
+  }, [syncRunning, selectedId, loadPreview]);
 
   const openCreate = () => {
     setEditing(null);
@@ -480,10 +510,9 @@ export default function IntegrationsPage() {
     return () => { cancelled = true; };
   }, [selectedId, selected?.config.accountId]);
 
-  const zonesTotalPages = Math.max(1, Math.ceil((detail?.zones.length ?? 0) / zonesPageSize));
-  const paginatedZones = detail
-    ? detail.zones.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize)
-    : [];
+  const previewRows = preview?.rows ?? [];
+  const zonesTotalPages = Math.max(1, Math.ceil(previewRows.length / zonesPageSize));
+  const paginatedZones = previewRows.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize);
   // Clamp the page if the list shrank (sync removed zones, smaller page size).
   React.useEffect(() => {
     if (zonesPage > zonesTotalPages) setZonesPage(zonesTotalPages);
@@ -629,21 +658,47 @@ export default function IntegrationsPage() {
       {/* Detail: per-zone replication state */}
       {selected && detail && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
             <div>
               <CardTitle className="text-base">Replicated zones — {selected.name}</CardTitle>
               <CardDescription>
-                {detail.zones.length} tracked zone(s)
-                {detail.sync.finishedAt && !detail.sync.running && ` — last sync ${formatDate(detail.sync.finishedAt)}`}
+                {previewRows.length} domaine(s) en scope
+                {preview?.sync.finishedAt && !preview.sync.running && ` — last sync ${formatDate(preview.sync.finishedAt)}`}
               </CardDescription>
             </div>
-            <Button onClick={handleSync} disabled={detail.sync.running}>
-              {detail.sync.running ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Syncing {detail.sync.processed}/{detail.sync.total}</>
-              ) : (
-                <><RefreshCw className="mr-2 h-4 w-4" />Sync zones</>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Rafraîchir l'aperçu */}
+              {selectedId && (
+                <div className="flex items-center gap-2">
+                  {preview?.cf.fetchedAt && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      données CF du {new Date(preview.cf.fetchedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      {preview.cf.stale && ' (périmées)'}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={previewLoading || syncRunning}
+                    onClick={() => loadPreview(selectedId, true)}
+                  >
+                    {previewLoading ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Rafraîchir l&apos;aperçu
+                  </Button>
+                </div>
               )}
-            </Button>
+              <Button onClick={handleSync} disabled={syncRunning}>
+                {syncRunning ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Syncing {preview?.sync.processed}/{preview?.sync.total}</>
+                ) : (
+                  <><RefreshCw className="mr-2 h-4 w-4" />Sync zones</>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {detailNsSets.length > 0 && (
@@ -661,13 +716,31 @@ export default function IntegrationsPage() {
                 </div>
               </div>
             )}
-            {detail.connectionMissing ? (
+            {/* CF error inline retry banner */}
+            {preview?.cf.error && !preview.cf.stale && (
+              <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-center justify-between gap-3">
+                <span>Erreur Cloudflare : {preview.cf.error}</span>
+                {selectedId && (
+                  <Button variant="outline" size="sm" disabled={previewLoading} onClick={() => loadPreview(selectedId, true)}>
+                    Réessayer
+                  </Button>
+                )}
+              </div>
+            )}
+            {(preview?.connectionMissing ?? detail.connectionMissing) ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
                 This integration&apos;s PowerDNS connection is missing or was deleted — edit the integration to rebind it to a connection.
               </div>
-            ) : detail.zones.length === 0 ? (
+            ) : previewLoading && previewRows.length === 0 ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement de l&apos;aperçu…
+              </div>
+            ) : previewError && previewRows.length === 0 ? (
+              <p className="text-sm text-destructive py-4">{previewError}</p>
+            ) : previewRows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">
-                No zone tracked yet — run a sync to provision every Master zone in scope at Cloudflare
+                Aucun domaine en scope
               </p>
             ) : (
               <>
@@ -677,84 +750,96 @@ export default function IntegrationsPage() {
                     <TableHead className="font-semibold">Zone</TableHead>
                     <TableHead className="font-semibold">Cloudflare Type</TableHead>
                     <TableHead className="font-semibold">NS set</TableHead>
-                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold">Statut</TableHead>
                     <TableHead className="font-semibold">Message</TableHead>
-                    <TableHead className="font-semibold whitespace-nowrap">Updated</TableHead>
+                    <TableHead className="font-semibold whitespace-nowrap">Mis à jour</TableHead>
                     <TableHead className="w-[120px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedZones.map((zone) => (
-                    <TableRow key={zone.zoneName}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain flex-shrink-0" />
-                          <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
-                            {zone.zoneName.replace(/\.$/, '')}
-                          </Link>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {zone.remoteType ? (
-                          <Badge variant="outline" className="capitalize">{zone.remoteType}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {zone.status === 'ok' && zone.remoteType === 'secondary' ? (
-                          <Select
-                            value={zone.customNsSet != null ? String(zone.customNsSet) : '__default__'}
-                            onValueChange={(value) => handleSetNsSet(zone.zoneName, value)}
-                            disabled={nsSetPending === zone.zoneName}
-                          >
-                            <SelectTrigger className="w-[180px] h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__default__">NS Cloudflare Default</SelectItem>
-                              {detailNsSets.map((s) => (
-                                <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.map((n) => n.host).join(', ')}>
-                                  Set {s.set}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={ZONE_STATUS_BADGE[zone.status] || ''}>{zone.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[360px] truncate" title={zone.message || ''}>
-                        {zone.message || '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDate(zone.updatedAt)}
-                      </TableCell>
-                      <TableCell>
-                        {zone.remoteZoneId && zone.status !== 'orphan' && (
-                          <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
-                            <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
-                          </Button>
-                        )}
-                        {zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
-                          <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
-                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {paginatedZones.map((zone) => {
+                    const isTracked = zone.previewState === 'tracked';
+                    const previewBadge = PREVIEW_STATE_BADGE[zone.previewState];
+                    return (
+                      <TableRow key={zone.zoneName}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src="/integrations/cloudflare-icon.svg" alt="Cloudflare" className="h-4 w-4 object-contain flex-shrink-0" />
+                            {zone.inPdnsScope ? (
+                              <Link href={`/zones/${encodeURIComponent(zone.zoneName)}`} className="font-medium hover:underline">
+                                {zone.zoneName.replace(/\.$/, '')}
+                              </Link>
+                            ) : (
+                              <span className="font-medium">{zone.zoneName.replace(/\.$/, '')}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {zone.cfType ? (
+                            <Badge variant="outline" className="capitalize">{zone.cfType}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isTracked && zone.status === 'ok' && zone.remoteType === 'secondary' ? (
+                            <Select
+                              value={zone.customNsSet != null ? String(zone.customNsSet) : '__default__'}
+                              onValueChange={(value) => handleSetNsSet(zone.zoneName, value)}
+                              disabled={nsSetPending === zone.zoneName}
+                            >
+                              <SelectTrigger className="w-[180px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__default__">NS Cloudflare Default</SelectItem>
+                                {detailNsSets.map((s) => (
+                                  <SelectItem key={s.set} value={String(s.set)} title={s.nameservers.map((n) => n.host).join(', ')}>
+                                    Set {s.set}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isTracked && zone.status ? (
+                            <Badge className={ZONE_STATUS_BADGE[zone.status] || ''}>{zone.status}</Badge>
+                          ) : previewBadge ? (
+                            <Badge className={previewBadge.className}>{previewBadge.label}</Badge>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[360px] truncate" title={zone.message || ''}>
+                          {isTracked ? (zone.message || '—') : '—'}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {isTracked && zone.updatedAt ? formatDate(zone.updatedAt) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && (
+                            <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
+                              <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
+                            </Button>
+                          )}
+                          {isTracked && zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
+                            <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
-              {detail.zones.length > zonesPageSize && (
+              {previewRows.length > zonesPageSize && (
                 <div className="flex items-center justify-between pt-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>
-                      Showing {(zonesPage - 1) * zonesPageSize + 1}-{Math.min(zonesPage * zonesPageSize, detail.zones.length)} of {detail.zones.length} zone(s)
+                      Showing {(zonesPage - 1) * zonesPageSize + 1}-{Math.min(zonesPage * zonesPageSize, previewRows.length)} of {previewRows.length} domaine(s)
                     </span>
                     <Select
                       value={String(zonesPageSize)}

@@ -601,14 +601,13 @@ export default function IntegrationsPage() {
       const ok = window.confirm(`Synchroniser ${names.length} domaines ?`);
       if (!ok) return;
     }
-    let done = 0;
     setBatchProgress([0, names.length]);
     setSelectedZones(new Set());
     try {
       await runWithConcurrency(names, 3, async (zoneName) => {
         // Skip zones that are no longer syncable (e.g. re-render race).
         const currentRow = preview?.rows.find((r) => r.zoneName === zoneName);
-        if (currentRow && !currentRow.syncable) { done++; setBatchProgress([done, names.length]); return; }
+        if (currentRow && !currentRow.syncable) { setBatchProgress((p) => p ? [p[0] + 1, p[1]] : p); return; }
         setSyncingZones((prev) => new Set(prev).add(zoneName));
         setRowErrors((prev) => { const next = { ...prev }; delete next[zoneName]; return next; });
         try {
@@ -620,8 +619,7 @@ export default function IntegrationsPage() {
           }
         } finally {
           setSyncingZones((prev) => { const next = new Set(prev); next.delete(zoneName); return next; });
-          done++;
-          setBatchProgress([done, names.length]);
+          setBatchProgress((p) => p ? [p[0] + 1, p[1]] : p);
         }
       });
     } finally {

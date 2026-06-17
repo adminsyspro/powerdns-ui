@@ -510,13 +510,141 @@ export default function IntegrationsPage() {
     return () => { cancelled = true; };
   }, [selectedId, selected?.config.accountId]);
 
+  // Per-row in-flight sync markers (keyed by zoneName).
+  const [syncingZones, setSyncingZones] = React.useState<Set<string>>(new Set());
+  // Multi-select: Set of zoneNames currently checked.
+  const [selectedZones, setSelectedZones] = React.useState<Set<string>>(new Set());
+  // Batch progress counter: [done, total] or null when not running.
+  const [batchProgress, setBatchProgress] = React.useState<[number, number] | null>(null);
+  // Per-row action errors (keyed by zoneName).
+  const [rowErrors, setRowErrors] = React.useState<Record<string, string>>({});
+  // Category filter: null = Tous.
+  type CategoryFilter = 'adopt' | 'create' | 'cf-only' | 'tracked' | null;
+  const [categoryFilter, setCategoryFilter] = React.useState<CategoryFilter>(null);
+
+  // Reset selection and filter when switching integrations.
+  React.useEffect(() => {
+    setSelectedZones(new Set());
+    setCategoryFilter(null);
+    setBatchProgress(null);
+    setRowErrors({});
+  }, [selectedId]);
+
+  /** Map a returned IntegrationZoneRow back into the ZonePreviewRow it belongs to. */
+  function patchPreviewRow(prev: ZonePreview, zoneName: string, row: IntegrationZoneRow): ZonePreview {
+    const updated = prev.rows.map((r) => {
+      if (r.zoneName !== zoneName) return r;
+      return {
+        ...r,
+        previewState: 'tracked' as const,
+        status: row.status,
+        message: row.message,
+        remoteType: row.remoteType,
+        remoteZoneId: row.remoteZoneId,
+        customNsSet: row.customNsSet,
+        updatedAt: row.updatedAt,
+        // carry over CF/PDNS fields from the prior preview row
+        cfPresent: r.cfPresent,
+        cfType: r.cfType,
+        cfZoneId: r.cfZoneId,
+        inPdnsScope: r.inPdnsScope,
+        account: r.account,
+        // recompute syncable
+        syncable: r.inPdnsScope && row.status !== 'provisioning',
+      };
+    });
+    // recompute counts
+    const counts = { adopt: 0, create: 0, cfOnly: 0, tracked: 0, unknown: 0 };
+    for (const r of updated) {
+      if (r.previewState === 'adopt') counts.adopt++;
+      else if (r.previewState === 'create') counts.create++;
+      else if (r.previewState === 'cf-only') counts.cfOnly++;
+      else if (r.previewState === 'tracked') counts.tracked++;
+      else counts.unknown++;
+    }
+    return { ...prev, rows: updated, counts };
+  }
+
+  const handleSyncZone = React.useCallback(async (zoneName: string) => {
+    if (!selectedId) return;
+    setSyncingZones((prev) => new Set(prev).add(zoneName));
+    setRowErrors((prev) => { const next = { ...prev }; delete next[zoneName]; return next; });
+    try {
+      const result = await api.syncIntegrationZone(selectedId, zoneName);
+      if (result.data?.row) {
+        setPreview((prev) => prev ? patchPreviewRow(prev, zoneName, result.data!.row) : prev);
+      } else {
+        setRowErrors((prev) => ({ ...prev, [zoneName]: result.error ?? 'Échec de la synchronisation' }));
+      }
+    } finally {
+      setSyncingZones((prev) => { const next = new Set(prev); next.delete(zoneName); return next; });
+    }
+  }, [selectedId]);
+
+  async function runWithConcurrency<T>(items: T[], limit: number, worker: (t: T) => Promise<void>) {
+    let i = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (i < items.length) { const item = items[i++]; await worker(item); }
+      }),
+    );
+  }
+
+  const handleSyncSelected = React.useCallback(async () => {
+    if (!selectedId || selectedZones.size === 0) return;
+    if (selectedZones.size > 200) {
+      setError('Maximum 200 domaines par lot');
+      return;
+    }
+    const names = Array.from(selectedZones);
+    if (names.length > 25) {
+      const ok = window.confirm(`Synchroniser ${names.length} domaines ?`);
+      if (!ok) return;
+    }
+    let done = 0;
+    setBatchProgress([0, names.length]);
+    setSelectedZones(new Set());
+    try {
+      await runWithConcurrency(names, 3, async (zoneName) => {
+        // Skip zones that are no longer syncable (e.g. re-render race).
+        const currentRow = preview?.rows.find((r) => r.zoneName === zoneName);
+        if (currentRow && !currentRow.syncable) { done++; setBatchProgress([done, names.length]); return; }
+        setSyncingZones((prev) => new Set(prev).add(zoneName));
+        setRowErrors((prev) => { const next = { ...prev }; delete next[zoneName]; return next; });
+        try {
+          const result = await api.syncIntegrationZone(selectedId, zoneName);
+          if (result.data?.row) {
+            setPreview((prev) => prev ? patchPreviewRow(prev, zoneName, result.data!.row) : prev);
+          } else {
+            setRowErrors((prev) => ({ ...prev, [zoneName]: result.error ?? 'Échec de la synchronisation' }));
+          }
+        } finally {
+          setSyncingZones((prev) => { const next = new Set(prev); next.delete(zoneName); return next; });
+          done++;
+          setBatchProgress([done, names.length]);
+        }
+      });
+    } finally {
+      setBatchProgress(null);
+    }
+  }, [selectedId, selectedZones, preview]);
+
   const previewRows = preview?.rows ?? [];
-  const zonesTotalPages = Math.max(1, Math.ceil(previewRows.length / zonesPageSize));
-  const paginatedZones = previewRows.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize);
+
+  // Category filter applied before pagination.
+  const filteredRows = categoryFilter
+    ? previewRows.filter((r) => r.previewState === categoryFilter)
+    : previewRows;
+
+  const zonesTotalPages = Math.max(1, Math.ceil(filteredRows.length / zonesPageSize));
+  const paginatedZones = filteredRows.slice((zonesPage - 1) * zonesPageSize, zonesPage * zonesPageSize);
   // Clamp the page if the list shrank (sync removed zones, smaller page size).
   React.useEffect(() => {
     if (zonesPage > zonesTotalPages) setZonesPage(zonesTotalPages);
   }, [zonesPage, zonesTotalPages]);
+
+  // Reset to page 1 when filter changes.
+  React.useEffect(() => { setZonesPage(1); }, [categoryFilter]);
 
   return (
     <div className="space-y-6">
@@ -667,6 +795,21 @@ export default function IntegrationsPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Sync la sélection */}
+              {previewRows.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncRunning || selectedZones.size === 0 || batchProgress !== null}
+                  onClick={handleSyncSelected}
+                >
+                  {batchProgress !== null ? (
+                    <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />{batchProgress[0]}/{batchProgress[1]}…</>
+                  ) : (
+                    <>Sync la sélection{selectedZones.size > 0 ? ` (${selectedZones.size})` : ''}</>
+                  )}
+                </Button>
+              )}
               {/* Rafraîchir l'aperçu */}
               {selectedId && (
                 <div className="flex items-center gap-2">
@@ -744,9 +887,56 @@ export default function IntegrationsPage() {
               </p>
             ) : (
               <>
+              {/* Counts banner */}
+              {preview?.counts && (
+                <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  {preview.counts.adopt > 0 && <span className="text-blue-700 dark:text-blue-300">{preview.counts.adopt} à adopter</span>}
+                  {preview.counts.create > 0 && <span>{preview.counts.create} à créer</span>}
+                  {preview.counts.cfOnly > 0 && <span>{preview.counts.cfOnly} CF seulement</span>}
+                  {preview.counts.tracked > 0 && <span className="text-green-700 dark:text-green-300">{preview.counts.tracked} suivis</span>}
+                  {preview.counts.unknown > 0 && <span className="text-amber-700 dark:text-amber-300">{preview.counts.unknown} CF inconnu</span>}
+                </div>
+              )}
+              {/* Category filter */}
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {([
+                  [null,      'Tous'],
+                  ['adopt',   'À adopter'],
+                  ['create',  'À créer'],
+                  ['cf-only', 'CF seulement'],
+                  ['tracked', 'Suivis'],
+                ] as Array<[CategoryFilter, string]>).map(([value, label]) => (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    onClick={() => setCategoryFilter(value)}
+                    className={`rounded-full border px-3 py-0.5 text-xs transition-colors ${categoryFilter === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <Table>
                 <TableHeader className="bg-slate-100 dark:bg-slate-800">
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={
+                          filteredRows.filter((r) => r.syncable).length > 0 &&
+                          filteredRows.filter((r) => r.syncable).every((r) => selectedZones.has(r.zoneName))
+                        }
+                        onCheckedChange={(checked) => {
+                          const syncable = filteredRows.filter((r) => r.syncable).map((r) => r.zoneName);
+                          setSelectedZones((prev) => {
+                            const next = new Set(prev);
+                            if (checked) { syncable.forEach((n) => next.add(n)); }
+                            else { syncable.forEach((n) => next.delete(n)); }
+                            return next;
+                          });
+                        }}
+                        aria-label="Sélectionner tous les domaines synchronisables"
+                      />
+                    </TableHead>
                     <TableHead className="font-semibold">Zone</TableHead>
                     <TableHead className="font-semibold">Cloudflare Type</TableHead>
                     <TableHead className="font-semibold">NS set</TableHead>
@@ -760,8 +950,25 @@ export default function IntegrationsPage() {
                   {paginatedZones.map((zone) => {
                     const isTracked = zone.previewState === 'tracked';
                     const previewBadge = PREVIEW_STATE_BADGE[zone.previewState];
+                    const isSyncing = syncingZones.has(zone.zoneName);
+                    const rowError = rowErrors[zone.zoneName];
                     return (
                       <TableRow key={zone.zoneName}>
+                        <TableCell className="w-[40px]">
+                          {zone.syncable ? (
+                            <Checkbox
+                              checked={selectedZones.has(zone.zoneName)}
+                              onCheckedChange={(checked) => {
+                                setSelectedZones((prev) => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(zone.zoneName); else next.delete(zone.zoneName);
+                                  return next;
+                                });
+                              }}
+                              aria-label={`Sélectionner ${zone.zoneName.replace(/\.$/, '')}`}
+                            />
+                          ) : null}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -812,34 +1019,53 @@ export default function IntegrationsPage() {
                             <Badge className={previewBadge.className}>{previewBadge.label}</Badge>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[360px] truncate" title={zone.message || ''}>
-                          {isTracked ? (zone.message || '—') : '—'}
+                        <TableCell className="text-xs text-muted-foreground max-w-[360px] truncate" title={rowError || zone.message || ''}>
+                          {rowError ? (
+                            <span className="text-destructive">{rowError}</span>
+                          ) : isTracked ? (zone.message || '—') : '—'}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {isTracked && zone.updatedAt ? formatDate(zone.updatedAt) : '—'}
                         </TableCell>
                         <TableCell>
-                          {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && (
-                            <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
-                              <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
-                            </Button>
-                          )}
-                          {isTracked && zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
-                            <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
-                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* Sync / Re-sync button */}
+                            {zone.syncable ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={syncRunning || isSyncing || batchProgress !== null}
+                                onClick={() => handleSyncZone(zone.zoneName)}
+                              >
+                                {isSyncing ? (
+                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : null}
+                                {isTracked ? 'Re-sync' : 'Sync'}
+                              </Button>
+                            ) : null}
+                            {/* Force AXFR for tracked non-orphan zones */}
+                            {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && (
+                              <Button variant="outline" size="sm" onClick={() => handleForceAxfr(zone.zoneName)}>
+                                <Send className="mr-1.5 h-3.5 w-3.5" />Force AXFR
+                              </Button>
+                            )}
+                            {isTracked && zone.status === 'orphan' && selected?.config.deleteMode !== 'never' && (
+                              <Button variant="outline" size="sm" className="text-destructive" onClick={() => handlePurgeOrphan(zone.zoneName)}>
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />Purge
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
-              {previewRows.length > zonesPageSize && (
+              {filteredRows.length > zonesPageSize && (
                 <div className="flex items-center justify-between pt-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>
-                      Showing {(zonesPage - 1) * zonesPageSize + 1}-{Math.min(zonesPage * zonesPageSize, previewRows.length)} of {previewRows.length} domaine(s)
+                      Showing {(zonesPage - 1) * zonesPageSize + 1}-{Math.min(zonesPage * zonesPageSize, filteredRows.length)} of {filteredRows.length} domaine(s)
                     </span>
                     <Select
                       value={String(zonesPageSize)}

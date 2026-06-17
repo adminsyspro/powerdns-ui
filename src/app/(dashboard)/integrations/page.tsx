@@ -656,7 +656,7 @@ export default function IntegrationsPage() {
   return (
     <TooltipProvider delayDuration={300}>
     <div className="space-y-6">
-      <PageTitle title="Integrations" />
+      <PageTitle title="Cloudflare" />
       <div className="flex items-start justify-end gap-4 flex-wrap">
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />New integration

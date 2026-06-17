@@ -706,11 +706,11 @@ export default function ZoneDetailPage() {
   if (error || !zone) {
     return (
       <div className="space-y-6">
+        <PageTitle title={zoneId} />
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
-          <h1 className="text-3xl font-bold tracking-tight">{zoneId}</h1>
         </div>
         <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
           <CardContent className="flex items-center gap-3 py-4">

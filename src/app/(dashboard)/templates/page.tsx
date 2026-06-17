@@ -256,7 +256,7 @@ export default function TemplatesPage() {
   return (
     <TooltipProvider>
     <div className="space-y-6">
-      <PageTitle title="Templates" />
+      <PageTitle title="Zone Templates" />
       <div className="flex items-center justify-end">
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />New Template

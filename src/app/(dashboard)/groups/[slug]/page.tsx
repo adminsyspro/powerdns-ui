@@ -395,6 +395,10 @@ export default function GroupDetailPage() {
         <Link href="/groups">
           <Button variant="ghost" size="sm" className="mb-2"><ArrowLeft className="mr-2 h-4 w-4" />Back to Groups</Button>
         </Link>
+        <p className="text-muted-foreground font-mono text-sm mt-1">{group.slug}</p>
+        {group.description && (
+          <p className="text-muted-foreground mt-1">{group.description}</p>
+        )}
         <div className="flex items-start justify-end">
           <div className="flex gap-2">
             <Badge variant="secondary">{group.memberCount} member{group.memberCount !== 1 ? 's' : ''}</Badge>

@@ -119,8 +119,21 @@ export default function CompliancePage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Compliance" />
-      <div className="flex items-start justify-end gap-4 flex-wrap">
+      <PageTitle title="NS Audit" />
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-muted-foreground">
+            Public delegation of each forward zone compared to the default nameserver pool
+            {data?.scan.poolName && (
+              <> — pool <span className="font-medium">{data.scan.poolName}</span>{' '}
+                <span className="font-mono text-xs">({data.scan.poolNameservers.map((ns) => ns.replace(/\.$/, '')).join(', ')})</span>
+              </>
+            )}
+          </p>
+          {data?.lastCheckedAt && !scanning && (
+            <p className="text-xs text-muted-foreground mt-1">Last scan: {formatDate(data.lastCheckedAt)}</p>
+          )}
+        </div>
         <Button onClick={handleScan} disabled={scanning}>
           {scanning ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning {data?.scan.scanned}/{data?.scan.total}</>

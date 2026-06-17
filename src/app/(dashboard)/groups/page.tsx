@@ -141,8 +141,7 @@ export default function GroupsPage() {
   return (
     <div className="space-y-6">
       <PageTitle title="Groups" />
-      <div className="flex items-center justify-between">
-        <div />
+      <div className="flex items-center justify-end">
         <Dialog
           open={dialogOpen}
           onOpenChange={(open) => {

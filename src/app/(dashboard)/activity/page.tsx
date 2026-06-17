@@ -64,9 +64,8 @@ export default function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Activity" />
-      <div className="flex items-center justify-between">
-        <div />
+      <PageTitle title="Activity Log" />
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={handleExport} disabled={logs.length === 0}>
             <Download className="mr-2 h-4 w-4" />Export

@@ -40,7 +40,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="History" />
+      <PageTitle title="Change History" />
 
       <Card>
         <CardHeader>

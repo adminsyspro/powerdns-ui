@@ -611,7 +611,7 @@ export default function ProxyPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Proxy" />
+      <PageTitle title="API Proxy" />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4">

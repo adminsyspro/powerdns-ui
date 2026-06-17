@@ -86,7 +86,7 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Servers" />
+      <PageTitle title="Server Connections" />
       <div className="flex items-center justify-end">
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>

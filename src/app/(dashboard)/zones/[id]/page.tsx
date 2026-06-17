@@ -469,8 +469,15 @@ export default function ZoneDetailPage() {
     // edits win over server state, mirroring handleSaveRecord) before removing
     // one value, so the REPLACE never silently drops hidden siblings.
     const key = `${record.name}::${record.type}`;
+    const pending = pendingMap.get(key);
+    // A whole-RRSet deletion is already queued for this key (a pending change
+    // whose `after` is null). The table still renders a trash button on each
+    // greyed "deleted" row; re-clicking it must NOT downgrade the queued DELETE
+    // into a partial EDIT (which would silently cancel the whole-RRSet delete).
+    // Keep the pending DELETE as-is.
+    if (pending && !pending.after) return;
     const fullRRSet =
-      pendingMap.get(key)?.after ||
+      pending?.after ||
       zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type) ||
       record;
 

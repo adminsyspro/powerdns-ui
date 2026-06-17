@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDateTime } from '@/lib/utils';
 import { useActivityLogStore } from '@/stores';
 import { useConfirm } from '@/hooks/use-confirm';
+import { PageTitle } from '@/components/layout/page-title';
 
 export default function ActivityPage() {
   const { logs, clearLogs } = useActivityLogStore();
@@ -63,11 +64,9 @@ export default function ActivityPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="Activity" />
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Activity Log</h1>
-          <p className="text-muted-foreground">Track all actions performed in the system</p>
-        </div>
+        <div />
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={handleExport} disabled={logs.length === 0}>
             <Download className="mr-2 h-4 w-4" />Export

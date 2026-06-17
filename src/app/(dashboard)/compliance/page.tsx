@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
 import type { NsAuditStatus, NsAuditRow } from '@/lib/ns-audit';
+import { PageTitle } from '@/components/layout/page-title';
 
 const STATUS_META: Record<NsAuditStatus, { label: string; badgeClass: string; description: string }> = {
   foreign: {
@@ -118,21 +119,8 @@ export default function CompliancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">NS Audit</h1>
-          <p className="text-muted-foreground">
-            Public delegation of each forward zone compared to the default nameserver pool
-            {data?.scan.poolName && (
-              <> — pool <span className="font-medium">{data.scan.poolName}</span>{' '}
-                <span className="font-mono text-xs">({data.scan.poolNameservers.map((ns) => ns.replace(/\.$/, '')).join(', ')})</span>
-              </>
-            )}
-          </p>
-          {data?.lastCheckedAt && !scanning && (
-            <p className="text-xs text-muted-foreground mt-1">Last scan: {formatDate(data.lastCheckedAt)}</p>
-          )}
-        </div>
+      <PageTitle title="Compliance" />
+      <div className="flex items-start justify-end gap-4 flex-wrap">
         <Button onClick={handleScan} disabled={scanning}>
           {scanning ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning {data?.scan.scanned}/{data?.scan.total}</>

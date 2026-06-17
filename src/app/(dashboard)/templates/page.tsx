@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTemplatesStore } from '@/stores';
 import { useConfirm } from '@/hooks/use-confirm';
+import { PageTitle } from '@/components/layout/page-title';
 import { formatDate, getRecordTypeColor, getRecordTypeRowColor } from '@/lib/utils';
 import type { TemplateRecord, RecordType, ZoneTemplate } from '@/types/powerdns';
 
@@ -255,11 +256,8 @@ export default function TemplatesPage() {
   return (
     <TooltipProvider>
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Zone Templates</h1>
-          <p className="text-muted-foreground">Create and manage reusable zone templates</p>
-        </div>
+      <PageTitle title="Templates" />
+      <div className="flex items-center justify-end">
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />New Template
         </Button>

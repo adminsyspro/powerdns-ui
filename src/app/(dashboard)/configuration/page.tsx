@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useConfig } from '@/hooks/use-pdns';
 import { useServerConnectionStore } from '@/stores';
+import { PageTitle } from '@/components/layout/page-title';
 
 export default function ConfigurationPage() {
   const { activeConnection } = useServerConnectionStore();
@@ -38,7 +39,7 @@ export default function ConfigurationPage() {
   if (!activeConnection) {
     return (
       <div className="space-y-6">
-        <div><h1 className="text-3xl font-bold tracking-tight">Configuration</h1></div>
+        <PageTitle title="Configuration" />
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
           <CardContent className="flex items-center justify-between py-6">
             <div className="flex items-center gap-3">
@@ -55,11 +56,8 @@ export default function ConfigurationPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Configuration</h1>
-            <p className="text-muted-foreground">View PowerDNS server configuration (read-only)</p>
-          </div>
+        <PageTitle title="Configuration" />
+        <div className="flex items-center justify-end">
           <Button onClick={refetch} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
           </Button>

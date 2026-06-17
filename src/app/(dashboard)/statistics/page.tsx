@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { StatCard, ServerMetricsChart } from '@/components/dashboard/stats';
 import { useStatistics, statsToMap } from '@/hooks/use-pdns';
 import { useServerConnectionStore } from '@/stores';
+import { PageTitle } from '@/components/layout/page-title';
 
 export default function StatisticsPage() {
   const { activeConnection } = useServerConnectionStore();
@@ -46,7 +47,7 @@ export default function StatisticsPage() {
   if (!activeConnection) {
     return (
       <div className="space-y-6">
-        <div><h1 className="text-3xl font-bold tracking-tight">Statistics</h1></div>
+        <PageTitle title="Statistics" />
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
           <CardContent className="flex items-center justify-between py-6">
             <div className="flex items-center gap-3">
@@ -62,11 +63,8 @@ export default function StatisticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Statistics</h1>
-          <p className="text-muted-foreground">Real-time server performance metrics</p>
-        </div>
+      <PageTitle title="Statistics" />
+      <div className="flex items-center justify-end">
         <Button onClick={refetch} disabled={isLoading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
         </Button>

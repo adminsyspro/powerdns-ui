@@ -27,6 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDate } from '@/lib/utils';
 import { useServerConnectionStore } from '@/stores';
+import { PageTitle } from '@/components/layout/page-title';
 
 interface RecordRule {
   id: string;
@@ -610,13 +611,7 @@ export default function ProxyPage() {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">API Proxy</h1>
-        <p className="text-muted-foreground">
-          Manage API accesses and granular access control
-        </p>
-      </div>
+      <PageTitle title="Proxy" />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4">

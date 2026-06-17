@@ -12,6 +12,7 @@ import { ChangeDiffCard } from '@/components/records/change-diff-card';
 import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
 import type { ChangesetSubmission } from '@/types/powerdns';
+import { PageTitle } from '@/components/layout/page-title';
 
 export default function HistoryPage() {
   const { activeConnection } = useServerConnectionStore();
@@ -39,10 +40,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Change History</h1>
-        <p className="text-muted-foreground">Full audit trail of all DNS record changes with before/after diffs</p>
-      </div>
+      <PageTitle title="History" />
 
       <Card>
         <CardHeader>

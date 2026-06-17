@@ -93,7 +93,20 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
       .prepare(`${base} AND account IN (${placeholders}) ORDER BY name`)
       .all(normalizeUrl(serverUrl), ...config.groups) as Array<{ name: string; account: string }>;
   }
-  return db.prepare(`${base} ORDER BY name`).all(normalizeUrl(serverUrl)) as Array<{ name: string; account: string }>;
+  return listMasterZones(serverUrl);
+}
+
+/** All Master zones of a connection (scope-independent) — preview + manual-sync inventory. */
+export function listMasterZones(serverUrl: string): Array<{ name: string; account: string }> {
+  return getDb()
+    .prepare(
+      `SELECT name, account FROM zones
+        WHERE server_url = ? AND kind = 'Master'
+          AND NOT (name = 'in-addr.arpa.' OR name LIKE '%.in-addr.arpa.'
+                   OR name = 'ip6.arpa.'   OR name LIKE '%.ip6.arpa.')
+        ORDER BY name`
+    )
+    .all(normalizeUrl(serverUrl)) as Array<{ name: string; account: string }>;
 }
 
 /** Names of the PowerDNS zones currently matching the integration scope. */

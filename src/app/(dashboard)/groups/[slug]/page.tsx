@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2, Loader2 } from 'lucide-react';
+import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -388,19 +389,13 @@ export default function GroupDetailPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title={group?.name ?? 'Group'} />
       {/* Header */}
       <div>
         <Link href="/groups">
           <Button variant="ghost" size="sm" className="mb-2"><ArrowLeft className="mr-2 h-4 w-4" />Back to Groups</Button>
         </Link>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{group.name}</h1>
-            <p className="text-muted-foreground font-mono text-sm mt-1">{group.slug}</p>
-            {group.description && (
-              <p className="text-muted-foreground mt-1">{group.description}</p>
-            )}
-          </div>
+        <div className="flex items-start justify-end">
           <div className="flex gap-2">
             <Badge variant="secondary">{group.memberCount} member{group.memberCount !== 1 ? 's' : ''}</Badge>
             <Badge variant="outline">{group.zoneCount} zone{group.zoneCount !== 1 ? 's' : ''}</Badge>

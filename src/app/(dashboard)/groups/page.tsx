@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
+import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -139,11 +140,9 @@ export default function GroupsPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="Groups" />
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Groups</h1>
-          <p className="text-muted-foreground">Manage groups, members, and zone assignments</p>
-        </div>
+        <div />
         <Dialog
           open={dialogOpen}
           onOpenChange={(open) => {

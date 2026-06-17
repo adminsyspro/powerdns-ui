@@ -30,6 +30,7 @@ import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
 import { normalizeRecordContent } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
+import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useActivityLogStore, useAuthStore, usePendingChangesStore } from '@/stores';
 import * as api from '@/lib/api';
@@ -728,6 +729,7 @@ export default function ZoneDetailPage() {
   return (
     <TooltipProvider delayDuration={300}>
     <div className="space-y-6">
+      <PageTitle title={zone?.name?.replace(/\.$/, '') ?? 'Zone'} />
       {/* Header + Zone info bar */}
       <Card>
         <CardContent className="py-3">

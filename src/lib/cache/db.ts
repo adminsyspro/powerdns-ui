@@ -301,6 +301,36 @@ function initSchema(db: Database.Database) {
     db.exec('ALTER TABLE integration_zones ADD COLUMN custom_ns_set INTEGER DEFAULT NULL');
   }
 
+  // Migration (data cleanup): clear the spurious "Enterprise plan not set: …
+  // 10000: Authentication error" warning that older builds left on healthy
+  // zones. Pre-fix code called setZonePlan on EVERY zone — including adopted
+  // secondaries that are already Enterprise — where an account-scoped token
+  // lacks billing permission, so a best-effort warning got stored in `message`.
+  // A reconcile never re-provisions an 'ok' zone (sync.ts), so that message can
+  // never self-clear. On any 'ok' zone the warning is necessarily stale: under
+  // the current code setZonePlan is only attempted on a freshly-created zone,
+  // and one that fails to reach Enterprise then fails the Enterprise-only
+  // linkZoneToPeer → status 'error', never 'ok'.
+  //
+  // provisionZone joins warnings with '; ' and always pushes the plan warning
+  // FIRST, so the only segment that can follow it is the override warning
+  // ("Secondary DNS override not …", sync.ts). The plan warning's own text can
+  // itself contain '; ' (Cloudflare joins multiple API errors with '; ',
+  // cloudflare.ts), so we cannot cut at the first '; '. Anchor on the override
+  // marker instead: keep from there when present (preserving a still-relevant
+  // override warning), else NULL the whole message. Idempotent: afterwards no
+  // 'ok' row starts with the plan warning.
+  db.prepare(
+    `UPDATE integration_zones
+        SET message = CASE
+              WHEN message LIKE '%; Secondary DNS override %'
+                THEN substr(message, instr(message, '; Secondary DNS override ') + 2)
+              ELSE NULL
+            END
+      WHERE status = 'ok'
+        AND message LIKE 'Enterprise plan not set:%'`
+  ).run();
+
   // Migration: extend users.role CHECK to include 'Customer', users.auth_type
   // CHECK to include 'oidc', and add oidc_subject + session_version columns.
   // SQLite cannot ALTER a CHECK in place, so rebuild the table when the stored

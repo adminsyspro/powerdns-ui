@@ -119,7 +119,7 @@ export async function getCachedCfZones(
   const now = Date.now();
   const entry = cfCache.get(key);
 
-  if (!opts.refresh && entry && entry.zones && now - entry.fetchedAt < ttl) {
+  if (!opts.refresh && entry && entry.fetchedAt && now - entry.fetchedAt < ttl) {
     return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: false, error: null };
   }
   if (entry?.pending) {
@@ -136,8 +136,9 @@ export async function getCachedCfZones(
   cfCache.set(key, { ...base, pending });
   try {
     const zones = await pending;
-    cfCache.set(key, { fetchedAt: Date.now(), zones, pending: null });
-    return { zones, fetchedAt: Date.now(), stale: false, error: null };
+    const fetchedAt = Date.now();
+    cfCache.set(key, { fetchedAt, zones, pending: null });
+    return { zones, fetchedAt, stale: false, error: null };
   } catch (e) {
     const prev = cfCache.get(key);
     cfCache.set(key, { fetchedAt: prev?.fetchedAt ?? 0, zones: prev?.zones ?? [], pending: null });

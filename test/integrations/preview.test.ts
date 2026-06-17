@@ -88,5 +88,19 @@ console.log('preview.computePreviewRows: ALL PASSED');
   assert.equal(res2.zones, null);
   assert.ok(res2.error);
 
+  // concurrent failure: both coalesced callers get a result, fetch fires once
+  __resetCfCache();
+  let failCalls = 0;
+  const slowBoom = async () => { failCalls++; await new Promise((r) => setTimeout(r, 10)); throw new Error('cf down'); };
+  const [f1, f2] = await Promise.all([
+    getCachedCfZones('cf', slowBoom, { ttlMs: 0 }),
+    getCachedCfZones('cf', slowBoom, { ttlMs: 0 }),
+  ]);
+  assert.equal(failCalls, 1, 'concurrent failure coalesced to one fetch');
+  assert.equal(f1.zones, null);
+  assert.ok(f1.error);
+  assert.equal(f2.zones, null);
+  assert.ok(f2.error);
+
   console.log('preview.getCachedCfZones: ALL PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

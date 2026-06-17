@@ -14,6 +14,7 @@ import {
   backfillIntegrationZoneType,
   deleteIntegrationZoneIfRemote,
   setIntegrationZoneNsSet,
+  setIntegrationZoneManaged,
 } from './store';
 import type { IntegrationConfig, IntegrationCredentials, IntegrationRow, IntegrationZoneRow } from './types';
 
@@ -164,7 +165,8 @@ async function provisionZoneLocked(
   integration: IntegrationRow,
   creds: IntegrationCredentials,
   serverUrl: string,
-  zoneName: string
+  zoneName: string,
+  managed: 'auto' | 'manual'
 ): Promise<void> {
   // A stale/errored link being retried may already know its remote zone id;
   // keep it through the provisioning states so a failed retry (bad peer
@@ -177,6 +179,7 @@ async function provisionZoneLocked(
     remoteZoneId: currentRemoteId,
     status: 'provisioning',
   });
+  setIntegrationZoneManaged(integration.id, serverUrl, zoneName, managed);
   try {
     const config = integration.config;
     const warnings: string[] = [];
@@ -281,7 +284,7 @@ async function provisionZone(
   const flightKey = inFlightKey(integration.id, serverUrl, zoneName);
   if (provisioningInFlight.has(flightKey)) return; // another path is provisioning this zone
   provisioningInFlight.add(flightKey);
-  try { await provisionZoneLocked(integration, creds, serverUrl, zoneName); }
+  try { await provisionZoneLocked(integration, creds, serverUrl, zoneName, 'auto'); }
   finally { provisioningInFlight.delete(flightKey); }
 }
 
@@ -305,26 +308,25 @@ export async function provisionOneZone(
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { ok: false, status: 400, error: 'Stored credentials are unreadable' };
   const normalizedUrl = normalizeUrl(serverUrl);
-
   if (getSyncState(integrationId, normalizedUrl).running) {
     return { ok: false, status: 409, error: 'A full sync is running — try again when it finishes' };
   }
-  const inScope = scopedZones(normalizedUrl, integration.config).some(
-    (z) => z.name.replace(/\.$/, '').toLowerCase() === zoneName.replace(/\.$/, '').toLowerCase(),
-  );
-  if (!inScope) return { ok: false, status: 409, error: 'Zone is not in the integration PowerDNS scope' };
+  const bare = (n: string) => n.replace(/\.$/, '').toLowerCase();
+  const matched = listMasterZones(normalizedUrl).find((z) => bare(z.name) === bare(zoneName));
+  if (!matched) return { ok: false, status: 409, error: 'Not a replicable PowerDNS Master zone' };
+  const canonical = matched.name;
 
-  const flightKey = inFlightKey(integrationId, normalizedUrl, zoneName);
+  const flightKey = inFlightKey(integrationId, normalizedUrl, canonical);
   if (provisioningInFlight.has(flightKey)) {
     return { ok: false, status: 409, error: 'This zone is already being provisioned — try again in a moment' };
   }
   provisioningInFlight.add(flightKey);
   try {
-    await provisionZoneLocked(integration, creds, normalizedUrl, zoneName);
+    await provisionZoneLocked(integration, creds, normalizedUrl, canonical, 'manual');
   } finally {
     provisioningInFlight.delete(flightKey);
   }
-  const row = getIntegrationZone(integrationId, normalizedUrl, zoneName);
+  const row = getIntegrationZone(integrationId, normalizedUrl, canonical);
   if (!row) return { ok: false, status: 404, error: 'Provisioning produced no zone row' };
   return { ok: true, row };
 }

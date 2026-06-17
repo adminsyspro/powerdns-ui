@@ -334,3 +334,6 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()(
 
 // Re-export pending changes store
 export { usePendingChangesStore } from './pending-changes';
+
+// Re-export page title store
+export { usePageTitleStore } from './page-title';

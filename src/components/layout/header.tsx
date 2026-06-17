@@ -27,12 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useServerConnectionStore, useAuthStore } from '@/stores';
+import { useServerConnectionStore, useAuthStore, usePageTitleStore } from '@/stores';
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { connections, activeConnection, setActiveConnection } = useServerConnectionStore();
   const { user, logout } = useAuthStore();
+  const pageTitle = usePageTitleStore((s) => s.title);
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-700 dark:border-border bg-slate-900 text-slate-100 dark:bg-background dark:text-foreground px-6">
       {/* Left: Server Selector */}
@@ -54,6 +55,12 @@ export function Header() {
               ))}
             </SelectContent>
           </Select>
+        )}
+        {pageTitle && (
+          <>
+            <div className="hidden h-6 w-px bg-slate-700 dark:bg-border sm:block" aria-hidden />
+            <h1 className="truncate text-base font-semibold text-slate-100 dark:text-foreground">{pageTitle}</h1>
+          </>
         )}
       </div>
 

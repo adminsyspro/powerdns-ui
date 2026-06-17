@@ -1,5 +1,11 @@
 import type { CfZone } from './cloudflare';
+import { listZones } from './cloudflare';
 import type { IntegrationZoneRow, IntegrationZoneStatus } from './types';
+import { getIntegration, getIntegrationCredentials, listIntegrationZones } from './store';
+import { getConnectionById } from './connections';
+import { normalizeUrl } from '@/lib/cache/zones';
+import { listScopedZones, getSyncState } from './sync';
+import type { IntegrationSyncState } from './sync';
 
 export type ZonePreviewState = 'tracked' | 'adopt' | 'create' | 'cf-only' | 'unknown';
 
@@ -157,13 +163,6 @@ function staleOrNull(entry: CfCacheEntry | undefined, e: unknown): CachedCfZones
 // ---------------------------------------------------------------------------
 // High-level preview builder: union of PDNS scope, CF zones, and tracked state
 // ---------------------------------------------------------------------------
-
-import { listZones } from './cloudflare';
-import { getIntegration, getIntegrationCredentials, listIntegrationZones } from './store';
-import { getConnectionById } from './connections';
-import { normalizeUrl } from '@/lib/cache/zones';
-import { listScopedZones, getSyncState } from './sync';
-import type { IntegrationSyncState } from './sync';
 
 export interface ZonePreview {
   rows: ZonePreviewRow[];

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { listIntegrations } from './store';
-import { getConnectionById, type StoredConnection } from './connections';
+import { getConnectionById } from './connections';
 import { runSync } from './sync';
 import { acquireLease } from './worker-lease';
 import { refreshZonesCache } from '@/lib/cache/refresh-zones';

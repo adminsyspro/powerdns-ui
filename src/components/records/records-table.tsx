@@ -23,7 +23,7 @@ interface RecordsTableProps {
   zoneName: string;
   isLoading?: boolean;
   onEdit?: (record: RRSet, recordContent?: string) => void;
-  onDelete?: (record: RRSet) => void;
+  onDelete?: (record: RRSet, recordContent?: string) => void;
   onToggle?: (record: RRSet, disabled: boolean) => void;
   onUpdateComment?: (record: RRSet, comment: string) => void;
   onAdd?: () => void;
@@ -520,7 +520,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                           </TooltipTrigger><TooltipContent>Last change</TooltipContent></Tooltip>
                         )}
                         <Tooltip><TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete?.(rrset)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete?.(rrset, record.content)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
                         {pendingAction && changeId && onUndoChange && (
                           <Tooltip><TooltipTrigger asChild>

@@ -455,15 +455,44 @@ export default function ZoneDetailPage() {
     setRecordDialogOpen(true);
   };
 
-  const handleDeleteRecord = async (record: RRSet) => {
+  const handleDeleteRecord = async (record: RRSet, recordContent?: string) => {
+    // An RRSet can hold several records (same name+type, different content).
+    // Deleting ONE row must not wipe the whole RRSet: when more than one value
+    // remains, REPLACE the RRSet with everything except the targeted value
+    // (matched by content — unique within an RRSet, same assumption as edit).
+    // Only when this is the last/only value do we DELETE the RRSet outright.
+    //
+    // The `record` from the table may be a PARTIAL view: the records list is
+    // server-paginated/searched, so siblings can live on another page or be
+    // hidden by the current search. Resolve the FULL current RRSet (pending
+    // edits win over server state, mirroring handleSaveRecord) before removing
+    // one value, so the REPLACE never silently drops hidden siblings.
+    const key = `${record.name}::${record.type}`;
+    const fullRRSet =
+      pendingMap.get(key)?.after ||
+      zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type) ||
+      record;
+
+    const deletesWholeRRSet = recordContent === undefined || fullRRSet.records.length <= 1;
     const ok = await confirm({
       title: 'Delete record',
-      description: `Delete ${record.type} record for "${record.name}"?`,
+      description: deletesWholeRRSet
+        ? `Delete ${record.type} record for "${record.name}"?`
+        : `Delete this ${record.type} value (${recordContent}) from "${record.name}"?`,
       confirmLabel: 'Delete',
       variant: 'destructive',
     });
     if (!ok) return;
-    addChange(zoneId, 'DELETE', record, null);
+
+    if (deletesWholeRRSet) {
+      addChange(zoneId, 'DELETE', fullRRSet, null);
+    } else {
+      const after: RRSet = {
+        ...fullRRSet,
+        records: fullRRSet.records.filter((r) => r.content !== recordContent),
+      };
+      addChange(zoneId, 'EDIT', fullRRSet, after);
+    }
   };
 
   const handleToggleRecord = (record: RRSet, disabled: boolean) => {

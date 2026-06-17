@@ -72,6 +72,9 @@ export interface IntegrationZoneRow {
   // The zone's actual custom NS set at Cloudflare (refreshed at sync). null =
   // Cloudflare-default nameservers (no custom set), or not yet read.
   customNsSet: number | null;
+  // 'auto': lifecycle managed by the reconciler (default). 'manual': operator
+  // pinned — the reconciler will not orphan or auto-delete this link.
+  managed: 'auto' | 'manual';
   status: IntegrationZoneStatus;
   message: string | null;
   updatedAt: number;

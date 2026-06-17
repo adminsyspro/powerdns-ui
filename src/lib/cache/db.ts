@@ -216,6 +216,7 @@ function initSchema(db: Database.Database) {
       custom_ns_set   INTEGER DEFAULT NULL,
       status          TEXT NOT NULL,
       message         TEXT DEFAULT NULL,
+      managed         TEXT NOT NULL DEFAULT 'auto',
       updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
       PRIMARY KEY (integration_id, server_url, zone_name)
     );
@@ -299,6 +300,12 @@ function initSchema(db: Database.Database) {
   // NULL = inherit the integration-wide customNsSet).
   if (!izCols.map((c) => c.name).includes('custom_ns_set')) {
     db.exec('ALTER TABLE integration_zones ADD COLUMN custom_ns_set INTEGER DEFAULT NULL');
+  }
+
+  // Migration: add managed to integration_zones ('auto' | 'manual'). Legacy rows
+  // default to 'auto' (reconciler-managed), preserving existing behaviour.
+  if (!izCols.map((c) => c.name).includes('managed')) {
+    db.exec("ALTER TABLE integration_zones ADD COLUMN managed TEXT NOT NULL DEFAULT 'auto'");
   }
 
   // Migration (data cleanup): clear the spurious "Enterprise plan not set: …

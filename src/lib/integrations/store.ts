@@ -188,12 +188,12 @@ export function listIntegrationZones(integrationId: string, serverUrl: string): 
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, status, message, updated_at
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, managed, status, message, updated_at
          FROM integration_zones WHERE integration_id = ? AND server_url = ? ORDER BY zone_name`
     )
     .all(integrationId, serverUrl) as Array<{
       integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
-      remote_type: string | null; custom_ns_set: number | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
+      remote_type: string | null; custom_ns_set: number | null; managed: string; status: IntegrationZoneStatus; message: string | null; updated_at: number;
     }>;
   return rows.map((row) => ({
     integrationId: row.integration_id,
@@ -202,6 +202,7 @@ export function listIntegrationZones(integrationId: string, serverUrl: string): 
     remoteZoneId: row.remote_zone_id,
     remoteType: row.remote_type,
     customNsSet: row.custom_ns_set,
+    managed: row.managed as 'auto' | 'manual',
     status: row.status,
     message: row.message,
     updatedAt: row.updated_at,
@@ -262,14 +263,14 @@ export function getIntegrationZone(
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, status, message, updated_at
+      `SELECT integration_id, server_url, zone_name, remote_zone_id, remote_type, custom_ns_set, managed, status, message, updated_at
          FROM integration_zones
         WHERE integration_id = ? AND server_url = ? AND zone_name = ?`
     )
     .get(integrationId, serverUrl, zoneName) as
       | {
           integration_id: string; server_url: string; zone_name: string; remote_zone_id: string | null;
-          remote_type: string | null; custom_ns_set: number | null; status: IntegrationZoneStatus; message: string | null; updated_at: number;
+          remote_type: string | null; custom_ns_set: number | null; managed: string; status: IntegrationZoneStatus; message: string | null; updated_at: number;
         }
       | undefined;
   if (!row) return undefined;
@@ -280,6 +281,7 @@ export function getIntegrationZone(
     remoteZoneId: row.remote_zone_id,
     remoteType: row.remote_type,
     customNsSet: row.custom_ns_set,
+    managed: row.managed as 'auto' | 'manual',
     status: row.status,
     message: row.message,
     updatedAt: row.updated_at,
@@ -302,6 +304,24 @@ export function setIntegrationZoneNsSet(
     `UPDATE integration_zones SET custom_ns_set = ?, updated_at = unixepoch()
       WHERE integration_id = ? AND server_url = ? AND zone_name = ?`
   ).run(nsSet, integrationId, serverUrl, zoneName);
+}
+
+/**
+ * Sets the managed mode for a single zone link. 'manual' pins the link so the
+ * reconciler will not orphan or auto-delete it. 'auto' restores default
+ * reconciler-managed behaviour. Plain UPDATE — no-op if the row is gone.
+ */
+export function setIntegrationZoneManaged(
+  integrationId: string,
+  serverUrl: string,
+  zoneName: string,
+  managed: 'auto' | 'manual'
+): void {
+  getDb()
+    .prepare(
+      'UPDATE integration_zones SET managed = ?, updated_at = unixepoch() WHERE integration_id = ? AND server_url = ? AND zone_name = ?'
+    )
+    .run(managed, integrationId, serverUrl, zoneName);
 }
 
 /**

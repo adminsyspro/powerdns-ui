@@ -14,6 +14,7 @@ import type { NameserverPool } from '@/lib/ns-pools';
 import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
 import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
+import type { ZonePreview } from '@/lib/integrations/preview';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -448,6 +449,18 @@ export async function fetchReplicatedZoneNames() {
   return apiRequest<{ zones: string[] }>('/api/integrations/replicated-zones');
 }
 
+export async function fetchIntegrationPreview(id: string, refresh = false) {
+  return apiRequest<ZonePreview>(
+    `/api/integrations/${encodeURIComponent(id)}/preview${refresh ? '?refresh=1' : ''}`
+  );
+}
+
+export async function syncIntegrationZone(id: string, zoneName: string) {
+  return apiRequest<{ row: IntegrationZoneRow }>(`/api/integrations/${encodeURIComponent(id)}/sync-zone`, {
+    method: 'POST',
+    body: JSON.stringify({ zoneName }),
+  });
+}
 
 export interface ZoneTrafficPoint {
   date: string;

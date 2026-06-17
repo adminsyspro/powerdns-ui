@@ -79,3 +79,76 @@ export function computePreviewRows(
   rows.sort((a, b) => a.zoneName.localeCompare(b.zoneName));
   return rows;
 }
+
+// ---------------------------------------------------------------------------
+// CF zone-list cache: coalesced, account-keyed, stale-on-failure
+// ---------------------------------------------------------------------------
+
+interface CfCacheEntry {
+  fetchedAt: number;
+  zones: CfZone[];
+  pending: Promise<CfZone[]> | null;
+}
+const cfCache = new Map<string, CfCacheEntry>();
+
+/** Test-only: clear the module cache. */
+export function __resetCfCache(): void {
+  cfCache.clear();
+}
+
+export interface CachedCfZones {
+  zones: CfZone[] | null;   // null only when there is no cached data at all
+  fetchedAt: number | null;
+  stale: boolean;
+  error: string | null;
+}
+
+const CF_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Returns the account's CF zones, cached per `key` with TTL, in-flight coalescing,
+ * and stale-on-failure. `fetcher` is injected so callers (and tests) control the
+ * actual Cloudflare call.
+ */
+export async function getCachedCfZones(
+  key: string,
+  fetcher: () => Promise<CfZone[]>,
+  opts: { refresh?: boolean; ttlMs?: number } = {},
+): Promise<CachedCfZones> {
+  const ttl = opts.ttlMs ?? CF_CACHE_TTL_MS;
+  const now = Date.now();
+  const entry = cfCache.get(key);
+
+  if (!opts.refresh && entry && entry.zones && now - entry.fetchedAt < ttl) {
+    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: false, error: null };
+  }
+  if (entry?.pending) {
+    try {
+      const zones = await entry.pending;
+      return { zones, fetchedAt: cfCache.get(key)?.fetchedAt ?? now, stale: false, error: null };
+    } catch (e) {
+      return staleOrNull(cfCache.get(key), e);
+    }
+  }
+
+  const pending = fetcher();
+  const base: CfCacheEntry = entry ?? { fetchedAt: 0, zones: [], pending: null };
+  cfCache.set(key, { ...base, pending });
+  try {
+    const zones = await pending;
+    cfCache.set(key, { fetchedAt: Date.now(), zones, pending: null });
+    return { zones, fetchedAt: Date.now(), stale: false, error: null };
+  } catch (e) {
+    const prev = cfCache.get(key);
+    cfCache.set(key, { fetchedAt: prev?.fetchedAt ?? 0, zones: prev?.zones ?? [], pending: null });
+    return staleOrNull(prev && prev.fetchedAt ? prev : undefined, e);
+  }
+}
+
+function staleOrNull(entry: CfCacheEntry | undefined, e: unknown): CachedCfZones {
+  const error = e instanceof Error ? e.message : 'Cloudflare listing failed';
+  if (entry && entry.zones && entry.fetchedAt) {
+    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: true, error };
+  }
+  return { zones: null, fetchedAt: null, stale: false, error };
+}

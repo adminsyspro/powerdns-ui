@@ -732,7 +732,7 @@ export default function ProxyPage() {
                   <div className="space-y-0.5">
                     <Label htmlFor="env-read-only" className="text-sm font-medium">Read-only</Label>
                     <p className="text-xs text-muted-foreground">
-                      This key can only read (GET) zones and records. Creating, updating and deleting are blocked.
+                      This key can read zones and records but cannot create, update or delete them. (NOTIFY is still allowed.)
                     </p>
                   </div>
                   <Switch

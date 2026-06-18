@@ -11,6 +11,7 @@ function toResponse(row: ProxyEnvironmentRow, zoneCount?: number) {
     tokenSha512: row.token_sha512,
     active: row.active === 1,
     fullAccess: row.full_access === 1,
+    readOnly: row.read_only === 1,
     zoneCount: zoneCount ?? 0,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     updatedAt: new Date(row.updated_at * 1000).toISOString(),
@@ -44,10 +45,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { name, description, fullAccess, zones } = body as {
+  const { name, description, fullAccess, readOnly, zones } = body as {
     name: string;
     description?: string;
     fullAccess?: boolean;
+    readOnly?: boolean;
     zones?: Array<{
       zoneName: string;
       acmeEnabled?: boolean;
@@ -73,8 +75,8 @@ export async function POST(request: NextRequest) {
   const tokenHash = hashToken(rawToken);
 
   const insertEnv = db.prepare(
-    `INSERT INTO proxy_environments (id, name, description, token_sha512, full_access)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO proxy_environments (id, name, description, token_sha512, full_access, read_only)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
   const insertZone = db.prepare(
     `INSERT INTO proxy_zone_permissions (id, environment_id, zone_name, acme_enabled)
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
 
   const isFull = fullAccess === true;
   const transaction = db.transaction(() => {
-    insertEnv.run(id, name, description || '', tokenHash, isFull ? 1 : 0);
+    insertEnv.run(id, name, description || '', tokenHash, isFull ? 1 : 0, readOnly === true ? 1 : 0);
 
     // Invariant: a full-access env owns NO zone permissions — ignore any `zones`.
     if (!isFull && zones && Array.isArray(zones)) {

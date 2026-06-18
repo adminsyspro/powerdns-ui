@@ -30,6 +30,7 @@ export async function GET(
     tokenSha512: row.token_sha512,
     active: row.active === 1,
     fullAccess: row.full_access === 1,
+    readOnly: row.read_only === 1,
     zones,
     createdAt: new Date(row.created_at * 1000).toISOString(),
     updatedAt: new Date(row.updated_at * 1000).toISOString(),
@@ -77,6 +78,10 @@ export async function PUT(
   if (body.fullAccess !== undefined) {
     fields.push('full_access = ?');
     values.push(body.fullAccess === true ? 1 : 0);
+  }
+  if (body.readOnly !== undefined) {
+    fields.push('read_only = ?');
+    values.push(body.readOnly === true ? 1 : 0);
   }
 
   // Resulting full-access state: explicit body value if provided, else current row value.
@@ -135,6 +140,7 @@ export async function PUT(
     tokenSha512: updated.token_sha512,
     active: updated.active === 1,
     fullAccess: updated.full_access === 1,
+    readOnly: updated.read_only === 1,
     zones,
     createdAt: new Date(updated.created_at * 1000).toISOString(),
     updatedAt: new Date(updated.updated_at * 1000).toISOString(),

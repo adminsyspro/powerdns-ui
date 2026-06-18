@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
-import { filterZones } from '@/lib/proxy/access-control';
+import { filterZones, isReadOnly } from '@/lib/proxy/access-control';
 
 // GET /api/v1/servers/[server_id]/zones — list zones filtered by permissions
 export async function GET(request: NextRequest) {
@@ -58,6 +58,11 @@ export async function POST(request: NextRequest) {
   }
 
   const { environment, connection } = auth;
+
+  if (isReadOnly(environment)) {
+    logProxy(request, 403, { environment, startTime, error: 'Read-only key' });
+    return NextResponse.json({ error: 'This API key is read-only' }, { status: 403 });
+  }
 
   if (environment.full_access !== 1) {
     logProxy(request, 403, { environment, startTime, error: 'Zone creation not allowed' });

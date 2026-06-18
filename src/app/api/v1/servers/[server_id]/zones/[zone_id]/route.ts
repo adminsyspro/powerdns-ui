@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateProxyRequest, isAuthError, logProxy } from '@/lib/proxy/auth';
-import { resolveZoneAccess, filterRRSets, validatePatchPayload } from '@/lib/proxy/access-control';
+import { resolveZoneAccess, filterRRSets, validatePatchPayload, isReadOnly } from '@/lib/proxy/access-control';
 
 /** Ensure a DNS name ends with a dot (canonical/FQDN form required by PowerDNS) */
 function canonicalize(name: string): string {
@@ -75,6 +75,11 @@ export async function PATCH(
   const { environment, connection } = auth;
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
+
+  if (isReadOnly(environment)) {
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Read-only key' });
+    return NextResponse.json({ error: 'This API key is read-only' }, { status: 403 });
+  }
 
   const zonePerm = resolveZoneAccess(environment, zone_id);
   if (!zonePerm) {
@@ -153,6 +158,11 @@ export async function PUT(
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
 
+  if (isReadOnly(environment)) {
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Read-only key' });
+    return NextResponse.json({ error: 'This API key is read-only' }, { status: 403 });
+  }
+
   if (environment.full_access !== 1) {
     logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone metadata update not allowed' });
     return NextResponse.json(
@@ -214,6 +224,11 @@ export async function DELETE(
   const { environment, connection } = auth;
   const { zone_id: rawZoneId } = await params;
   const zone_id = canonicalize(rawZoneId);
+
+  if (isReadOnly(environment)) {
+    logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Read-only key' });
+    return NextResponse.json({ error: 'This API key is read-only' }, { status: 403 });
+  }
 
   if (environment.full_access !== 1) {
     logProxy(request, 403, { environment, zone: zone_id, startTime, error: 'Zone deletion not allowed' });

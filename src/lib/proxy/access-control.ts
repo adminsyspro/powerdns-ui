@@ -11,6 +11,15 @@ import type { RRSet } from '@/types/powerdns';
 export const FULL_ACCESS_PERM_ID = '__full_access__';
 
 /**
+ * True if the environment is read-only: it may only perform GET requests
+ * through the proxy. All zone/record mutations (POST/PATCH/PUT/DELETE) are
+ * blocked. NOTIFY is intentionally NOT a mutation here and stays allowed.
+ */
+export function isReadOnly(environment: ProxyEnvironmentRow): boolean {
+  return environment.read_only === 1;
+}
+
+/**
  * Find an active environment by its token SHA-512 hash.
  */
 export function getEnvironmentByTokenHash(tokenHash: string): ProxyEnvironmentRow | null {

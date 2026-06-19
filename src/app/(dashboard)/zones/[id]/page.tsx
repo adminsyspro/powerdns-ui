@@ -391,11 +391,13 @@ export default function ZoneDetailPage() {
     }
   }, [fetchRecords, zone]);
 
-  // Change-counts are independent of the records query (page/search/filter);
-  // load them once per zone, not on every fetchRecords() identity change.
+  // Change-counts are independent of the records query (page/search/filter)
+  // but DO depend on the active connection. Mirror the records effect's
+  // connection signal (`zone`, which refetches on a server switch) so counts
+  // reload on zone/connection change — never on pagination/search/filter.
   React.useEffect(() => {
     loadChangeCounts();
-  }, [loadChangeCounts]);
+  }, [loadChangeCounts, zone]);
 
   const handleRecordsPageChange = (page: number) => setRecordsPage(page);
   const handleRecordsPageSizeChange = (size: number) => {

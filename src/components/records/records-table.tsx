@@ -99,10 +99,10 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
   const historyKeyRef = React.useRef<string>('');
 
   // Sort state
-  const [sortColumn, setSortColumn] = React.useState<'name' | 'type' | 'ttl' | 'content' | 'status' | null>(null);
+  const [sortColumn, setSortColumn] = React.useState<'name' | 'type' | 'ttl' | 'content' | 'status' | 'changes' | null>(null);
   const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
 
-  const handleSort = (column: 'name' | 'type' | 'ttl' | 'content' | 'status') => {
+  const handleSort = (column: 'name' | 'type' | 'ttl' | 'content' | 'status' | 'changes') => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -226,6 +226,11 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
             const bVal = b.record.disabled ? 1 : 0;
             return dir * (aVal - bVal);
           }
+          case 'changes': {
+            const aN = changeCounts?.[makeRrsetKey(a.rrset.name, a.rrset.type)] ?? 0;
+            const bN = changeCounts?.[makeRrsetKey(b.rrset.name, b.rrset.type)] ?? 0;
+            return aN !== bN ? dir * (aN - bN) : a.rrset.name.localeCompare(b.rrset.name);
+          }
         }
       }
       // Default sort: by type order then name
@@ -236,7 +241,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
     });
 
     return sorted;
-  }, [flatRecords, searchTerm, typeFilter, isServerPaginated, sortColumn, sortDirection]);
+  }, [flatRecords, searchTerm, typeFilter, isServerPaginated, sortColumn, sortDirection, changeCounts]);
 
   const toggleAll = (checked: boolean) => {
     if (checked) {
@@ -421,7 +426,12 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </span>
                   </TableHead>
                 )}
-                <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">Changes</TableHead>
+                <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('changes')}>
+                    Changes
+                    {sortColumn === 'changes' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </TableHead>
                 <TableHead className="w-[40px] font-semibold text-slate-700 dark:text-slate-200">Comment</TableHead>
                 <TableHead className="w-[140px] font-semibold text-slate-700 dark:text-slate-200">Actions</TableHead>
               </TableRow>

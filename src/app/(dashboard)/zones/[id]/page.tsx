@@ -388,9 +388,14 @@ export default function ZoneDetailPage() {
   React.useEffect(() => {
     if (zone) {
       fetchRecords();
-      loadChangeCounts();
     }
-  }, [fetchRecords, zone, loadChangeCounts]);
+  }, [fetchRecords, zone]);
+
+  // Change-counts are independent of the records query (page/search/filter);
+  // load them once per zone, not on every fetchRecords() identity change.
+  React.useEffect(() => {
+    loadChangeCounts();
+  }, [loadChangeCounts]);
 
   const handleRecordsPageChange = (page: number) => setRecordsPage(page);
   const handleRecordsPageSizeChange = (size: number) => {

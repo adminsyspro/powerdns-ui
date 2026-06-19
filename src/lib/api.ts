@@ -676,20 +676,6 @@ export interface PaginatedHistory {
   totalPages: number;
 }
 
-export interface RRSetLastChange {
-  found: boolean;
-  change?: import('@/types/powerdns').PendingChange;
-  reason?: string;
-  user?: string;
-  submittedAt?: number;
-}
-
-export async function fetchRRSetLastChange(zoneId: string, rrsetKey: string) {
-  return apiRequest<RRSetLastChange>(
-    `/api/zones/history/rrset?zoneId=${encodeURIComponent(zoneId)}&rrsetKey=${encodeURIComponent(rrsetKey)}`
-  );
-}
-
 export async function fetchZoneChangeCounts(zoneId: string) {
   return apiRequest<{ counts: Record<string, number> }>(
     `/api/zones/history/counts?zoneId=${encodeURIComponent(zoneId)}`

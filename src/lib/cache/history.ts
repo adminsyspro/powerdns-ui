@@ -138,48 +138,6 @@ export function getHistoryEntry(id: string): (ChangesetSubmission & { serverUrl:
 }
 
 /**
- * Find the last change that affected a specific RRSet (name::type).
- * Scans change_history rows in reverse chronological order.
- */
-export function getLastChangeForRRSet(
-  serverUrl: string,
-  zoneId: string,
-  rrsetKey: string
-): { change: import('@/types/powerdns').PendingChange; reason: string; user: string; submittedAt: number } | null {
-  const db = getDb();
-  const key = normalizeUrl(serverUrl);
-
-  // Get recent history entries for this zone (limit search to last 50 for perf)
-  const rows = db.prepare(`
-    SELECT changes_json, reason, user, submitted_at
-    FROM change_history
-    WHERE server_url = ? AND zone_id = ? AND status = 'success'
-    ORDER BY submitted_at DESC
-    LIMIT 50
-  `).all(key, zoneId) as Array<{
-    changes_json: string;
-    reason: string;
-    user: string;
-    submitted_at: number;
-  }>;
-
-  for (const row of rows) {
-    const changes = JSON.parse(row.changes_json) as import('@/types/powerdns').PendingChange[];
-    const match = changes.find((c) => c.rrsetKey === rrsetKey);
-    if (match) {
-      return {
-        change: match,
-        reason: row.reason,
-        user: row.user,
-        submittedAt: row.submitted_at,
-      };
-    }
-  }
-
-  return null;
-}
-
-/**
  * Exact count of successful changesets that touched each rrsetKey in a zone.
  * One increment per changeset per key (a key appearing twice in one changeset
  * counts once), so the count equals the timeline length from getChangesForRRSet.

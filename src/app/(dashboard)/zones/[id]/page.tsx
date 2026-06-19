@@ -28,7 +28,7 @@ import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
-import { normalizeRecordContent } from '@/lib/record-fields';
+import { normalizeRecordContent, makeRrsetKey } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
@@ -353,6 +353,9 @@ export default function ZoneDetailPage() {
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [importDialogOpen, setImportDialogOpen] = React.useState(false);
 
+  // Per-record change counts (keyed by makeRrsetKey)
+  const [changeCounts, setChangeCounts] = React.useState<Record<string, number>>({});
+
   // Paginated records state
   const [recordsPage, setRecordsPage] = React.useState(1);
   const [recordsPageSize, setRecordsPageSize] = React.useState(25);
@@ -360,6 +363,12 @@ export default function ZoneDetailPage() {
   const [recordsType, setRecordsType] = React.useState('all');
   const [paginatedData, setPaginatedData] = React.useState<api.PaginatedRecordsResponse | null>(null);
   const [recordsLoading, setRecordsLoading] = React.useState(false);
+
+  const loadChangeCounts = React.useCallback(async () => {
+    if (!zoneId) return;
+    const res = await api.fetchZoneChangeCounts(zoneId);
+    if (res.data) setChangeCounts(res.data.counts);
+  }, [zoneId]);
 
   // Fetch paginated records
   const fetchRecords = React.useCallback(async () => {
@@ -377,8 +386,11 @@ export default function ZoneDetailPage() {
   }, [zoneId, recordsPage, recordsPageSize, recordsSearch, recordsType]);
 
   React.useEffect(() => {
-    if (zone) fetchRecords();
-  }, [fetchRecords, zone]);
+    if (zone) {
+      fetchRecords();
+      loadChangeCounts();
+    }
+  }, [fetchRecords, zone, loadChangeCounts]);
 
   const handleRecordsPageChange = (page: number) => setRecordsPage(page);
   const handleRecordsPageSizeChange = (size: number) => {
@@ -468,7 +480,7 @@ export default function ZoneDetailPage() {
     // hidden by the current search. Resolve the FULL current RRSet (pending
     // edits win over server state, mirroring handleSaveRecord) before removing
     // one value, so the REPLACE never silently drops hidden siblings.
-    const key = `${record.name}::${record.type}`;
+    const key = makeRrsetKey(record.name, record.type);
     const pending = pendingMap.get(key);
     // A whole-RRSet deletion is already queued for this key (a pending change
     // whose `after` is null). The table still renders a trash button on each
@@ -538,7 +550,7 @@ export default function ZoneDetailPage() {
         ? [{ content: data.comment, account: 'admin', modified_at: Math.floor(Date.now() / 1000) }]
         : [],
     };
-    const rrsetKey = `${recordName}::${data.type}`;
+    const rrsetKey = makeRrsetKey(recordName, data.type);
 
     if (editingRecord) {
       // Replace exactly the record that was opened (matched by its original
@@ -622,6 +634,7 @@ export default function ZoneDetailPage() {
     addLog({ action: 'Records Updated', resource: zoneName, user: auditUser, details: `${pendingChanges.length} changes applied` });
     refetch();
     fetchRecords();
+    loadChangeCounts();
   };
 
   const zoneName = zone?.name || zoneId;
@@ -924,6 +937,7 @@ export default function ZoneDetailPage() {
         serverTypeStats={paginatedData?.typeStats}
         onBulkDelete={handleBulkDelete}
         onBulkToggle={handleBulkToggle}
+        changeCounts={changeCounts}
         cloudProxy={cfProxy?.linked ? {
           byKey: cfProxy.byKey,
           canToggle: canManageZone,

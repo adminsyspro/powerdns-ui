@@ -212,7 +212,7 @@ export function getChangeCountsForZone(
 /**
  * Timeline (newest first) of recorded changes for one rrsetKey: one entry per
  * matching changeset (the first matching change in that changeset). Capped at
- * `limit` (default 100) with hasMore; scans at most 2000 changesets.
+ * `limit` (default 100) with hasMore.
  */
 export function getChangesForRRSet(
   serverUrl: string,
@@ -222,13 +222,11 @@ export function getChangesForRRSet(
   db: Database.Database = getDb()
 ): { items: RRSetHistoryEntry[]; hasMore: boolean } {
   const key = normalizeUrl(serverUrl);
-  const SCAN_CAP = 2000;
   const rows = db.prepare(
     `SELECT id, changes_json, reason, user, submitted_at FROM change_history
      WHERE server_url = ? AND zone_id = ? AND status = 'success'
-     ORDER BY submitted_at DESC
-     LIMIT ?`
-  ).all(key, zoneId, SCAN_CAP) as Array<{
+     ORDER BY submitted_at DESC`
+  ).all(key, zoneId) as Array<{
     id: string; changes_json: string; reason: string; user: string; submitted_at: number;
   }>;
 
@@ -242,6 +240,5 @@ export function getChangesForRRSet(
     if (items.length >= limit) { hasMore = true; break; }
     items.push({ changesetId: row.id, change: match, reason: row.reason, user: row.user, submittedAt: row.submitted_at });
   }
-  if (!hasMore && rows.length === SCAN_CAP) hasMore = true;
   return { items, hasMore };
 }

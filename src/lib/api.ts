@@ -8,6 +8,7 @@ import type {
   RRSet,
   ServerConnection,
   CryptoKey,
+  RRSetHistoryEntry,
 } from '@/types/powerdns';
 import type { ImportPreview } from '@/lib/bind/types';
 import type { NameserverPool } from '@/lib/ns-pools';
@@ -686,6 +687,18 @@ export interface RRSetLastChange {
 export async function fetchRRSetLastChange(zoneId: string, rrsetKey: string) {
   return apiRequest<RRSetLastChange>(
     `/api/zones/history/rrset?zoneId=${encodeURIComponent(zoneId)}&rrsetKey=${encodeURIComponent(rrsetKey)}`
+  );
+}
+
+export async function fetchZoneChangeCounts(zoneId: string) {
+  return apiRequest<{ counts: Record<string, number> }>(
+    `/api/zones/history/counts?zoneId=${encodeURIComponent(zoneId)}`
+  );
+}
+
+export async function fetchRRSetHistory(zoneId: string, rrsetKey: string) {
+  return apiRequest<{ items: RRSetHistoryEntry[]; hasMore: boolean }>(
+    `/api/zones/history/rrset/list?zoneId=${encodeURIComponent(zoneId)}&rrsetKey=${encodeURIComponent(rrsetKey)}`
   );
 }
 

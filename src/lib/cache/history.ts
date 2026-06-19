@@ -190,14 +190,12 @@ export function getChangeCountsForZone(
   db: Database.Database = getDb()
 ): Record<string, number> {
   const key = normalizeUrl(serverUrl);
-  const rows = db.prepare(
+  const stmt = db.prepare(
     `SELECT changes_json FROM change_history
-     WHERE server_url = ? AND zone_id = ? AND status = 'success'
-     ORDER BY submitted_at DESC`
-  ).all(key, zoneId) as Array<{ changes_json: string }>;
-
+     WHERE server_url = ? AND zone_id = ? AND status = 'success'`
+  );
   const counts: Record<string, number> = {};
-  for (const row of rows) {
+  for (const row of stmt.iterate(key, zoneId) as IterableIterator<{ changes_json: string }>) {
     let changes: PendingChange[];
     try { changes = JSON.parse(row.changes_json); } catch { continue; }
     const keys = new Set<string>();
@@ -222,17 +220,16 @@ export function getChangesForRRSet(
   db: Database.Database = getDb()
 ): { items: RRSetHistoryEntry[]; hasMore: boolean } {
   const key = normalizeUrl(serverUrl);
-  const rows = db.prepare(
+  const stmt = db.prepare(
     `SELECT id, changes_json, reason, user, submitted_at FROM change_history
      WHERE server_url = ? AND zone_id = ? AND status = 'success'
      ORDER BY submitted_at DESC`
-  ).all(key, zoneId) as Array<{
-    id: string; changes_json: string; reason: string; user: string; submitted_at: number;
-  }>;
-
+  );
   const items: RRSetHistoryEntry[] = [];
   let hasMore = false;
-  for (const row of rows) {
+  for (const row of stmt.iterate(key, zoneId) as IterableIterator<{
+    id: string; changes_json: string; reason: string; user: string; submitted_at: number;
+  }>) {
     let changes: PendingChange[];
     try { changes = JSON.parse(row.changes_json); } catch { continue; }
     const match = changes.find((c) => c && c.rrsetKey === rrsetKey);

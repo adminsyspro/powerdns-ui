@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
-import type { RRSet, RecordType, Comment, ChangeAction, PendingChange } from '@/types/powerdns';
+import type { RRSet, RecordType, Comment, ChangeAction, PendingChange, RRSetHistoryEntry } from '@/types/powerdns';
 import type { MergedRecord } from '@/lib/pending-changes-utils';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
+import { makeRrsetKey } from '@/lib/record-fields';
+import { RrsetHistoryDialog } from './rrset-history-dialog';
 import { getRecordTypeColor, getRecordTypeRowColor, copyToClipboard, formatDateTime, formatTTL } from '@/lib/utils';
 import * as api from '@/lib/api';
 
@@ -58,6 +60,8 @@ interface RecordsTableProps {
     busyKey?: string | null;
     onToggle: (name: string, type: string, proxied: boolean) => void;
   };
+  // Per-RRSet recorded-change counts, keyed by makeRrsetKey(name, type).
+  changeCounts?: Record<string, number>;
 }
 
 const PROXYABLE_TYPES = new Set(['A', 'AAAA', 'CNAME']);
@@ -79,16 +83,20 @@ function getRecordPendingAction(
   return ttlChanged ? change.action : undefined;
 }
 
-export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle, cloudProxy }: RecordsTableProps) {
+export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle, cloudProxy, changeCounts }: RecordsTableProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<RecordType | 'all'>('all');
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [detailRecord, setDetailRecord] = React.useState<RRSet | null>(null);
   const [selectedRecord, setSelectedRecord] = React.useState<RRSet | null>(null);
   const [commentText, setCommentText] = React.useState('');
-  const [historyData, setHistoryData] = React.useState<api.RRSetLastChange | null>(null);
-  const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState(false);
+  const [historyItems, setHistoryItems] = React.useState<RRSetHistoryEntry[]>([]);
+  const [historyHasMore, setHistoryHasMore] = React.useState(false);
+  const [historyTarget, setHistoryTarget] = React.useState<{ name: string; type: string } | null>(null);
+  const historyKeyRef = React.useRef<string>('');
 
   // Sort state
   const [sortColumn, setSortColumn] = React.useState<'name' | 'type' | 'ttl' | 'content' | 'status' | null>(null);
@@ -153,12 +161,22 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
 
   const handleOpenHistory = async (rrset: RRSet) => {
     if (!zoneId) return;
+    const key = makeRrsetKey(rrset.name, rrset.type);
+    historyKeyRef.current = key;
+    setHistoryTarget({ name: rrset.name, type: rrset.type });
     setHistoryOpen(true);
     setHistoryLoading(true);
-    setHistoryData(null);
-    const key = `${rrset.name}::${rrset.type}`;
-    const result = await api.fetchRRSetLastChange(zoneId, key);
-    setHistoryData(result.data || null);
+    setHistoryError(false);
+    setHistoryItems([]);
+    setHistoryHasMore(false);
+    const result = await api.fetchRRSetHistory(zoneId, key);
+    if (historyKeyRef.current !== key) return; // a newer open superseded this one
+    if (result.data) {
+      setHistoryItems(result.data.items);
+      setHistoryHasMore(result.data.hasMore);
+    } else {
+      setHistoryError(true);
+    }
     setHistoryLoading(false);
   };
 
@@ -403,15 +421,16 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </span>
                   </TableHead>
                 )}
+                <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">Changes</TableHead>
                 <TableHead className="w-[40px] font-semibold text-slate-700 dark:text-slate-200">Comment</TableHead>
                 <TableHead className="w-[140px] font-semibold text-slate-700 dark:text-slate-200">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={cloudProxy ? 9 : 8} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={cloudProxy ? 10 : 9} className="h-24 text-center">Loading records...</TableCell></TableRow>
               ) : filteredRecords.length === 0 ? (
-                <TableRow><TableCell colSpan={cloudProxy ? 9 : 8} className="h-24 text-center">No records found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={cloudProxy ? 10 : 9} className="h-24 text-center">No records found</TableCell></TableRow>
               ) : (
                 filteredRecords.map(({ rrset, record, index, pendingAction, changeId }) => {
                   const pendingBorder = pendingAction === 'ADD' ? 'border-l-4 border-l-green-500'
@@ -485,6 +504,23 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                         })()}
                       </TableCell>
                     )}
+                    <TableCell>
+                      {(() => {
+                        const n = changeCounts?.[makeRrsetKey(rrset.name, rrset.type)] ?? 0;
+                        if (n > 0 && zoneId) {
+                          return (
+                            <Badge
+                              variant="secondary"
+                              className="cursor-pointer gap-1 font-mono"
+                              onClick={(e) => { e.stopPropagation(); handleOpenHistory(rrset); }}
+                            >
+                              <History className="h-3 w-3" />{n}
+                            </Badge>
+                          );
+                        }
+                        return <span className="text-muted-foreground">—</span>;
+                      })()}
+                    </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       {rrset.comments && rrset.comments.length > 0 ? (
                         <Tooltip>
@@ -514,11 +550,6 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                             {record.disabled ? <Power className="h-3.5 w-3.5" /> : <PowerOff className="h-3.5 w-3.5" />}
                           </Button>
                         </TooltipTrigger><TooltipContent>{record.disabled ? 'Enable' : 'Disable'}</TooltipContent></Tooltip>
-                        {zoneId && (
-                          <Tooltip><TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenHistory(rrset)}><History className="h-3.5 w-3.5" /></Button>
-                          </TooltipTrigger><TooltipContent>Last change</TooltipContent></Tooltip>
-                        )}
                         <Tooltip><TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete?.(rrset, record.content)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
@@ -681,46 +712,19 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
             )}
           </DialogContent>
         </Dialog>
-        {/* RRSet History Dialog */}
-        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Last Change</DialogTitle>
-            </DialogHeader>
-            {historyLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-              </div>
-            ) : historyData && historyData.found && historyData.change ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div className="p-2 rounded bg-muted/30 border">
-                    <p className="text-xs text-muted-foreground">Date</p>
-                    <p>{new Date(historyData.submittedAt!).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                  </div>
-                  <div className="p-2 rounded bg-muted/30 border">
-                    <p className="text-xs text-muted-foreground">User</p>
-                    <p>{historyData.user}</p>
-                  </div>
-                  <div className="p-2 rounded bg-muted/30 border">
-                    <p className="text-xs text-muted-foreground">Action</p>
-                    <p>{historyData.change.action}</p>
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-muted/30 border text-sm">
-                  <p className="text-xs text-muted-foreground">Reason</p>
-                  <p>{historyData.reason}</p>
-                </div>
-                <ChangeDiffCard change={historyData.change} zoneName={zoneName} />
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <History className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground text-sm">No change history for this record</p>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* RRSet History Timeline */}
+        <RrsetHistoryDialog
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          zoneName={zoneName}
+          recordName={historyTarget?.name ?? ''}
+          recordType={historyTarget?.type ?? ''}
+          items={historyItems}
+          loading={historyLoading}
+          error={historyError}
+          totalCount={historyTarget ? (changeCounts?.[makeRrsetKey(historyTarget.name, historyTarget.type)] ?? historyItems.length) : historyItems.length}
+          hasMore={historyHasMore}
+        />
       </div>
     </TooltipProvider>
   );

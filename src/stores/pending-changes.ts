@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PendingChange, ChangeAction, RRSet } from '@/types/powerdns';
 import { generateId } from '@/lib/utils';
+import { makeRrsetKey } from '@/lib/record-fields';
 
 function rrsetKey(name: string, type: string): string {
-  return `${name}::${type}`;
+  return makeRrsetKey(name, type);
 }
 
 function rrsetEqual(a: RRSet | null, b: RRSet | null): boolean {

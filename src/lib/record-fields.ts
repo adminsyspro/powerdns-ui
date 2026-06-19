@@ -16,6 +16,12 @@ export interface RecordFieldConfig {
   build: (fields: Record<string, string>) => string;
 }
 
+/** Canonical RRSet key used by change history. Raw `${name}::${type}` — must
+ *  match the format stored by the pending-changes store; do NOT normalize. */
+export function makeRrsetKey(name: string, type: string): string {
+  return `${name}::${type}`;
+}
+
 const RECORD_FIELD_CONFIGS: Record<string, RecordFieldConfig> = {
   MX: {
     fields: [

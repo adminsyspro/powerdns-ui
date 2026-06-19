@@ -319,3 +319,11 @@ export interface ChangesetSubmission {
   status: 'success' | 'error';
   errorMessage?: string;
 }
+
+export interface RRSetHistoryEntry {
+  changesetId: string;
+  change: PendingChange;
+  reason: string;
+  user: string;
+  submittedAt: number;
+}

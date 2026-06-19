@@ -1,5 +1,6 @@
 import { getDb } from './db';
-import type { ChangesetSubmission } from '@/types/powerdns';
+import type { ChangesetSubmission, PendingChange, RRSetHistoryEntry } from '@/types/powerdns';
+import type Database from 'better-sqlite3';
 
 function normalizeUrl(url: string): string {
   return url.replace(/\/$/, '').toLowerCase();
@@ -176,4 +177,71 @@ export function getLastChangeForRRSet(
   }
 
   return null;
+}
+
+/**
+ * Exact count of successful changesets that touched each rrsetKey in a zone.
+ * One increment per changeset per key (a key appearing twice in one changeset
+ * counts once), so the count equals the timeline length from getChangesForRRSet.
+ */
+export function getChangeCountsForZone(
+  serverUrl: string,
+  zoneId: string,
+  db: Database.Database = getDb()
+): Record<string, number> {
+  const key = normalizeUrl(serverUrl);
+  const rows = db.prepare(
+    `SELECT changes_json FROM change_history
+     WHERE server_url = ? AND zone_id = ? AND status = 'success'
+     ORDER BY submitted_at DESC`
+  ).all(key, zoneId) as Array<{ changes_json: string }>;
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    let changes: PendingChange[];
+    try { changes = JSON.parse(row.changes_json); } catch { continue; }
+    const keys = new Set<string>();
+    for (const c of changes) {
+      if (c && typeof c.rrsetKey === 'string') keys.add(c.rrsetKey);
+    }
+    for (const k of keys) counts[k] = (counts[k] || 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Timeline (newest first) of recorded changes for one rrsetKey: one entry per
+ * matching changeset (the first matching change in that changeset). Capped at
+ * `limit` (default 100) with hasMore; scans at most 2000 changesets.
+ */
+export function getChangesForRRSet(
+  serverUrl: string,
+  zoneId: string,
+  rrsetKey: string,
+  limit = 100,
+  db: Database.Database = getDb()
+): { items: RRSetHistoryEntry[]; hasMore: boolean } {
+  const key = normalizeUrl(serverUrl);
+  const SCAN_CAP = 2000;
+  const rows = db.prepare(
+    `SELECT id, changes_json, reason, user, submitted_at FROM change_history
+     WHERE server_url = ? AND zone_id = ? AND status = 'success'
+     ORDER BY submitted_at DESC
+     LIMIT ?`
+  ).all(key, zoneId, SCAN_CAP) as Array<{
+    id: string; changes_json: string; reason: string; user: string; submitted_at: number;
+  }>;
+
+  const items: RRSetHistoryEntry[] = [];
+  let hasMore = false;
+  for (const row of rows) {
+    let changes: PendingChange[];
+    try { changes = JSON.parse(row.changes_json); } catch { continue; }
+    const match = changes.find((c) => c && c.rrsetKey === rrsetKey);
+    if (!match) continue;
+    if (items.length >= limit) { hasMore = true; break; }
+    items.push({ changesetId: row.id, change: match, reason: row.reason, user: row.user, submittedAt: row.submitted_at });
+  }
+  if (!hasMore && rows.length === SCAN_CAP) hasMore = true;
+  return { items, hasMore };
 }

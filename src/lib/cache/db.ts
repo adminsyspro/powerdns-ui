@@ -59,7 +59,7 @@ function initSchema(db: Database.Database) {
       error_message   TEXT DEFAULT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_change_history_zone ON change_history(server_url, zone_id);
+    CREATE INDEX IF NOT EXISTS idx_change_history_zone ON change_history(server_url, zone_id, submitted_at);
     CREATE INDEX IF NOT EXISTS idx_change_history_time ON change_history(submitted_at DESC);
 
     CREATE TABLE IF NOT EXISTS server_connections (

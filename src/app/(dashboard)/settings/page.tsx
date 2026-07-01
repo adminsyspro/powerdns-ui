@@ -503,18 +503,18 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">Users not in these groups will have read-only access</p>
                   </div>
-                  {ldapMessage && (
-                    <div className={`p-3 rounded-lg text-sm ${ldapMessage.includes('Error') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
-                      {ldapMessage}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button onClick={handleSaveLdap} disabled={ldapSaving}>
-                      {ldapSaving ? 'Saving...' : 'Save Configuration'}
-                    </Button>
-                  </div>
                 </>
               )}
+              {ldapMessage && (
+                <div className={`p-3 rounded-lg text-sm ${ldapMessage.includes('Error') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                  {ldapMessage}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button onClick={handleSaveLdap} disabled={ldapSaving}>
+                  {ldapSaving ? 'Saving...' : 'Save Configuration'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

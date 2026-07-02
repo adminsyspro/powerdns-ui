@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import {
   createCertificate, getCertificate, listCertificates, getCertificatePrivateKey,
   updateCertificateIssuance, setCertificateRenewalFailure, deleteCertificate, certificatesUsingAccount,
+  setCertificatePrivateKey, setCertificateMaterialized,
 } from '../../src/lib/certs/cert-store';
 
 function makeDb() {
@@ -55,6 +56,20 @@ assert.equal(afterFail.status, 'valid', 'still valid after renewal failure');
 assert.equal(afterFail.renewalStatus, 'failed', 'renewal_status failed');
 assert.equal(afterFail.nextAttemptAt, 9999, 'backoff stored');
 
+// setCertificatePrivateKey / getCertificatePrivateKey round-trip (used by the
+// engine to persist the key BEFORE finalizeOrder, ahead of a full issuance).
+setCertificatePrivateKey(cert.id, '-PRE-FINALIZE-KEY-', db);
+assert.equal(
+  getCertificatePrivateKey(cert.id, db),
+  '-PRE-FINALIZE-KEY-',
+  'setCertificatePrivateKey round-trips via getCertificatePrivateKey'
+);
+
+// setCertificateMaterialized stamps materialized_at once the on-disk write succeeds
+assert.equal(getCertificate(cert.id, db)!.materializedAt, null, 'materializedAt starts null');
+setCertificateMaterialized(cert.id, db);
+assert.ok((getCertificate(cert.id, db)!.materializedAt ?? 0) > 0, 'materializedAt set');
+
 // account-delete guard
 assert.equal(certificatesUsingAccount('a1', db), 1, 'one cert uses a1');
 assert.equal(certificatesUsingAccount('nope', db), 0, 'none for other account');
@@ -67,6 +82,14 @@ assert.throws(
   () => createCertificate({ name: 'bad', acmeAccountId: 'nope', connectionId: 'c1', sans: ['example.org'] }, db),
   /unknown acme_account_id/,
   'unknown acme_account_id rejected'
+);
+
+// createCertificate refuses an unsafe/invalid name (same rules materialize.ts
+// enforces on-disk — validated up front so a bad name never reaches the fs)
+assert.throws(
+  () => createCertificate({ name: '../evil', acmeAccountId: 'a1', connectionId: 'c1', sans: ['example.org'] }, db),
+  /invalid certificate name/,
+  'invalid certificate name rejected'
 );
 
 console.log('certs/cert-store: ALL PASSED');

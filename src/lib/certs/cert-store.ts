@@ -4,6 +4,7 @@ import { getDb } from '@/lib/cache/db';
 import { encrypt, decryptStrict } from '@/lib/crypto';
 import { canonicalizeSans } from './san';
 import { normalizeUrl } from '@/lib/cache/zones';
+import { sanitizeCertName } from './materialize';
 import type { Certificate, KeyType } from './types';
 
 type Db = Database.Database;
@@ -43,6 +44,9 @@ export function createCertificate(
   },
   db: Db = getDb()
 ): Certificate {
+  // Same rules the materializer enforces on-disk (no path traversal / unsafe
+  // chars) — validate up front so a bad name never reaches the filesystem.
+  const name = sanitizeCertName(input.name);
   const sans = canonicalizeSans(input.sans);
   const account = db.prepare(`SELECT 1 FROM acme_accounts WHERE id = ?`).get(input.acmeAccountId);
   if (!account) throw new Error('unknown acme_account_id');
@@ -59,7 +63,7 @@ export function createCertificate(
       (id, name, acme_account_id, connection_id, server_url, sans_json, key_type, auto_renew, renew_before_days)
      VALUES (?,?,?,?,?,?,?,?,?)`
   ).run(
-    id, input.name, input.acmeAccountId, input.connectionId, serverUrl,
+    id, name, input.acmeAccountId, input.connectionId, serverUrl,
     JSON.stringify(sans), input.keyType ?? 'ecdsa',
     input.autoRenew === false ? 0 : 1, input.renewBeforeDays ?? 30,
   );
@@ -79,6 +83,26 @@ export function getCertificatePrivateKey(id: string, db: Db = getDb()): string |
   const row = db.prepare(`SELECT privkey_enc FROM certificates WHERE id = ?`).get(id) as any;
   if (!row || !row.privkey_enc) return null;
   return decryptStrict(row.privkey_enc);
+}
+
+/**
+ * Persist just the private key, ahead of finalizeOrder. This lets a crash
+ * between finalize and cert-fetch be resumed: the order can be re-checked
+ * (status 'valid') and getCertificate() re-issued the fullchain, paired back
+ * up with this already-stored key, without generating a NEW keypair (which
+ * would desync the CSR's public key from the eventual cert).
+ */
+export function setCertificatePrivateKey(id: string, privkeyPem: string, db: Db = getDb()): void {
+  db.prepare(
+    `UPDATE certificates SET privkey_enc = ?, updated_at = unixepoch() WHERE id = ?`
+  ).run(encrypt(privkeyPem), id);
+}
+
+/** Record that the on-disk certbot-style materialization succeeded for this cert. */
+export function setCertificateMaterialized(id: string, db: Db = getDb()): void {
+  db.prepare(
+    `UPDATE certificates SET materialized_at = unixepoch(), updated_at = unixepoch() WHERE id = ?`
+  ).run(id);
 }
 
 export function updateCertificateIssuance(

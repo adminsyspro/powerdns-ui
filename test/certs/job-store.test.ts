@@ -14,7 +14,8 @@ function makeDb() {
     error_class TEXT DEFAULT NULL, error_message TEXT DEFAULT NULL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()), claimed_at INTEGER DEFAULT NULL,
     finished_at INTEGER DEFAULT NULL, next_attempt_at INTEGER DEFAULT NULL
-  );`);
+  );
+  CREATE UNIQUE INDEX idx_certificate_jobs_active ON certificate_jobs(certificate_id) WHERE state IN ('queued','running');`);
   return db;
 }
 

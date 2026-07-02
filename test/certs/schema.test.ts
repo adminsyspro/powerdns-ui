@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS certificate_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_certificate_jobs_state ON certificate_jobs(state, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_certificate_jobs_cert ON certificate_jobs(certificate_id, state);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_certificate_jobs_active ON certificate_jobs(certificate_id) WHERE state IN ('queued','running');
 CREATE TABLE IF NOT EXISTS certificate_events (
   id TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, ts INTEGER NOT NULL DEFAULT (unixepoch()),
   type TEXT NOT NULL, status TEXT DEFAULT NULL, actor TEXT DEFAULT NULL,
@@ -62,7 +63,7 @@ for (const t of ['acme_accounts', 'certificates', 'certificate_jobs', 'certifica
   assert.ok(tables.includes(t), `table ${t} exists`);
 }
 const idx = db.prepare(`SELECT name FROM sqlite_master WHERE type='index'`).all().map((r: any) => r.name);
-for (const i of ['idx_certificates_renewal', 'idx_certificate_jobs_state', 'idx_certificate_events_cert']) {
+for (const i of ['idx_certificates_renewal', 'idx_certificate_jobs_state', 'idx_certificate_jobs_active', 'idx_certificate_events_cert']) {
   assert.ok(idx.includes(i), `index ${i} exists`);
 }
 assert.equal((db.prepare(`SELECT value FROM app_settings WHERE key='x'`).get() as any).value, '1', 'legacy data intact');

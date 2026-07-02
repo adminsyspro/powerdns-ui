@@ -26,29 +26,31 @@ function rowToJob(r: any): CertJob {
 }
 
 /**
- * Enqueue an issuance/renewal job. Refuses to create a second active job for
- * the same certificate (one active job per cert), returning { alreadyActive }.
+ * Enqueue an issuance/renewal job. A second active job for the same
+ * certificate (one active job per cert) is refused by the DB — a partial
+ * unique index on certificate_jobs(certificate_id) WHERE state IN
+ * ('queued','running') (see initSchema) rejects the INSERT — so this is race
+ * free even under concurrent callers, unlike a SELECT-then-INSERT check.
  */
 export function enqueueJob(
   certificateId: string,
   kind: 'issue' | 'renew',
   db: Db = getDb()
 ): { id: string } | { alreadyActive: true } {
-  return db.transaction(() => {
-    const active = db
-      .prepare(
-        "SELECT 1 FROM certificate_jobs WHERE certificate_id=? AND state IN ('queued','running') LIMIT 1"
-      )
-      .get(certificateId);
-    if (active) return { alreadyActive: true as const };
-    const id = randomUUID();
+  const id = randomUUID();
+  try {
     db.prepare('INSERT INTO certificate_jobs (id, certificate_id, kind) VALUES (?,?,?)').run(
       id,
       certificateId,
       kind
     );
     return { id };
-  })();
+  } catch (err: any) {
+    if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE' || String(err?.message).includes('UNIQUE')) {
+      return { alreadyActive: true as const };
+    }
+    throw err;
+  }
 }
 
 /**

@@ -273,6 +273,7 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_certificate_jobs_state ON certificate_jobs(state, next_attempt_at);
     CREATE INDEX IF NOT EXISTS idx_certificate_jobs_cert ON certificate_jobs(certificate_id, state);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_certificate_jobs_active ON certificate_jobs(certificate_id) WHERE state IN ('queued','running');
 
     -- SSL certificates: audit trail of certificate lifecycle events.
     CREATE TABLE IF NOT EXISTS certificate_events (

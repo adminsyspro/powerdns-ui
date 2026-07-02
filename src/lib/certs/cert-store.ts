@@ -123,3 +123,26 @@ export function certificatesUsingAccount(acmeAccountId: string, db: Db = getDb()
   const row = db.prepare(`SELECT COUNT(*) AS n FROM certificates WHERE acme_account_id = ?`).get(acmeAccountId);
   return (row as any).n as number;
 }
+
+export function updateCertificateSettings(
+  id: string,
+  patch: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean },
+  db: Db = getDb()
+): Certificate | undefined {
+  const existing = db.prepare(`SELECT 1 FROM certificates WHERE id = ?`).get(id);
+  if (!existing) return undefined;
+  db.prepare(
+    `UPDATE certificates SET
+       auto_renew = COALESCE(?, auto_renew),
+       renew_before_days = COALESCE(?, renew_before_days),
+       key_download_enabled = COALESCE(?, key_download_enabled),
+       updated_at = unixepoch()
+     WHERE id = ?`
+  ).run(
+    patch.autoRenew === undefined ? null : (patch.autoRenew ? 1 : 0),
+    patch.renewBeforeDays === undefined ? null : patch.renewBeforeDays,
+    patch.keyDownloadEnabled === undefined ? null : (patch.keyDownloadEnabled ? 1 : 0),
+    id,
+  );
+  return getCertificate(id, db);
+}

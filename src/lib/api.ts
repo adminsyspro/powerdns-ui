@@ -16,7 +16,7 @@ import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
 import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
-import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch } from '@/lib/certs/types';
+import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch, Certificate, CertEvent } from '@/lib/certs/types';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -558,6 +558,48 @@ export async function updateAcmeAccountApi(id: string, patch: AcmeAccountPatch) 
 
 export async function deleteAcmeAccountApi(id: string) {
   return apiRequest<void>(`/api/certs/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// --- SSL certificates: certificates ---
+export async function fetchCertificates() {
+  return apiRequest<Certificate[]>('/api/certs');
+}
+
+export async function createCertificateApi(input: {
+  name: string;
+  acmeAccountId: string;
+  connectionId: string;
+  sans: string[];
+  keyType?: 'ecdsa' | 'rsa';
+  autoRenew?: boolean;
+  renewBeforeDays?: number;
+}) {
+  return apiRequest<Certificate>('/api/certs', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateCertificateApi(
+  id: string,
+  patch: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean }
+) {
+  return apiRequest<Certificate>(`/api/certs/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteCertificateApi(id: string) {
+  return apiRequest<void>(`/api/certs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function issueCertificateApi(id: string) {
+  return apiRequest<{ jobId: string }>(`/api/certs/${encodeURIComponent(id)}/issue`, { method: 'POST' });
+}
+
+export async function fetchCertEvents(id: string) {
+  return apiRequest<CertEvent[]>(`/api/certs/${encodeURIComponent(id)}/events`);
 }
 
 // ---- NS compliance audit ----

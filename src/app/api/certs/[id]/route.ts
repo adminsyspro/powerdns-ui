@@ -1,0 +1,79 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { isCertsEnabled } from '@/lib/certs/config';
+import { getCertificate, deleteCertificate, updateCertificateSettings } from '@/lib/certs/cert-store';
+import { appendCertEvent } from '@/lib/certs/event-store';
+import { removeMaterializedCert } from '@/lib/certs/materialize';
+
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(request: NextRequest, { params }: RouteContext) {
+  try {
+    if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireAdmin(request);
+    const { id } = await params;
+    const cert = getCertificate(id);
+    if (!cert) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(cert);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  try {
+    if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireAdmin(request);
+    const { id } = await params;
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
+    }
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+      return NextResponse.json({ error: 'invalid body' }, { status: 400 });
+    }
+    if (body.autoRenew !== undefined && typeof body.autoRenew !== 'boolean') {
+      return NextResponse.json({ error: 'autoRenew must be a boolean' }, { status: 400 });
+    }
+    if (
+      body.renewBeforeDays !== undefined &&
+      (typeof body.renewBeforeDays !== 'number' || !Number.isInteger(body.renewBeforeDays) || body.renewBeforeDays < 1)
+    ) {
+      return NextResponse.json({ error: 'renewBeforeDays must be a positive integer' }, { status: 400 });
+    }
+    if (body.keyDownloadEnabled !== undefined && typeof body.keyDownloadEnabled !== 'boolean') {
+      return NextResponse.json({ error: 'keyDownloadEnabled must be a boolean' }, { status: 400 });
+    }
+    const updated = updateCertificateSettings(id, {
+      autoRenew: body.autoRenew,
+      renewBeforeDays: body.renewBeforeDays,
+      keyDownloadEnabled: body.keyDownloadEnabled,
+    });
+    if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(updated);
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  try {
+    if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireAdmin(request);
+    const { id } = await params;
+    const cert = getCertificate(id);
+    if (!cert) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    appendCertEvent({ certificateId: id, type: 'delete', status: 'ok', message: `certificate "${cert.name}" deleted` });
+    deleteCertificate(id);
+    try {
+      removeMaterializedCert(cert.name);
+    } catch {
+      // best-effort filesystem cleanup — DB row is already gone
+    }
+    return new NextResponse(null, { status: 204 });
+  } catch (e) {
+    return authzErrorResponse(e);
+  }
+}

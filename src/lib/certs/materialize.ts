@@ -35,3 +35,11 @@ export function materializeCert(opts: {
   writeFileAtomic(path.join(live, 'fullchain.pem'), fullchain, 0o644);
   return live;
 }
+
+/** Remove a certificate's materialized live/<name> directory (best-effort; caller should catch). */
+export function removeMaterializedCert(name: string, certsDir?: string): void {
+  const safeName = sanitizeCertName(name);
+  const root = certsDir ?? getCertsDir();
+  const live = path.join(root, 'live', safeName);
+  fs.rmSync(live, { recursive: true, force: true });
+}

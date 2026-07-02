@@ -19,6 +19,7 @@ import {
   Layers,
   History,
   Radar,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -75,10 +76,18 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Users', href: '/users', icon: Users, requiredRole: ['Administrator'] },
       { title: 'Groups', href: '/groups', icon: Users2, requiredRole: ['Administrator'] },
-      { title: 'Cloudflare', href: '/integrations', icon: CloudflareIcon, requiredRole: ['Administrator'] },
       { title: 'Change History', href: '/history', icon: History, requiredRole: ['Administrator'] },
       { title: 'Activity Log', href: '/activity', icon: FileText, requiredRole: ['Administrator'] },
       { title: 'Settings', href: '/settings', icon: Settings, requiredRole: ['Administrator'] },
+    ],
+  },
+  {
+    title: 'Intégration',
+    items: [
+      { title: 'Cloudflare', href: '/integrations', icon: CloudflareIcon, requiredRole: ['Administrator'] },
+      ...(process.env.NEXT_PUBLIC_CERTS_ENABLED === 'true'
+        ? [{ title: 'Certificats SSL', href: '/certificates', icon: ShieldCheck, requiredRole: ['Administrator'] as UserRole[] }]
+        : []),
     ],
   },
 ];

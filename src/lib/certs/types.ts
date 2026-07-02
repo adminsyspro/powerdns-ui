@@ -107,3 +107,16 @@ export interface CertJob {
   finishedAt: number | null;
   nextAttemptAt: number | null;
 }
+
+export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete';
+
+export interface CertEvent {
+  id: string;
+  certificateId: string;
+  ts: number;
+  type: CertEventType;
+  status: string | null;
+  actor: string | null;
+  actorIp: string | null;
+  message: string | null;
+}

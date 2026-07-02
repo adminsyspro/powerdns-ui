@@ -230,6 +230,57 @@ function initSchema(db: Database.Database) {
       owner      TEXT NOT NULL,
       heartbeat  INTEGER NOT NULL
     );
+
+    -- SSL certificates: ACME account configuration (secrets encrypted at rest).
+    CREATE TABLE IF NOT EXISTS acme_accounts (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+      ca_type TEXT NOT NULL DEFAULT 'letsencrypt', directory_url TEXT NOT NULL,
+      contact_email TEXT NOT NULL DEFAULT '', eab_kid TEXT DEFAULT NULL, eab_hmac_key TEXT DEFAULT NULL,
+      account_key_pem TEXT DEFAULT NULL, account_url TEXT DEFAULT NULL,
+      tos_agreed INTEGER NOT NULL DEFAULT 0, tos_agreed_at INTEGER DEFAULT NULL,
+      root_pem TEXT DEFAULT NULL, root_fingerprint_sha256 TEXT DEFAULT NULL,
+      propagation_mode TEXT NOT NULL DEFAULT 'authoritative', propagation_resolver TEXT DEFAULT NULL,
+      status TEXT NOT NULL DEFAULT 'unregistered', last_error TEXT DEFAULT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    -- SSL certificates: issued/managed certificates.
+    CREATE TABLE IF NOT EXISTS certificates (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, acme_account_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL, server_url TEXT NOT NULL, sans_json TEXT NOT NULL DEFAULT '[]',
+      key_type TEXT NOT NULL DEFAULT 'ecdsa', status TEXT NOT NULL DEFAULT 'pending',
+      renewal_status TEXT NOT NULL DEFAULT 'idle', last_renewal_error TEXT DEFAULT NULL,
+      error_class TEXT DEFAULT NULL, next_attempt_at INTEGER DEFAULT NULL,
+      not_before INTEGER DEFAULT NULL, not_after INTEGER DEFAULT NULL,
+      serial TEXT DEFAULT NULL, fingerprint_sha256 TEXT DEFAULT NULL, issuer TEXT DEFAULT NULL,
+      cert_pem TEXT DEFAULT NULL, chain_pem TEXT DEFAULT NULL, privkey_enc TEXT DEFAULT NULL,
+      key_download_enabled INTEGER NOT NULL DEFAULT 1, auto_renew INTEGER NOT NULL DEFAULT 1,
+      renew_before_days INTEGER NOT NULL DEFAULT 30, last_issued_at INTEGER DEFAULT NULL,
+      last_renewal_success_at INTEGER DEFAULT NULL, materialized_at INTEGER DEFAULT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_certificates_renewal ON certificates(auto_renew, not_after);
+    CREATE INDEX IF NOT EXISTS idx_certificates_next_attempt ON certificates(next_attempt_at);
+
+    -- SSL certificates: background jobs (issuance/renewal) for the cert engine.
+    CREATE TABLE IF NOT EXISTS certificate_jobs (
+      id TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, kind TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'queued', owner TEXT DEFAULT NULL, attempt INTEGER NOT NULL DEFAULT 0,
+      order_url TEXT DEFAULT NULL, challenges_json TEXT NOT NULL DEFAULT '[]', cleanup_done INTEGER NOT NULL DEFAULT 0,
+      error_class TEXT DEFAULT NULL, error_message TEXT DEFAULT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()), claimed_at INTEGER DEFAULT NULL,
+      finished_at INTEGER DEFAULT NULL, next_attempt_at INTEGER DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_certificate_jobs_state ON certificate_jobs(state, next_attempt_at);
+    CREATE INDEX IF NOT EXISTS idx_certificate_jobs_cert ON certificate_jobs(certificate_id, state);
+
+    -- SSL certificates: audit trail of certificate lifecycle events.
+    CREATE TABLE IF NOT EXISTS certificate_events (
+      id TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, ts INTEGER NOT NULL DEFAULT (unixepoch()),
+      type TEXT NOT NULL, status TEXT DEFAULT NULL, actor TEXT DEFAULT NULL,
+      actor_ip TEXT DEFAULT NULL, message TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_certificate_events_cert ON certificate_events(certificate_id, ts);
   `);
 
   // Migrations — add columns that may not exist in older databases

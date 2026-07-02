@@ -56,3 +56,36 @@ export interface AcmeAccountSecrets {
   accountKeyPem: string | null;
   eabHmacKey: string | null;
 }
+
+export type KeyType = 'ecdsa' | 'rsa';
+export type CertStatus = 'pending' | 'valid' | 'expired' | 'error';
+export type RenewalStatus = 'idle' | 'queued' | 'running' | 'failed';
+
+export interface Certificate {
+  id: string;
+  name: string;
+  acmeAccountId: string;
+  connectionId: string;
+  serverUrl: string;
+  sans: string[];
+  keyType: KeyType;
+  status: CertStatus;
+  renewalStatus: RenewalStatus;
+  lastRenewalError: string | null;
+  errorClass: string | null;
+  nextAttemptAt: number | null;
+  notBefore: number | null;
+  notAfter: number | null;
+  serial: string | null;
+  fingerprintSha256: string | null;
+  issuer: string | null;
+  hasCert: boolean;
+  keyDownloadEnabled: boolean;
+  autoRenew: boolean;
+  renewBeforeDays: number;
+  lastIssuedAt: number | null;
+  lastRenewalSuccessAt: number | null;
+  materializedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}

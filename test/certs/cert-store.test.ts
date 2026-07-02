@@ -9,6 +9,7 @@ function makeDb() {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE server_connections (id TEXT PRIMARY KEY, name TEXT, url TEXT, api_key TEXT, is_default INTEGER DEFAULT 0, created_at INTEGER DEFAULT (unixepoch()));
+    CREATE TABLE acme_accounts (id TEXT PRIMARY KEY, name TEXT);
     CREATE TABLE certificates (
       id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, acme_account_id TEXT NOT NULL,
       connection_id TEXT NOT NULL, server_url TEXT NOT NULL, sans_json TEXT NOT NULL DEFAULT '[]',
@@ -24,6 +25,7 @@ function makeDb() {
       created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );`);
   db.prepare(`INSERT INTO server_connections (id, name, url, api_key) VALUES ('c1','pdns','http://PDNS/','plain')`).run();
+  db.prepare(`INSERT INTO acme_accounts (id, name) VALUES ('a1','x')`).run();
   return db;
 }
 
@@ -59,5 +61,12 @@ assert.equal(certificatesUsingAccount('nope', db), 0, 'none for other account');
 
 assert.equal(deleteCertificate(cert.id, db), true, 'deleted');
 assert.equal(getCertificate(cert.id, db), undefined, 'gone');
+
+// createCertificate refuses an unknown acme_account_id
+assert.throws(
+  () => createCertificate({ name: 'bad', acmeAccountId: 'nope', connectionId: 'c1', sans: ['example.org'] }, db),
+  /unknown acme_account_id/,
+  'unknown acme_account_id rejected'
+);
 
 console.log('certs/cert-store: ALL PASSED');

@@ -44,6 +44,8 @@ export function createCertificate(
   db: Db = getDb()
 ): Certificate {
   const sans = canonicalizeSans(input.sans);
+  const account = db.prepare(`SELECT 1 FROM acme_accounts WHERE id = ?`).get(input.acmeAccountId);
+  if (!account) throw new Error('unknown acme_account_id');
   // Resolve the server URL from the SAME (injected) db so the DI seam stays
   // consistent; getConnectionById() is hard-wired to the global getDb().
   const conn = db.prepare(`SELECT url FROM server_connections WHERE id = ?`).get(input.connectionId) as

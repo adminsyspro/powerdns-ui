@@ -4,6 +4,7 @@ import { isCertsEnabled } from '@/lib/certs/config';
 import { getCertificate, deleteCertificate, updateCertificateSettings } from '@/lib/certs/cert-store';
 import { appendCertEvent } from '@/lib/certs/event-store';
 import { removeMaterializedCert } from '@/lib/certs/materialize';
+import { listActiveJobs } from '@/lib/certs/job-store';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -65,6 +66,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const cert = getCertificate(id);
     if (!cert) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (listActiveJobs(id).length > 0) {
+      return NextResponse.json(
+        { error: 'a job is active for this certificate; wait for it to finish' },
+        { status: 409 }
+      );
+    }
     appendCertEvent({ certificateId: id, type: 'delete', status: 'ok', message: `certificate "${cert.name}" deleted` });
     deleteCertificate(id);
     try {

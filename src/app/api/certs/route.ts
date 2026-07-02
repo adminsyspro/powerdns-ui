@@ -45,6 +45,18 @@ export async function POST(request: NextRequest) {
     if (body.keyType !== undefined && !KEY_TYPES.includes(body.keyType)) {
       return NextResponse.json({ error: 'invalid keyType' }, { status: 400 });
     }
+    if (body.autoRenew !== undefined && typeof body.autoRenew !== 'boolean') {
+      return NextResponse.json({ error: 'autoRenew must be a boolean' }, { status: 400 });
+    }
+    if (
+      body.renewBeforeDays !== undefined &&
+      (typeof body.renewBeforeDays !== 'number' ||
+        !Number.isInteger(body.renewBeforeDays) ||
+        body.renewBeforeDays < 1 ||
+        body.renewBeforeDays > 90)
+    ) {
+      return NextResponse.json({ error: 'renewBeforeDays must be an integer between 1 and 90' }, { status: 400 });
+    }
     try {
       const cert = createCertificate({
         name,
@@ -52,8 +64,8 @@ export async function POST(request: NextRequest) {
         connectionId,
         sans: body.sans,
         keyType: body.keyType as KeyType | undefined,
-        autoRenew: body.autoRenew === undefined ? undefined : body.autoRenew === true,
-        renewBeforeDays: body.renewBeforeDays !== undefined ? Number(body.renewBeforeDays) : undefined,
+        autoRenew: body.autoRenew === undefined ? undefined : body.autoRenew,
+        renewBeforeDays: body.renewBeforeDays,
       });
       return NextResponse.json(cert, { status: 201 });
     } catch (err: any) {
@@ -65,6 +77,7 @@ export async function POST(request: NextRequest) {
         msg.startsWith('invalid SAN') ||
         msg.includes('at least one SAN') ||
         msg.includes('too many SANs') ||
+        msg.startsWith('invalid certificate name') ||
         msg === 'unknown acme_account_id' ||
         msg.startsWith('connection not found')
       ) {

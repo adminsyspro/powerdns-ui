@@ -16,6 +16,7 @@ import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
 import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
+import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch } from '@/lib/certs/types';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -534,6 +535,29 @@ export async function fetchZoneDnsAnalytics(zone: string, range: DnsAnalyticsRan
   return apiRequest<ZoneDnsAnalytics>(
     `/api/integrations/zone-dns-analytics?zone=${encodeURIComponent(zone)}&range=${range}`
   );
+}
+
+// --- SSL certificates: ACME accounts ---
+export async function fetchAcmeAccounts() {
+  return apiRequest<AcmeAccount[]>('/api/certs/accounts');
+}
+
+export async function createAcmeAccountApi(input: AcmeAccountInput) {
+  return apiRequest<AcmeAccount>('/api/certs/accounts', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAcmeAccountApi(id: string, patch: AcmeAccountPatch) {
+  return apiRequest<AcmeAccount>(`/api/certs/accounts/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteAcmeAccountApi(id: string) {
+  return apiRequest<void>(`/api/certs/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 // ---- NS compliance audit ----

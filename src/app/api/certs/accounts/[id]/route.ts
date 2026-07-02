@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
-import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccount } from '@/lib/certs/store';
-import { certificatesUsingAccount } from '@/lib/certs/cert-store';
+import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccountIfUnused } from '@/lib/certs/store';
 import type { PropagationMode } from '@/lib/certs/types';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -81,14 +80,14 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     requireAdmin(request);
     const { id } = await params;
-    const inUse = certificatesUsingAccount(id);
-    if (inUse > 0) {
+    const outcome = deleteAcmeAccountIfUnused(id);
+    if (outcome.result === 'not-found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (outcome.result === 'in-use') {
       return NextResponse.json(
-        { error: `Account is used by ${inUse} certificate(s); delete those first` },
+        { error: `Account is used by ${outcome.inUse} certificate(s); delete those first` },
         { status: 409 }
       );
     }
-    if (!deleteAcmeAccount(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     return authzErrorResponse(e);

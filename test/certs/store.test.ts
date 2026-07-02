@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
   createAcmeAccount, listAcmeAccounts, getAcmeAccount,
-  updateAcmeAccount, deleteAcmeAccount, getAccountSecrets, setAccountRegistration,
+  updateAcmeAccount, deleteAcmeAccount, deleteAcmeAccountIfUnused, getAccountSecrets, setAccountRegistration,
 } from '../../src/lib/certs/store';
 
 function makeDb() {
@@ -17,6 +17,9 @@ function makeDb() {
     propagation_mode TEXT NOT NULL DEFAULT 'authoritative', propagation_resolver TEXT DEFAULT NULL,
     status TEXT NOT NULL DEFAULT 'unregistered', last_error TEXT DEFAULT NULL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  CREATE TABLE certificates (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, acme_account_id TEXT NOT NULL
   );`);
   return db;
 }
@@ -69,5 +72,27 @@ assert.equal(getAccountSecrets(created.id, db)!.accountKeyPem, '-----KEY-----', 
 assert.equal(deleteAcmeAccount(created.id, db), true, 'delete returns true');
 assert.equal(getAcmeAccount(created.id, db), undefined, 'gone after delete');
 assert.equal(deleteAcmeAccount('missing', db), false, 'delete missing returns false');
+
+// deleteAcmeAccountIfUnused: atomic guard against deleting an in-use account
+const unused = createAcmeAccount({
+  name: 'unused-acct', caType: 'letsencrypt',
+  directoryUrl: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+}, db);
+assert.deepEqual(deleteAcmeAccountIfUnused(unused.id, db), { result: 'deleted' }, 'unused account deleted');
+assert.equal(getAcmeAccount(unused.id, db), undefined, 'unused account gone');
+
+const inUseAcct = createAcmeAccount({
+  name: 'in-use-acct', caType: 'letsencrypt',
+  directoryUrl: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+}, db);
+db.prepare(`INSERT INTO certificates (id, name, acme_account_id) VALUES ('cert1','web',?)`).run(inUseAcct.id);
+assert.deepEqual(
+  deleteAcmeAccountIfUnused(inUseAcct.id, db),
+  { result: 'in-use', inUse: 1 },
+  'in-use account refused with count'
+);
+assert.ok(getAcmeAccount(inUseAcct.id, db), 'in-use account NOT deleted');
+
+assert.deepEqual(deleteAcmeAccountIfUnused('missing', db), { result: 'not-found' }, 'missing account not-found');
 
 console.log('certs/store: ALL PASSED');

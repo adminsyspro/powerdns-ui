@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import { getDb } from '@/lib/cache/db';
-import { encrypt, decrypt } from '@/lib/crypto';
+import { encrypt, decryptStrict } from '@/lib/crypto';
+import { certificatesUsingAccount } from './cert-store';
 import type {
   AcmeAccount, AcmeAccountInput, AcmeAccountPatch, AcmeAccountSecrets,
 } from './types';
@@ -98,12 +99,32 @@ export function deleteAcmeAccount(id: string, db: Db = getDb()): boolean {
   return db.prepare(`DELETE FROM acme_accounts WHERE id = ?`).run(id).changes > 0;
 }
 
+/**
+ * Delete an ACME account only if no certificate references it, atomically —
+ * the existence check, in-use count, and DELETE all run inside one
+ * transaction so a concurrent createCertificate() can't sneak in between the
+ * count and the delete and leave a certificate pointing at a deleted account.
+ */
+export function deleteAcmeAccountIfUnused(
+  id: string,
+  db: Db = getDb()
+): { result: 'deleted' | 'in-use' | 'not-found'; inUse?: number } {
+  return db.transaction(() => {
+    const existing = db.prepare(`SELECT 1 FROM acme_accounts WHERE id = ?`).get(id);
+    if (!existing) return { result: 'not-found' as const };
+    const inUse = certificatesUsingAccount(id, db);
+    if (inUse > 0) return { result: 'in-use' as const, inUse };
+    db.prepare(`DELETE FROM acme_accounts WHERE id = ?`).run(id);
+    return { result: 'deleted' as const };
+  })();
+}
+
 export function getAccountSecrets(id: string, db: Db = getDb()): AcmeAccountSecrets | undefined {
   const r = db.prepare(`SELECT account_key_pem, eab_hmac_key FROM acme_accounts WHERE id = ?`).get(id) as any;
   if (!r) return undefined;
   return {
-    accountKeyPem: r.account_key_pem ? decrypt(r.account_key_pem) : null,
-    eabHmacKey: r.eab_hmac_key ? decrypt(r.eab_hmac_key) : null,
+    accountKeyPem: r.account_key_pem ? decryptStrict(r.account_key_pem) : null,
+    eabHmacKey: r.eab_hmac_key ? decryptStrict(r.eab_hmac_key) : null,
   };
 }
 

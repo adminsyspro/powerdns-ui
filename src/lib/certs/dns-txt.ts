@@ -16,11 +16,23 @@ function unquote(value: string): string {
   return value;
 }
 
-/** Union of existing + new TXT values, deduped by unquoted content, order preserved, all quoted. */
+/**
+ * Union of existing + new TXT values, deduped by unquoted content, order
+ * preserved. Existing values are kept byte-for-byte as their original
+ * strings — never re-serialized through quoteTxt/unquote, which could alter
+ * a third party's escaping. Only newly-added values are quoted.
+ */
 export function mergeTxtValues(existing: string[], toAdd: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const v of [...existing, ...toAdd]) {
+  for (const v of existing) {
+    const key = unquote(v);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(v);
+    }
+  }
+  for (const v of toAdd) {
     const key = unquote(v);
     if (!seen.has(key)) {
       seen.add(key);
@@ -30,10 +42,13 @@ export function mergeTxtValues(existing: string[], toAdd: string[]): string[] {
   return out;
 }
 
-/** Existing values minus the ones we own (compared unquoted), remainder quoted. */
+/**
+ * Existing values minus the ones we own (compared unquoted). Retained values
+ * are returned byte-for-byte as their original strings, not re-quoted.
+ */
 export function removeTxtValues(existing: string[], toRemove: string[]): string[] {
   const drop = new Set(toRemove.map(unquote));
-  return existing.filter((v) => !drop.has(unquote(v))).map((v) => quoteTxt(unquote(v)));
+  return existing.filter((v) => !drop.has(unquote(v)));
 }
 
 /** `_acme-challenge.<base>.` for an ACME identifier value (strips leading `*.`). */

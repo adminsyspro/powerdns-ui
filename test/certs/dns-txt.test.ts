@@ -18,6 +18,18 @@ assert.deepEqual(mergeTxtValues(['"dup"'], ['dup']), ['"dup"'], 'dedupe by unquo
 assert.deepEqual(removeTxtValues(['"other"', '"valA"', '"valB"'], ['valA', 'valB']), ['"other"'], 'removes only ours');
 assert.deepEqual(removeTxtValues(['"valA"'], ['valA']), [], 'empties when we were sole owner');
 
+// existing values are preserved byte-for-byte — never re-serialized through quoteTxt/unquote
+assert.deepEqual(
+  mergeTxtValues(['"a\\"b"'], ['new']),
+  ['"a\\"b"', '"new"'],
+  'existing unusual escaping kept verbatim, new value quoted'
+);
+assert.deepEqual(
+  removeTxtValues(['"a\\"b"', '"mine"'], ['mine']),
+  ['"a\\"b"'],
+  'retained existing value kept verbatim, not re-quoted'
+);
+
 // challenge fqdn: apex and wildcard both target _acme-challenge.<base>.
 assert.equal(challengeFqdn('example.com'), '_acme-challenge.example.com.', 'apex');
 assert.equal(challengeFqdn('*.example.com'), '_acme-challenge.example.com.', 'wildcard strips *.');

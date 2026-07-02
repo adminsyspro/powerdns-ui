@@ -89,3 +89,21 @@ export interface Certificate {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface CertJob {
+  id: string;
+  certificateId: string;
+  kind: 'issue' | 'renew';
+  state: 'queued' | 'running' | 'succeeded' | 'failed';
+  owner: string | null;
+  attempt: number;
+  orderUrl: string | null;
+  challenges: { fqdn: string; value: string }[];
+  cleanupDone: boolean;
+  errorClass: string | null;
+  errorMessage: string | null;
+  createdAt: number;
+  claimedAt: number | null;
+  finishedAt: number | null;
+  nextAttemptAt: number | null;
+}

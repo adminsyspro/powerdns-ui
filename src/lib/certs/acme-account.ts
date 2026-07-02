@@ -15,15 +15,23 @@ export async function registerAccount(id: string): Promise<AcmeAccount> {
     accountKeyPem = (await acme.crypto.createPrivateKey()).toString();
   }
 
-  const client = new acme.Client({ directoryUrl: account.directoryUrl, accountKey: accountKeyPem });
+  // EAB is a Client-constructor option, NOT part of the createAccount() data:
+  // acme-client signs the EAB JWS itself (HttpClient#signedRequest) from
+  // opts.externalAccountBinding and overwrites whatever is in the createAccount
+  // payload — passing {kid, hmacKey} inside createAccount()'s data would send an
+  // unsigned, invalid EAB object to the CA.
+  const externalAccountBinding =
+    account.eabKid && secrets?.eabHmacKey ? { kid: account.eabKid, hmacKey: secrets.eabHmacKey } : undefined;
+  const client = new acme.Client({
+    directoryUrl: account.directoryUrl,
+    accountKey: accountKeyPem,
+    externalAccountBinding,
+  });
 
-  const createOpts: { contact?: string[]; termsOfServiceAgreed: boolean; externalAccountBinding?: { kid: string; hmacKey: string } } = {
+  const createOpts: { contact?: string[]; termsOfServiceAgreed: boolean } = {
     termsOfServiceAgreed: true,
     contact: account.contactEmail ? [`mailto:${account.contactEmail}`] : undefined,
   };
-  if (account.eabKid && secrets?.eabHmacKey) {
-    createOpts.externalAccountBinding = { kid: account.eabKid, hmacKey: secrets.eabHmacKey };
-  }
 
   try {
     await client.createAccount(createOpts);

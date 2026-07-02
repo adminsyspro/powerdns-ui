@@ -73,6 +73,35 @@ export function decrypt(encoded: string): string {
   }
 }
 
+/**
+ * Like decrypt(), but FAILS CLOSED: throws on malformed input, wrong key, or
+ * auth-tag mismatch instead of returning the input verbatim. Use for secrets
+ * that must never be silently treated as plaintext (e.g. ACME account keys).
+ */
+export function decryptStrict(encoded: string): string {
+  const key = getKey();
+  const packed = Buffer.from(encoded, 'base64');
+  if (packed.length < IV_LENGTH + TAG_LENGTH + 1) {
+    throw new Error('decryptStrict: input too short to be ciphertext');
+  }
+  const iv = packed.subarray(0, IV_LENGTH);
+  const tag = packed.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = packed.subarray(IV_LENGTH + TAG_LENGTH);
+  try {
+    const decipher = createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch (err) {
+    // Re-throw with a message that always identifies this as a decrypt
+    // failure — the underlying Node crypto error (e.g. "Unsupported state
+    // or unable to authenticate data" on auth-tag mismatch) doesn't
+    // otherwise say "decrypt".
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(`decryptStrict: failed to decrypt ciphertext (${cause})`);
+  }
+}
+
 
 /**
  * Try to decrypt known-encrypted rows to detect a silent encryption-key change.

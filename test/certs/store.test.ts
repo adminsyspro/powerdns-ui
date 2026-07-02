@@ -51,6 +51,11 @@ const upd = updateAcmeAccount(created.id, { contactEmail: 'z@z.z', propagationMo
 assert.equal(upd.contactEmail, 'z@z.z', 'update applied');
 assert.equal(upd.propagationMode, 'resolver', 'propagation updated');
 
+// un-agreeing ToS clears tosAgreedAt
+const unagreed = updateAcmeAccount(created.id, { tosAgreed: false }, db)!;
+assert.equal(unagreed.tosAgreed, false, 'tosAgreed cleared');
+assert.equal(unagreed.tosAgreedAt, null, 'tosAgreedAt cleared');
+
 // registration setter
 setAccountRegistration(created.id, { accountKeyPem: '-----KEY-----', accountUrl: 'https://acct/1', status: 'registered', clearEab: true }, db);
 const afterReg = getAcmeAccount(created.id, db)!;

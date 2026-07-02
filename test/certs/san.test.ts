@@ -18,4 +18,20 @@ assert.throws(() => canonicalizeSans(['']), /empty|invalid/i, 'empty rejected');
 assert.throws(() => canonicalizeSans(['no_spaces here.com']), /invalid/i, 'invalid host rejected');
 assert.throws(() => canonicalizeSans([]), /at least one/i, 'empty list rejected');
 
+// path/port/userinfo/query/fragment smuggling rejected (would otherwise be
+// silently stripped by the URL parser)
+assert.throws(() => canonicalizeSans(['example.com/path']), /invalid/i, 'path smuggling rejected');
+assert.throws(() => canonicalizeSans(['example.com:443']), /invalid/i, 'port smuggling rejected');
+assert.throws(() => canonicalizeSans(['user@example.com']), /invalid/i, 'userinfo smuggling rejected');
+// label shape
+assert.throws(() => canonicalizeSans(['a.-b.com']), /invalid/i, 'leading-hyphen label rejected');
+assert.throws(() => canonicalizeSans(['a.b-.com']), /invalid/i, 'trailing-hyphen label rejected');
+assert.throws(() => canonicalizeSans(['a'.repeat(64) + '.com']), /invalid/i, 'over-length label rejected');
+// IPv4 literal rejected
+assert.throws(() => canonicalizeSans(['127.0.0.1']), /invalid/i, 'IPv4 literal rejected');
+// still-valid cases
+assert.deepEqual(canonicalizeSans(['*.example.com']), ['*.example.com'], 'wildcard still valid');
+assert.deepEqual(canonicalizeSans(['exämple.com']), ['xn--exmple-cua.com'], 'IDN still valid');
+assert.deepEqual(canonicalizeSans(['www.example.com']), ['www.example.com'], 'plain host still valid');
+
 console.log('certs/san: ALL PASSED');

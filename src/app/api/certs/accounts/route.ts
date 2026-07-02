@@ -7,10 +7,19 @@ import type { CaType, PropagationMode } from '@/lib/certs/types';
 const CA_TYPES: CaType[] = ['letsencrypt', 'step-ca', 'other'];
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
 
+function validateHttpsUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && !!u.hostname;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    requireAdmin(request);
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireAdmin(request);
     return NextResponse.json(listAcmeAccounts());
   } catch (e) {
     return authzErrorResponse(e);
@@ -19,16 +28,28 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    requireAdmin(request);
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const body = await request.json();
+    requireAdmin(request);
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
+    }
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+      return NextResponse.json({ error: 'invalid body' }, { status: 400 });
+    }
     const name = String(body.name ?? '').trim();
     const directoryUrl = String(body.directoryUrl ?? '').trim();
-    const caType: CaType = CA_TYPES.includes(body.caType) ? body.caType : 'letsencrypt';
     if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
-    if (!/^https:\/\//.test(directoryUrl))
-      return NextResponse.json({ error: 'directoryUrl must be an https URL' }, { status: 400 });
-    const propagationMode: PropagationMode = PROP_MODES.includes(body.propagationMode) ? body.propagationMode : 'authoritative';
+    if (!validateHttpsUrl(directoryUrl))
+      return NextResponse.json({ error: 'directoryUrl must be a valid https URL' }, { status: 400 });
+    if (body.caType !== undefined && !CA_TYPES.includes(body.caType))
+      return NextResponse.json({ error: 'invalid caType' }, { status: 400 });
+    const caType: CaType = body.caType ?? 'letsencrypt';
+    if (body.propagationMode !== undefined && !PROP_MODES.includes(body.propagationMode))
+      return NextResponse.json({ error: 'invalid propagationMode' }, { status: 400 });
+    const propagationMode: PropagationMode = body.propagationMode ?? 'authoritative';
     try {
       const account = createAcmeAccount({
         name, caType, directoryUrl,

@@ -62,29 +62,35 @@ export function updateAcmeAccount(id: string, patch: AcmeAccountPatch, db: Db = 
   const existing = db.prepare(`SELECT * FROM acme_accounts WHERE id = ?`).get(id) as any;
   if (!existing) return undefined;
   const tosAgreed = patch.tosAgreed === undefined ? existing.tos_agreed : (patch.tosAgreed ? 1 : 0);
-  const tosAgreedAt =
-    patch.tosAgreed === true && existing.tos_agreed !== 1 ? Math.floor(Date.now() / 1000) : existing.tos_agreed_at;
-  db.prepare(
-    `UPDATE acme_accounts SET
-       name = ?, contact_email = ?, directory_url = ?, eab_kid = ?,
-       root_pem = ?, root_fingerprint_sha256 = ?, propagation_mode = ?, propagation_resolver = ?,
-       tos_agreed = ?, tos_agreed_at = ?, updated_at = unixepoch()
-     WHERE id = ?`
-  ).run(
-    patch.name ?? existing.name,
-    patch.contactEmail ?? existing.contact_email,
-    patch.directoryUrl ?? existing.directory_url,
-    patch.eabKid === undefined ? existing.eab_kid : patch.eabKid,
-    patch.rootPem === undefined ? existing.root_pem : patch.rootPem,
-    patch.rootFingerprintSha256 === undefined ? existing.root_fingerprint_sha256 : patch.rootFingerprintSha256,
-    patch.propagationMode ?? existing.propagation_mode,
-    patch.propagationResolver === undefined ? existing.propagation_resolver : patch.propagationResolver,
-    tosAgreed, tosAgreedAt, id,
-  );
-  if (patch.eabHmacKey !== undefined) {
-    db.prepare(`UPDATE acme_accounts SET eab_hmac_key = ?, updated_at = unixepoch() WHERE id = ?`)
-      .run(patch.eabHmacKey ? encrypt(patch.eabHmacKey) : null, id);
+  let tosAgreedAt = existing.tos_agreed_at;
+  if (patch.tosAgreed === false) {
+    tosAgreedAt = null;
+  } else if (patch.tosAgreed === true && existing.tos_agreed !== 1) {
+    tosAgreedAt = Math.floor(Date.now() / 1000);
   }
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE acme_accounts SET
+         name = ?, contact_email = ?, directory_url = ?, eab_kid = ?,
+         root_pem = ?, root_fingerprint_sha256 = ?, propagation_mode = ?, propagation_resolver = ?,
+         tos_agreed = ?, tos_agreed_at = ?, updated_at = unixepoch()
+       WHERE id = ?`
+    ).run(
+      patch.name ?? existing.name,
+      patch.contactEmail ?? existing.contact_email,
+      patch.directoryUrl ?? existing.directory_url,
+      patch.eabKid === undefined ? existing.eab_kid : patch.eabKid,
+      patch.rootPem === undefined ? existing.root_pem : patch.rootPem,
+      patch.rootFingerprintSha256 === undefined ? existing.root_fingerprint_sha256 : patch.rootFingerprintSha256,
+      patch.propagationMode ?? existing.propagation_mode,
+      patch.propagationResolver === undefined ? existing.propagation_resolver : patch.propagationResolver,
+      tosAgreed, tosAgreedAt, id,
+    );
+    if (patch.eabHmacKey !== undefined) {
+      db.prepare(`UPDATE acme_accounts SET eab_hmac_key = ?, updated_at = unixepoch() WHERE id = ?`)
+        .run(patch.eabHmacKey ? encrypt(patch.eabHmacKey) : null, id);
+    }
+  })();
   return getAcmeAccount(id, db);
 }
 

@@ -78,10 +78,11 @@ export default function ActivityPage() {
   const items: ActivityEntry[] = data?.items ?? [];
 
   const handleExport = () => {
+    const csvCell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [
       'Timestamp,Action,ResourceType,Actor,Resource,Details',
       ...items.map((e) =>
-        `${new Date(e.ts * 1000).toISOString()},${e.action},${e.resourceType},${e.actorName},${e.resourceName ?? ''},"${(e.details ?? '').replace(/"/g, '""')}"`
+        [csvCell(new Date(e.ts * 1000).toISOString()), csvCell(e.action), csvCell(e.resourceType), csvCell(e.actorName), csvCell(e.resourceName ?? ''), csvCell(e.details ?? '')].join(',')
       ),
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

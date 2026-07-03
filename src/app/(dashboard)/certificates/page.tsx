@@ -46,7 +46,8 @@ export default function CertificatesPage() {
     const [c, a] = await Promise.all([api.fetchCertificates(), api.fetchAcmeAccounts()]);
     if (c.error) setError(c.error);
     else setCerts(c.data ?? []);
-    if (!a.error) setAccounts(a.data ?? []);
+    if (a.error) { if (!c.error) setError(a.error); }
+    else setAccounts(a.data ?? []);
     setIsLoading(false);
   }, []);
 
@@ -64,6 +65,7 @@ export default function CertificatesPage() {
   }
 
   async function onToggleAutoRenew(cert: Certificate, next: boolean) {
+    setError(''); setSuccess('');
     const res = await api.updateCertificateApi(cert.id, { autoRenew: next });
     if (res.error) setError(res.error);
     else setCerts((prev) => prev.map((c) => (c.id === cert.id ? { ...c, autoRenew: next } : c)));
@@ -81,6 +83,7 @@ export default function CertificatesPage() {
   }
 
   async function onDelete(cert: Certificate) {
+    setError(''); setSuccess('');
     const ok = await confirm({
       title: `Supprimer « ${cert.name} » ?`,
       description:
@@ -160,9 +163,13 @@ export default function CertificatesPage() {
                           <Button variant="ghost" size="icon" title="Émettre maintenant" onClick={() => onIssue(cert)}>
                             <RefreshCw className="h-4 w-4" />
                           </Button>
-                          <a href={api.certFullchainDownloadUrl(cert.id)} title="Télécharger la chaîne publique" download={`${cert.name}-fullchain.pem`}>
-                            <Button variant="ghost" size="icon" disabled={!cert.hasCert}><Download className="h-4 w-4" /></Button>
-                          </a>
+                          {cert.hasCert ? (
+                            <a href={api.certFullchainDownloadUrl(cert.id)} title="Télécharger la chaîne publique" download={`${cert.name}-fullchain.pem`}>
+                              <Button variant="ghost" size="icon"><Download className="h-4 w-4" /></Button>
+                            </a>
+                          ) : (
+                            <Button variant="ghost" size="icon" disabled title="Télécharger la chaîne publique"><Download className="h-4 w-4" /></Button>
+                          )}
                           <Button variant="ghost" size="icon" title="Télécharger clé + bundle" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={() => onDownloadBundle(cert)}>
                             <KeyRound className="h-4 w-4" />
                           </Button>

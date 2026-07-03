@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { getZonePermissions } from '@/lib/proxy/access-control';
 import type { ProxyZonePermissionRow, ProxyRecordRuleRow } from '@/types/proxy';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // GET /api/proxy/environments/[id]/zones
 export async function GET(
@@ -95,6 +96,15 @@ export async function POST(
   // Return the created zone permission with rules
   const zones = getZonePermissions(id);
   const created = zones.find((z) => z.id === zonePermId);
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'proxy_env',
+    resourceId: id, resourceName: id,
+    details: `zone permission added: ${zoneName}`,
+  });
 
   return NextResponse.json(created, { status: 201 });
 }

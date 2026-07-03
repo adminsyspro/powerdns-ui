@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import type { ProxyZonePermissionRow, ProxyRecordRuleRow } from '@/types/proxy';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 function getZoneWithRules(zonePermId: string) {
   const db = getDb();
@@ -97,6 +98,15 @@ export async function PUT(
 
   transaction();
 
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'proxy_env',
+    resourceId: id, resourceName: id,
+    details: `zone permission updated: ${zoneName ?? existing.zone_name}`,
+  });
+
   return NextResponse.json(getZoneWithRules(zonePermId));
 }
 
@@ -122,8 +132,8 @@ export async function DELETE(
   }
 
   const existing = db.prepare(
-    'SELECT id FROM proxy_zone_permissions WHERE id = ? AND environment_id = ?'
-  ).get(zonePermId, id);
+    'SELECT id, zone_name FROM proxy_zone_permissions WHERE id = ? AND environment_id = ?'
+  ).get(zonePermId, id) as { id: string; zone_name: string } | undefined;
 
   if (!existing) {
     return NextResponse.json({ error: 'Zone permission not found' }, { status: 404 });
@@ -131,6 +141,15 @@ export async function DELETE(
 
   db.prepare('DELETE FROM proxy_record_rules WHERE zone_perm_id = ?').run(zonePermId);
   db.prepare('DELETE FROM proxy_zone_permissions WHERE id = ?').run(zonePermId);
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'proxy_env',
+    resourceId: id, resourceName: id,
+    details: `zone permission removed: ${existing?.zone_name ?? zonePermId}`,
+  });
 
   return NextResponse.json({ success: true });
 }

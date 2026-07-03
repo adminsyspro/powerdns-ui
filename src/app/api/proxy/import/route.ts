@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import yaml from 'js-yaml';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 interface ProxyConfigZone {
   name: string;
@@ -120,6 +121,15 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: `Import failed: ${(e as Error).message}` }, { status: 500 });
   }
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'create', resourceType: 'proxy_env',
+    resourceId: null, resourceName: 'proxy import',
+    details: `imported ${summary.environments} env(s), ${summary.zones} zone(s), ${summary.recordRules} rule(s); skipped ${summary.skipped.length}`,
+  });
 
   return NextResponse.json({
     success: true,

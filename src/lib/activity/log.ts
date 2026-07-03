@@ -20,9 +20,10 @@ export function logActivity(e: {
   actorId?: string | null; actorName: string; actorIp?: string | null;
   action: ActivityAction; resourceType: ActivityResource;
   resourceId?: string | null; resourceName?: string | null; details?: string | null;
-}, db: Db = getDb()): void {
+}, db?: Db): void {
   try {
-    db.prepare(
+    const database = db ?? getDb();
+    database.prepare(
       `INSERT INTO activity_log (id, actor_id, actor_name, actor_ip, action, resource_type, resource_id, resource_name, details)
        VALUES (?,?,?,?,?,?,?,?,?)`
     ).run(randomUUID(), e.actorId ?? null, e.actorName, e.actorIp ?? null, e.action,

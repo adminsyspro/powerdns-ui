@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { hashPassword } from '@/lib/auth/password';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 interface UserRow {
   id: string;
@@ -96,6 +97,16 @@ export async function PUT(request: NextRequest) {
 
   if (fields.length > 1) {
     db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values, userId);
+    logActivity({
+      ...actorFromHeaders(request),
+      action: 'update', resourceType: 'user',
+      resourceId: userId, resourceName: existing.username,
+      details: [
+        email !== undefined ? 'email' : null,
+        (firstname !== undefined || lastname !== undefined) ? 'name' : null,
+        newPassword ? 'password changed' : null,
+      ].filter(Boolean).join(', ') || 'profile',
+    });
   }
 
   const row = db.prepare('SELECT id, username, email, firstname, lastname, role, active, auth_type, avatar, created_at, updated_at FROM users WHERE id = ?').get(userId) as UserRow;

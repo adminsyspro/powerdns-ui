@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Download, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -115,8 +115,8 @@ export default function CertificatesPage() {
 
       <Tabs defaultValue="certificates" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="certificates">Certificates</TabsTrigger>
-          <TabsTrigger value="accounts">ACME Accounts</TabsTrigger>
+          <TabsTrigger value="certificates"><ShieldCheck className="mr-2 h-4 w-4" />Certificates</TabsTrigger>
+          <TabsTrigger value="accounts"><KeyRound className="mr-2 h-4 w-4" />ACME Accounts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -147,7 +147,10 @@ export default function CertificatesPage() {
                   {certs.map((cert) => (
                     <TableRow key={cert.id}>
                       <TableCell className="font-medium">
-                        <Link href={`/certificates/${cert.id}`} className="hover:underline">{cert.name}</Link>
+                        <span className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Link href={`/certificates/${cert.id}`} className="hover:underline">{cert.name}</Link>
+                        </span>
                       </TableCell>
                       <TableCell className="max-w-[220px] truncate text-muted-foreground" title={cert.sans.join(', ')}>
                         {cert.sans.join(', ')}

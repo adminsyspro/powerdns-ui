@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2, Trash2, Pencil, CheckCircle2 } from 'lucide-react';
+import { Loader2, Trash2, Pencil, CheckCircle2, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -186,7 +186,12 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
             <TableBody>
               {accounts.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      {a.name}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{a.caType}</TableCell>
                   <TableCell className="max-w-[260px] truncate text-muted-foreground" title={a.directoryUrl}>{a.directoryUrl}</TableCell>
                   <TableCell>

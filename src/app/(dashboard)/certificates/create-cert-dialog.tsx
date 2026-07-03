@@ -138,7 +138,15 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
             <Select value={connectionId} onValueChange={onConnectionChange}>
               <SelectTrigger><SelectValue placeholder="Choisir une connexion" /></SelectTrigger>
               <SelectContent>
-                {connections.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                {connections.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="flex items-center gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/powerdns-logo.png" alt="" className="h-4 w-4 shrink-0 object-cover object-left" />
+                      {c.name}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

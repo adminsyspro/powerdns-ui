@@ -239,6 +239,11 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                 ))}
               </SelectContent>
             </Select>
+            {accounts.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Aucun compte ACME. Crée-en un dans l’onglet « Comptes ACME » avant de créer un certificat.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-4">
@@ -266,7 +271,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Annuler</Button>
-          <Button onClick={onSubmit} disabled={busy}>
+          <Button onClick={onSubmit} disabled={busy || accounts.length === 0}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Créer
           </Button>
         </DialogFooter>

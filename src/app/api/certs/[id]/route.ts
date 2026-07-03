@@ -5,6 +5,7 @@ import { getCertificate, deleteCertificate, updateCertificateSettings } from '@/
 import { appendCertEvent } from '@/lib/certs/event-store';
 import { removeMaterializedCert } from '@/lib/certs/materialize';
 import { listActiveJobs } from '@/lib/certs/job-store';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -70,7 +71,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const cert = getCertificate(id);
     if (!cert) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -87,6 +88,16 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     } catch {
       // best-effort filesystem cleanup — DB row is already gone
     }
+    logActivity({
+      actorId: ctx.userId,
+      actorName: ctx.username,
+      actorIp: clientIp(request),
+      action: 'delete',
+      resourceType: 'certificate',
+      resourceId: cert.id,
+      resourceName: cert.name,
+      details: cert.sans.join(', '),
+    });
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     return authzErrorResponse(e);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as client from 'openid-client';
 import { getDb } from '@/lib/cache/db';
 import { createSession } from '@/lib/auth/session';
+import { logActivity, clientIp } from '@/lib/activity/log';
 import {
   getOidcConfig,
   getOidcConfiguration,
@@ -156,6 +157,8 @@ export async function GET(request: NextRequest) {
       lastname: lastname || '',
       role,
     });
+
+    logActivity({ actorId: userId, actorName: username, actorIp: clientIp(request), action: 'login', resourceType: 'session', resourceName: username });
 
     // Set session cookie directly on the redirect response.
     // (setSessionCookie uses next/headers cookies() which writes to the current

@@ -3,6 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { createCertificate, listCertificates } from '@/lib/certs/cert-store';
 import { connectionExists } from '@/lib/integrations/connections';
+import { logActivity, clientIp } from '@/lib/activity/log';
 import type { KeyType } from '@/lib/certs/types';
 
 const KEY_TYPES: KeyType[] = ['ecdsa', 'rsa'];
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     let body: any;
     try {
       body = await request.json();
@@ -74,6 +75,16 @@ export async function POST(request: NextRequest) {
         renewBeforeDays: body.renewBeforeDays,
         category: body.category,
         comment: body.comment,
+      });
+      logActivity({
+        actorId: ctx.userId,
+        actorName: ctx.username,
+        actorIp: clientIp(request),
+        action: 'create',
+        resourceType: 'certificate',
+        resourceId: cert.id,
+        resourceName: cert.name,
+        details: cert.sans.join(', '),
       });
       return NextResponse.json(cert, { status: 201 });
     } catch (err: any) {

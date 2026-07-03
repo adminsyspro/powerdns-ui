@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession, setSessionCookie, clearSession, getSession } from '@/lib/auth/session';
+import { logActivity, clientIp } from '@/lib/activity/log';
 import type { User, UserRole } from '@/types/powerdns';
 
 interface UserRow {
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       if (existingRow) {
         const ldapOk = await tryLDAPAuth(db, username, password);
         if (!ldapOk) {
+          logActivity({ actorName: username || 'unknown', actorIp: clientIp(request), action: 'login_failed', resourceType: 'session', resourceName: username || 'unknown' });
           return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
         }
         // Check if account is pending approval
@@ -89,6 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user) {
+      logActivity({ actorName: username || 'unknown', actorIp: clientIp(request), action: 'login_failed', resourceType: 'session', resourceName: username || 'unknown' });
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }
 
@@ -97,6 +100,8 @@ export async function POST(request: NextRequest) {
 
     const token = await createSession(user);
     await setSessionCookie(token);
+
+    logActivity({ actorId: user.id, actorName: user.username, actorIp: clientIp(request), action: 'login', resourceType: 'session', resourceName: user.username });
 
     return NextResponse.json({
       user: {
@@ -117,8 +122,12 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE /api/auth/login (logout)
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const session = await getSession();
   await clearSession();
+  if (session) {
+    logActivity({ actorId: session.userId, actorName: session.username, actorIp: clientIp(request), action: 'logout', resourceType: 'session', resourceName: session.username });
+  }
   return NextResponse.json({ success: true });
 }
 

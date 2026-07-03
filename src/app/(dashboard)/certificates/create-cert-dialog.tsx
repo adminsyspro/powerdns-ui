@@ -36,6 +36,8 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   const [zoneRecordNames, setZoneRecordNames] = React.useState<string[]>([]);
   const [recordsLoading, setRecordsLoading] = React.useState(false);
   const [manual, setManual] = React.useState('');
+  const zoneReqRef = React.useRef(0);
+  const searchReqRef = React.useRef(0);
 
   React.useEffect(() => {
     if (!open) return;
@@ -50,7 +52,9 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
     if (!open || !connectionId || zoneQuery.trim().length < 1) { setZoneResults([]); return; }
     const q = zoneQuery.trim();
     const t = setTimeout(async () => {
+      const token = ++searchReqRef.current;
       const r = await api.fetchZonesForConnection(connectionId, q);
+      if (searchReqRef.current !== token) return;
       if (!r.error) setZoneResults(r.data?.items ?? []);
     }, 250);
     return () => clearTimeout(t);
@@ -65,6 +69,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   function onConnectionChange(v: string) {
     setConnectionId(v);
     setSelectedZone(null); setZoneRecordNames([]); setZoneQuery(''); setZoneResults([]);
+    zoneReqRef.current++; searchReqRef.current++;
   }
 
   function addSan(v: string) {
@@ -76,8 +81,10 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   function toggleSan(v: string, checked: boolean) { checked ? addSan(v) : removeSan(v); }
 
   async function selectZone(z: ZoneListItem) {
+    const token = ++zoneReqRef.current;
     setSelectedZone(z); setZoneResults([]); setZoneQuery(''); setZoneRecordNames([]); setRecordsLoading(true);
     const r = await api.fetchZoneForConnection(connectionId, z.id);
+    if (zoneReqRef.current !== token) return;
     setRecordsLoading(false);
     if (r.error || !r.data) { setError(r.error ?? 'échec du chargement de la zone'); return; }
     const names = new Set<string>();
@@ -177,7 +184,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                       <div className="max-h-40 space-y-1 overflow-auto">
                         {zoneRecordNames.map((n) => (
                           <label key={n} className="flex items-center gap-2 text-sm">
-                            <Checkbox checked={sans.includes(n)} onCheckedChange={(v) => toggleSan(n, v === true)} />
+                            <Checkbox checked={sans.some((x) => x.toLowerCase() === n.toLowerCase())} onCheckedChange={(v) => toggleSan(n, v === true)} />
                             <span>{n}</span>
                           </label>
                         ))}

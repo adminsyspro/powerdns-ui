@@ -6,6 +6,7 @@ import {
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 import { handleZoneDeleted } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -61,6 +62,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
+    if (response.ok) {
+      const count = Array.isArray(body.rrsets) ? body.rrsets.length : 0;
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'record',
+        resourceId: id, resourceName: id,
+        details: `${count} rrset change(s)`,
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);
@@ -99,6 +109,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (response.ok && body.account !== undefined && String(body.account) !== (account ?? '')) {
       setZoneAccountInCache(conn.url, id, String(body.account));
     }
+    if (response.ok) {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: Object.keys(body).join(', ') || 'settings',
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);
@@ -110,7 +128,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // DELETE /api/pdns/zones/[id] - Delete zone
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    requireRole(getAuthContextFromHeaders(request), 'Administrator');
+    const ctx = requireRole(getAuthContextFromHeaders(request), 'Administrator');
 
     const { id } = await params;
     const conn = getConnectionFromRequest(request);
@@ -124,6 +142,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       try {
         handleZoneDeleted(conn.url, zoneName);
       } catch { /* never block zone deletion on integration errors */ }
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'delete', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: null,
+      });
     }
     return forwardPdnsResponse(response);
   } catch (e) {

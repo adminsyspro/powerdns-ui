@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Activity, Filter, Download, Globe, FileText, User, Plus, Edit, Trash2, LogIn, LogOut, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, Filter, Download, Globe, FileText, User, Plus, Edit, Trash2, LogIn, LogOut, ShieldAlert, ChevronLeft, ChevronRight, Users, Server, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,9 @@ function getActionIcon(action: string, resourceType: string) {
   if (resourceType === 'zone') return <Globe className="h-4 w-4 text-purple-600" />;
   if (resourceType === 'record') return <FileText className="h-4 w-4 text-orange-600" />;
   if (resourceType === 'user' || resourceType === 'session') return <User className="h-4 w-4 text-cyan-600" />;
+  if (resourceType === 'group') return <Users className="h-4 w-4 text-indigo-600" />;
+  if (resourceType === 'connection') return <Server className="h-4 w-4 text-teal-600" />;
+  if (resourceType === 'setting') return <Settings className="h-4 w-4 text-amber-600" />;
   return <Activity className="h-4 w-4" />;
 }
 
@@ -44,6 +47,7 @@ export default function ActivityPage() {
   const [search, setSearch] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [actionFilter, setActionFilter] = React.useState<string>('all');
+  const [resourceFilter, setResourceFilter] = React.useState<string>('all');
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<api.PaginatedActivity | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -62,11 +66,12 @@ export default function ActivityPage() {
       page,
       pageSize: PAGE_SIZE,
       action: actionFilter === 'all' ? undefined : actionFilter,
+      resourceType: resourceFilter === 'all' ? undefined : resourceFilter,
       search: debouncedSearch || undefined,
     });
     if (result.data) setData(result.data);
     setIsLoading(false);
-  }, [page, actionFilter, debouncedSearch]);
+  }, [page, actionFilter, resourceFilter, debouncedSearch]);
 
   React.useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
@@ -116,6 +121,23 @@ export default function ActivityPage() {
                   <SelectItem value="login">Login</SelectItem>
                   <SelectItem value="logout">Logout</SelectItem>
                   <SelectItem value="login_failed">Login failed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={resourceFilter}
+                onValueChange={(v) => { setResourceFilter(v); setPage(1); }}
+              >
+                <SelectTrigger className="w-[160px]"><Filter className="mr-2 h-4 w-4" /><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Resources</SelectItem>
+                  <SelectItem value="zone">Zones</SelectItem>
+                  <SelectItem value="record">Records</SelectItem>
+                  <SelectItem value="user">Users</SelectItem>
+                  <SelectItem value="group">Groups</SelectItem>
+                  <SelectItem value="connection">Connections</SelectItem>
+                  <SelectItem value="setting">Settings</SelectItem>
+                  <SelectItem value="certificate">Certificates</SelectItem>
+                  <SelectItem value="session">Sessions</SelectItem>
                 </SelectContent>
               </Select>
             </div>

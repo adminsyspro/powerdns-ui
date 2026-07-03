@@ -56,3 +56,7 @@ data/
 # Internal design docs (specs / implementation plans) — keep local only.
 # This is a PUBLIC repo; these describe the security model and must not be published.
 docs/superpowers/
+
+# Local dev / subagent-driven scratch artifacts (never commit)
+.superpowers/
+dev-server.log

@@ -51,6 +51,7 @@ export default function ActivityPage() {
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<api.PaginatedActivity | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => {
@@ -69,7 +70,12 @@ export default function ActivityPage() {
       resourceType: resourceFilter === 'all' ? undefined : resourceFilter,
       search: debouncedSearch || undefined,
     });
-    if (result.data) setData(result.data);
+    if (result.data) {
+      setData(result.data);
+      setError(null);
+    } else {
+      setError(result.error || 'Failed to load activity');
+    }
     setIsLoading(false);
   }, [page, actionFilter, resourceFilter, debouncedSearch]);
 
@@ -145,6 +151,7 @@ export default function ActivityPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
           {!isLoading && items.length === 0 ? (
             <div className="text-center py-12">
               <Activity className="mx-auto h-12 w-12 text-muted-foreground" />

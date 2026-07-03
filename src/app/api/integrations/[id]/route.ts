@@ -132,12 +132,14 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const existing = getIntegration(id);
     deleteIntegration(id);
-    logActivity({
-      ...actorFromRequest(request, ctx),
-      action: 'delete', resourceType: 'integration',
-      resourceId: id, resourceName: existing?.name ?? id,
-      details: null,
-    });
+    if (existing) {
+      logActivity({
+        ...actorFromRequest(request, ctx),
+        action: 'delete', resourceType: 'integration',
+        resourceId: id, resourceName: existing.name,
+        details: null,
+      });
+    }
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     return authzErrorResponse(e);

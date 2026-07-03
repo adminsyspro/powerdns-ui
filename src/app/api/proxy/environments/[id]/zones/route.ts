@@ -37,7 +37,7 @@ export async function POST(
 
   const { id } = await params;
   const db = getDb();
-  const env = db.prepare('SELECT id, full_access FROM proxy_environments WHERE id = ?').get(id) as { id: string; full_access: number } | undefined;
+  const env = db.prepare('SELECT id, full_access, name FROM proxy_environments WHERE id = ?').get(id) as { id: string; full_access: number; name: string } | undefined;
   if (!env) {
     return NextResponse.json({ error: 'Environment not found' }, { status: 404 });
   }
@@ -100,7 +100,7 @@ export async function POST(
   logActivity({
     ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
-    resourceId: id, resourceName: id,
+    resourceId: id, resourceName: env?.name ?? id,
     details: `zone permission added: ${zoneName}`,
   });
 

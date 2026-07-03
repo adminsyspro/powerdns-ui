@@ -36,7 +36,7 @@ export async function PUT(
   const { id, zonePermId } = await params;
   const db = getDb();
 
-  const env = db.prepare('SELECT full_access FROM proxy_environments WHERE id = ?').get(id) as { full_access: number } | undefined;
+  const env = db.prepare('SELECT full_access, name FROM proxy_environments WHERE id = ?').get(id) as { full_access: number; name: string } | undefined;
   if (env?.full_access === 1) {
     return NextResponse.json(
       { error: 'Environment is full-access; zone permissions do not apply' },
@@ -101,7 +101,7 @@ export async function PUT(
   logActivity({
     ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
-    resourceId: id, resourceName: id,
+    resourceId: id, resourceName: env?.name ?? id,
     details: `zone permission updated: ${zoneName ?? existing.zone_name}`,
   });
 
@@ -121,7 +121,7 @@ export async function DELETE(
   const { id, zonePermId } = await params;
   const db = getDb();
 
-  const env = db.prepare('SELECT full_access FROM proxy_environments WHERE id = ?').get(id) as { full_access: number } | undefined;
+  const env = db.prepare('SELECT full_access, name FROM proxy_environments WHERE id = ?').get(id) as { full_access: number; name: string } | undefined;
   if (env?.full_access === 1) {
     return NextResponse.json(
       { error: 'Environment is full-access; zone permissions do not apply' },
@@ -143,7 +143,7 @@ export async function DELETE(
   logActivity({
     ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
-    resourceId: id, resourceName: id,
+    resourceId: id, resourceName: env?.name ?? id,
     details: `zone permission removed: ${existing?.zone_name ?? zonePermId}`,
   });
 

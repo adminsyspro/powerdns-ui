@@ -61,8 +61,8 @@ export function listActivity(opts: {
   if (opts.action) { where.push('action = ?'); params.push(opts.action); }
   if (opts.resourceType) { where.push('resource_type = ?'); params.push(opts.resourceType); }
   if (opts.actor) { where.push('actor_name = ?'); params.push(opts.actor); }
-  if (opts.search) { where.push('(resource_name LIKE ? OR details LIKE ? OR actor_name LIKE ?)');
-    const q = `%${opts.search}%`; params.push(q, q, q); }
+  if (opts.search) { where.push("(resource_name LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR actor_name LIKE ? ESCAPE '\\')");
+    const q = `%${opts.search.replace(/[\\%_]/g, (c) => '\\' + c)}%`; params.push(q, q, q); }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) n FROM activity_log ${w}`).get(...params) as any).n as number;
   const items = db.prepare(

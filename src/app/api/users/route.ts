@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 interface UserRow {
   id: string;
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
 // POST /api/users
 export async function POST(request: NextRequest) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
 
     const body = await request.json();
     const { username, email, firstname, lastname, role: userRole, password, authType } = body;
@@ -77,6 +78,12 @@ export async function POST(request: NextRequest) {
     ).run(id, username, email, firstname || '', lastname || '', userRole, passwordHash, effectiveAuthType);
 
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'create', resourceType: 'user',
+      resourceId: row.id, resourceName: row.username,
+      details: `role=${row.role}`,
+    });
     return NextResponse.json(toUserResponse(row), { status: 201 });
   } catch (e) {
     return authzErrorResponse(e);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -36,7 +37,7 @@ function toUserResponse(row: UserRow) {
 // PUT /api/users/[id]
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
 
     const { id } = await params;
     const body = await request.json();
@@ -91,6 +92,19 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
 
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+    if (fields.length > 1) {
+      const changes = [
+        userRole ? `role=${userRole}` : null,
+        active !== undefined ? `active=${active}` : null,
+        password ? 'password changed' : null,
+      ].filter(Boolean).join(', ');
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'user',
+        resourceId: id, resourceName: row.username,
+        details: changes || 'profile updated',
+      });
+    }
     return NextResponse.json(toUserResponse(row));
   } catch (e) {
     return authzErrorResponse(e);
@@ -100,7 +114,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // DELETE /api/users/[id]
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
 
     const { id } = await params;
     const currentUserId = request.headers.get('x-user-id');
@@ -130,6 +144,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       db.prepare('DELETE FROM user_groups WHERE user_id = ?').run(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     })();
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'delete', resourceType: 'user',
+      resourceId: id, resourceName: existing.username,
+      details: `role=${existing.role}`,
+    });
     return NextResponse.json({ success: true });
   } catch (e) {
     return authzErrorResponse(e);

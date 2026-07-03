@@ -16,7 +16,7 @@ import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
 const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 const stripDot = (s: string) => s.replace(/\.$/, '');
 
-export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccount[]; onCreated: () => void }) {
+export function CreateCertDialog({ accounts, onCreated, trigger }: { accounts: AcmeAccount[]; onCreated: () => void; trigger?: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   const [connections, setConnections] = React.useState<ServerConnection[]>([]);
   const [name, setName] = React.useState('');
@@ -119,7 +119,11 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
-        <Button>New certificate</Button>
+        {trigger ?? (
+          <Button variant="ghost" size="icon" className="h-6 w-6" title="New certificate" aria-label="New certificate">
+            <Plus className="h-4 w-4" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>

@@ -122,13 +122,11 @@ export default function CertificatesPage() {
 
         <TabsContent value="certificates" className="space-y-4">
           <CertsOverview certs={certs} />
-          <div className="flex items-center justify-end">
-            <CreateCertDialog accounts={accounts} onCreated={load} />
-          </div>
 
           {certs.length === 0 ? (
-            <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-              <p className="text-sm">No certificates. Create one to start an ACME DNS-01 issuance.</p>
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground space-y-3">
+              <p className="text-sm">No certificates yet. Create one to start an ACME DNS-01 issuance.</p>
+              <CreateCertDialog accounts={accounts} onCreated={load} trigger={<Button>New certificate</Button>} />
             </div>
           ) : (
             <div className="rounded-md border">
@@ -142,7 +140,12 @@ export default function CertificatesPage() {
                     <TableHead>Renewal</TableHead>
                     <TableHead>Expiry</TableHead>
                     <TableHead>Auto</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right">
+                      <span className="inline-flex items-center justify-end gap-2">
+                        Actions
+                        <CreateCertDialog accounts={accounts} onCreated={load} />
+                      </span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

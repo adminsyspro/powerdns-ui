@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { getCertificate } from '@/lib/certs/cert-store';
 import { enqueueJob } from '@/lib/certs/job-store';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'an issuance/renewal job is already active' }, { status: 409 });
     }
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'certificate',
       resourceId: id, resourceName: cert?.name ?? id,
       details: `issuance queued (job ${result.id})`,

@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { getIntegration } from '@/lib/integrations/store';
 import { provisionOneZone } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const result = await provisionOneZone(id, conn.url, zoneName);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'integration',
       resourceId: id, resourceName: integration.name,
       details: `zone synced: ${result.row.zoneName} (${result.row.status})`,

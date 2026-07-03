@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { createCertificate, listCertificates } from '@/lib/certs/cert-store';
 import { connectionExists } from '@/lib/integrations/connections';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 import type { KeyType } from '@/lib/certs/types';
 
 const KEY_TYPES: KeyType[] = ['ecdsa', 'rsa'];
@@ -77,9 +77,7 @@ export async function POST(request: NextRequest) {
         comment: body.comment,
       });
       logActivity({
-        actorId: ctx.userId,
-        actorName: ctx.username,
-        actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'create',
         resourceType: 'certificate',
         resourceId: cert.id,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt } from '@/lib/crypto';
 import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // SECURITY: the decrypted PowerDNS API key MUST NOT leave the server. The proxy
 // resolves it server-side from the stored connection (see pdns-proxy.ts), so
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   ).run(id, name, url, encryptedApiKey, version ?? null, isDefault ? 1 : 0);
 
   logActivity({
-    actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+    ...actorFromRequest(request, ctx),
     action: 'create', resourceType: 'connection',
     resourceId: id, resourceName: name,
     details: url,

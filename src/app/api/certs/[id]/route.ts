@@ -5,7 +5,7 @@ import { getCertificate, deleteCertificate, updateCertificateSettings } from '@/
 import { appendCertEvent } from '@/lib/certs/event-store';
 import { removeMaterializedCert } from '@/lib/certs/materialize';
 import { listActiveJobs } from '@/lib/certs/job-store';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -63,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'certificate',
       resourceId: id, resourceName: updated.name,
       details: [
@@ -101,9 +101,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       // best-effort filesystem cleanup — DB row is already gone
     }
     logActivity({
-      actorId: ctx.userId,
-      actorName: ctx.username,
-      actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete',
       resourceType: 'certificate',
       resourceId: cert.id,

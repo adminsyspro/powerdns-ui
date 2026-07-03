@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContextFromHeaders, requireAdmin, requireAuth, authzErrorResponse, AuthzError } from '@/lib/auth/authz';
 import { getGroupBySlug, updateGroup, deleteGroup } from '@/lib/cache/groups';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/groups/[slug] — group detail. Admin sees any; others only their own.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const group = updateGroup(slug, fields);
     if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'group',
       resourceId: slug, resourceName: group.name,
       details: null,
@@ -55,7 +55,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const result = deleteGroup(slug);
     if (!result.deleted) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete', resourceType: 'group',
       resourceId: slug, resourceName: slug,
       details: result.zoneCount ? `${result.zoneCount} zone(s) orphaned` : null,

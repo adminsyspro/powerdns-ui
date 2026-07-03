@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContextFromHeaders, requireAdmin, requireAuth, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 import { listGroups, listGroupsBySlugs, getGroupRowBySlug, createGroup, isValidSlug } from '@/lib/cache/groups';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/groups — Administrators and Operators see all groups (they manage all
 // zones, so they need every account for the zone group picker/filter); Users and
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
     const group = createGroup(slug, name, description);
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'create', resourceType: 'group',
       resourceId: group.slug, resourceName: group.name,
       details: null,

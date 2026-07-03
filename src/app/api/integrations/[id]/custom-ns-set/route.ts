@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { setZoneCustomNsSet } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const result = await setZoneCustomNsSet(id, conn.url, zoneName, nsSet);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'custom_ns_set',
       resourceId: id, resourceName: zoneName,
       details: nsSet === null ? `${zoneName}: reset to Cloudflare-default NS` : `${zoneName}: NS set ${nsSet}`,

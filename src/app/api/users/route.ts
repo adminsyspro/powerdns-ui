@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 interface UserRow {
   id: string;
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'create', resourceType: 'user',
       resourceId: row.id, resourceName: row.username,
       details: `role=${row.role}`,

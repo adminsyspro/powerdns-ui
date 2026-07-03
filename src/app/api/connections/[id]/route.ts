@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt } from '@/lib/crypto';
 import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 export async function PUT(
   request: NextRequest,
@@ -52,7 +52,7 @@ export async function PUT(
 
   if (fields.length > 1) {
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'connection',
       resourceId: id, resourceName: row.name,
       details: row.url,
@@ -90,7 +90,7 @@ export async function DELETE(
   }
 
   logActivity({
-    actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+    ...actorFromRequest(request, ctx),
     action: 'delete', resourceType: 'connection',
     resourceId: id, resourceName: existing?.name ?? id,
     details: null,

@@ -13,7 +13,7 @@ import {
 } from '@/lib/integrations/store';
 import { getSyncState } from '@/lib/integrations/sync';
 import type { IntegrationConfig } from '@/lib/integrations/types';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // Provider-side peer/TSIG objects only stay valid while the settings they
 // were created from are unchanged.
@@ -114,7 +114,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       ...(credentials ? { credentials } : {}),
     });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'integration',
       resourceId: id, resourceName: updated?.name ?? existing.name,
       details: `active=${body.active}${body.apiToken ? ', token rotated' : ''}`,
@@ -133,7 +133,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const existing = getIntegration(id);
     deleteIntegration(id);
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete', resourceType: 'integration',
       resourceId: id, resourceName: existing?.name ?? id,
       details: null,

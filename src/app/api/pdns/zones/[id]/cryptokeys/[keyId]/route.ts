@@ -5,7 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string; keyId: string }> };
 
@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     );
     if (response.ok) {
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'zone',
         resourceId: id, resourceName: id,
         details: `DNSSEC key ${keyId} ${body.active === true ? 'activated' : body.active === false ? 'deactivated' : 'updated'}`,
@@ -62,7 +62,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     );
     if (response.ok || response.status === 204) {
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'zone',
         resourceId: id, resourceName: id,
         details: `DNSSEC key ${keyId} deleted`,

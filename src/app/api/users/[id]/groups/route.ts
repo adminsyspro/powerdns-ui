@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getDb } from '@/lib/cache/db';
 import { listUserGroups, replaceManualUserGroups } from '@/lib/cache/groups';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/users/[id]/groups — the user's group memberships with their source (Administrator only).
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const slugs = body.groupSlugs.map((s: unknown) => String(s));
     const applied = replaceManualUserGroups(id, slugs);
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'user',
       resourceId: id, resourceName: null,
       details: `groups: ${applied.join(', ') || '(none)'}`,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { createIntegration, listIntegrations, sanitizeConfig } from '@/lib/integrations/store';
 import { connectionExists } from '@/lib/integrations/connections';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/integrations — list instances (credentials never leave the server)
 export async function GET(request: NextRequest) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       },
     });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'create', resourceType: 'integration',
       resourceId: integration.id, resourceName: integration.name,
       details: `${body.provider ?? 'cloudflare'} acct ${config.accountId ?? ''}, mode ${config.mode ?? ''}`,

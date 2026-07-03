@@ -6,7 +6,7 @@ import {
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer, setZoneAccountInCache } from '@/lib/cache/zones';
 import { handleZoneDeleted } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (response.ok) {
       const count = Array.isArray(body.rrsets) ? body.rrsets.length : 0;
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'record',
         resourceId: id, resourceName: id,
         details: `${count} rrset change(s)`,
@@ -111,7 +111,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
     if (response.ok) {
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'zone',
         resourceId: id, resourceName: id,
         details: Object.keys(body).join(', ') || 'settings',
@@ -143,7 +143,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
         handleZoneDeleted(conn.url, zoneName);
       } catch { /* never block zone deletion on integration errors */ }
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'delete', resourceType: 'zone',
         resourceId: id, resourceName: id,
         details: null,

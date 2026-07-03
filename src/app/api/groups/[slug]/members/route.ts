@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getDb } from '@/lib/cache/db';
 import { getGroupRowBySlug, listMembers, addManualMember } from '@/lib/cache/groups';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/groups/[slug]/members — list members (Administrator only).
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
     addManualMember(group.id, userId);
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'group',
       resourceId: slug, resourceName: group.name,
       details: `added member ${userId}`,

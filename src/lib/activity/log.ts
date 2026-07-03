@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import type { NextRequest } from 'next/server';
 import { getDb } from '@/lib/cache/db';
+import type { AuthContext } from '@/lib/auth/authz';
 
 type Db = Database.Database;
 export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'login_failed';
@@ -34,6 +35,15 @@ export function logActivity(e: {
 /** First hop of x-forwarded-for, else x-real-ip. */
 export function clientIp(req: NextRequest): string | null {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null;
+}
+
+/** Actor fields from an authenticated AuthContext (requireAdmin/requireAuth/…). */
+export function actorFromRequest(req: NextRequest, ctx: AuthContext): { actorId: string; actorName: string; actorIp: string | null } {
+  return { actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(req) };
+}
+/** Actor fields from the middleware-injected identity headers. */
+export function actorFromHeaders(req: NextRequest): { actorId: string | null; actorName: string; actorIp: string | null } {
+  return { actorId: req.headers.get('x-user-id'), actorName: req.headers.get('x-user-name') || 'unknown', actorIp: clientIp(req) };
 }
 
 function rowToEntry(r: any): ActivityEntry {

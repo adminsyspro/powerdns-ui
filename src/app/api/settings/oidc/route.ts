@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getOidcConfig, saveOidcConfig, getPublicBaseUrl } from '@/lib/auth/oidc';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/settings/oidc — current config (client secret never returned).
 export async function GET(request: NextRequest) {
@@ -55,7 +55,7 @@ export async function PUT(request: NextRequest) {
     saveOidcConfig(body);
 
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'setting',
       resourceId: 'oidc', resourceName: 'oidc',
       details: `enabled=${!!body.enabled}`,

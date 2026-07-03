@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { registerAccount } from '@/lib/certs/acme-account';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const account = await registerAccount(id);
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'acme_account',
       resourceId: id, resourceName: account.name,
       details: `registered (${account.status})`,

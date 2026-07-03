@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { purgeOrphanZone } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const result = await purgeOrphanZone(id, conn.url, canonical);
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete', resourceType: 'integration',
       resourceId: id, resourceName: integration.name,
       details: `purged orphan zone: ${canonical}`,

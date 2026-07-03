@@ -5,7 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const { privatekey: _privatekey, ...key } = (await response.json()) as Record<string, unknown>;
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'zone',
       resourceId: id, resourceName: id,
       details: `DNSSEC key created (${String(key.keytype ?? '')})`,

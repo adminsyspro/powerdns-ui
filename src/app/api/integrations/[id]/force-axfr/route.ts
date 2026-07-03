@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { forceZoneAxfr } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const result = await forceZoneAxfr(id, conn.url, zoneName);
     if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'integration',
       resourceId: id, resourceName: integration.name,
       details: `force AXFR: ${zoneName}`,

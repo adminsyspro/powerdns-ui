@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getDb } from '@/lib/cache/db';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // DELETE /api/users/[id]/sessions — force-logout (Administrator only).
 // Increments users.session_version so the user's outstanding JWT (which carries
@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .run(id);
     if (result.changes === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 });
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete', resourceType: 'session',
       resourceId: id, resourceName: null,
       details: 'force-logout (revoked sessions)',

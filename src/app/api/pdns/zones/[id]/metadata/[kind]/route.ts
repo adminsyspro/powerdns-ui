@@ -5,7 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string; kind: string }> };
 
@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       // caller "no values" is already true, so treat it as success.
       if (response.status === 404 || response.ok) {
         logActivity({
-          actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+          ...actorFromRequest(request, ctx),
           action: 'update', resourceType: 'zone',
           resourceId: id, resourceName: id,
           details: `metadata ${kind} cleared`,
@@ -91,7 +91,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     );
     if (response.ok) {
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'zone',
         resourceId: id, resourceName: id,
         details: `metadata ${kind} set (${metadata.length} value(s))`,

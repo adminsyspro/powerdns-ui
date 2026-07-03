@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -99,7 +99,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         password ? 'password changed' : null,
       ].filter(Boolean).join(', ');
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'user',
         resourceId: id, resourceName: row.username,
         details: changes || 'profile updated',
@@ -145,7 +145,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     })();
     logActivity({
-      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      ...actorFromRequest(request, ctx),
       action: 'delete', resourceType: 'user',
       resourceId: id, resourceName: existing.username,
       details: `role=${existing.role}`,

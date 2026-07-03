@@ -3,7 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccountIfUnused } from '@/lib/certs/store';
 import type { PropagationMode } from '@/lib/certs/types';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       });
       if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'acme_account',
         resourceId: id, resourceName: updated.name,
         details: `${updated.caType} @ ${updated.directoryUrl}`,
@@ -98,7 +98,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     }
     if (outcome.result === 'deleted') {
       logActivity({
-        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, ctx),
         action: 'delete', resourceType: 'acme_account',
         resourceId: id, resourceName: account?.name ?? id,
         details: null,

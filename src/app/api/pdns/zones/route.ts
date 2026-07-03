@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireAuth, requireCreateInGroup, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { autoProvisionZone } from '@/lib/integrations/sync';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 // GET /api/pdns/zones - List all zones
 export async function GET(request: NextRequest) {
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         autoProvisionZone(conn.url, zoneName, String(body.kind ?? ''), account);
       } catch { /* never block zone creation on integration errors */ }
       logActivity({
-        actorId: authed.userId, actorName: authed.username, actorIp: clientIp(request),
+        ...actorFromRequest(request, authed),
         action: 'create', resourceType: 'zone',
         resourceId: zoneName, resourceName: zoneName,
         details: `kind=${body.kind}`,

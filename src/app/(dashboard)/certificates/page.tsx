@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
+import { useAuthStore, useActivityLogStore } from '@/stores';
 import type { Certificate, AcmeAccount } from '@/lib/certs/types';
 import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
@@ -46,6 +47,9 @@ export default function CertificatesPage() {
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { user } = useAuthStore();
+  const auditUser = user?.username || 'unknown';
+  const { addLog } = useActivityLogStore();
 
   const load = React.useCallback(async () => {
     const [c, a] = await Promise.all([api.fetchCertificates(), api.fetchAcmeAccounts()]);
@@ -61,6 +65,11 @@ export default function CertificatesPage() {
   }, [load]);
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
+
+  const onCreated = (c?: Certificate) => {
+    if (c) addLog({ action: 'Certificate Created', resource: c.name, user: auditUser, details: c.sans.join(', ') });
+    load();
+  };
 
   const categories = React.useMemo(
     () => [...new Set(certs.map((c) => c.category).filter((x): x is string => !!x))].sort(),
@@ -104,7 +113,11 @@ export default function CertificatesPage() {
     if (!ok) return;
     const res = await api.deleteCertificateApi(cert.id);
     if (res.error) setError(res.error);
-    else { setSuccess(`"${cert.name}" deleted.`); load(); }
+    else {
+      addLog({ action: 'Certificate Deleted', resource: cert.name, user: auditUser, details: '' });
+      setSuccess(`"${cert.name}" deleted.`);
+      load();
+    }
   }
 
   const [groupBy, setGroupBy] = React.useState<'none' | 'category' | 'account' | 'status' | 'connection'>('category');
@@ -201,7 +214,7 @@ export default function CertificatesPage() {
           {certs.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground space-y-3">
               <p className="text-sm">No certificates yet. Create one to start an ACME DNS-01 issuance.</p>
-              <CreateCertDialog accounts={accounts} onCreated={load} categories={[]} trigger={<Button>New certificate</Button>} />
+              <CreateCertDialog accounts={accounts} onCreated={onCreated} categories={[]} trigger={<Button>New certificate</Button>} />
             </div>
           ) : (
             <div className="space-y-3">
@@ -232,7 +245,7 @@ export default function CertificatesPage() {
                       <TableHead className="text-right">
                         <span className="inline-flex items-center justify-end gap-2">
                           Actions
-                          <CreateCertDialog accounts={accounts} onCreated={load} categories={categories} />
+                          <CreateCertDialog accounts={accounts} onCreated={onCreated} categories={categories} />
                         </span>
                       </TableHead>
                     </TableRow>

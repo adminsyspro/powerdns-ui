@@ -8,6 +8,7 @@ import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -48,7 +49,7 @@ export default function CertificateDetailPage() {
 
   React.useEffect(() => { load(); }, [load]);
 
-  async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null }) {
+  async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
     if (res.error) setError(res.error); else setCert(res.data ?? cert);
   }
@@ -142,6 +143,11 @@ export default function CertificateDetailPage() {
                 <Label htmlFor="d-category">Category</Label>
                 <Input id="d-category" defaultValue={cert.category ?? ''} className="w-40"
                   onBlur={(e) => { const v = e.target.value.trim(); if (v !== (cert.category ?? '')) patch({ category: v || null }); }} />
+              </div>
+              <div className="space-y-1 pt-2">
+                <Label htmlFor="d-comment">Comment</Label>
+                <Textarea id="d-comment" rows={2} defaultValue={cert.comment ?? ''}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v !== (cert.comment ?? '')) patch({ comment: v || null }); }} />
               </div>
               <div className="flex items-center justify-between pt-2">
                 <Label htmlFor="d-auto">Automatic renewal</Label>

@@ -8,19 +8,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as api from '@/lib/api';
-import type { AcmeAccount } from '@/lib/certs/types';
+import type { AcmeAccount, Certificate } from '@/lib/certs/types';
 import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
 
 const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 const stripDot = (s: string) => s.replace(/\.$/, '');
 
-export function CreateCertDialog({ accounts, onCreated, trigger, categories }: { accounts: AcmeAccount[]; onCreated: () => void; trigger?: React.ReactNode; categories?: string[] }) {
+export function CreateCertDialog({ accounts, onCreated, trigger, categories }: { accounts: AcmeAccount[]; onCreated: (created?: Certificate) => void; trigger?: React.ReactNode; categories?: string[] }) {
   const [open, setOpen] = React.useState(false);
   const [connections, setConnections] = React.useState<ServerConnection[]>([]);
   const [name, setName] = React.useState('');
   const [category, setCategory] = React.useState('');
+  const [comment, setComment] = React.useState('');
   const [sans, setSans] = React.useState<string[]>([]);
   const [accountId, setAccountId] = React.useState('');
   const [connectionId, setConnectionId] = React.useState('');
@@ -62,7 +64,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
   }, [zoneQuery, connectionId, open]);
 
   function reset() {
-    setName(''); setCategory(''); setSans([]); setAccountId(''); setConnectionId('');
+    setName(''); setCategory(''); setComment(''); setSans([]); setAccountId(''); setConnectionId('');
     setKeyType('ecdsa'); setAutoRenew(true); setRenewBeforeDays(30); setError('');
     setZoneQuery(''); setZoneResults([]); setSelectedZone(null); setZoneRecordNames([]); setManual('');
   }
@@ -112,10 +114,11 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
     const res = await api.createCertificateApi({
       name: name.trim(), acmeAccountId: accountId, connectionId, sans, keyType, autoRenew, renewBeforeDays,
       category: category.trim() || undefined,
+      comment: comment.trim() || undefined,
     });
     setBusy(false);
     if (res.error) { setError(res.error); return; }
-    setOpen(false); reset(); onCreated();
+    setOpen(false); reset(); onCreated(res.data);
   }
 
   return (
@@ -145,6 +148,11 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
             <datalist id="cert-category-list">
               {(categories ?? []).map((c) => <option key={c} value={c} />)}
             </datalist>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cert-comment">Comment</Label>
+            <Textarea id="cert-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional note about this certificate" />
           </div>
 
           <div className="space-y-2">

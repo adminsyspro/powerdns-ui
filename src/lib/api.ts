@@ -17,6 +17,7 @@ import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/li
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
 import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch, Certificate, CertEvent } from '@/lib/certs/types';
+import type { ActivityEntry } from '@/lib/activity/log';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -806,4 +807,20 @@ export async function fetchChangeHistory(params: { zoneId?: string; page?: numbe
   if (params.page) searchParams.set('page', String(params.page));
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
   return apiRequest<PaginatedHistory>(`/api/zones/history?${searchParams}`);
+}
+
+// ---- Activity log ----
+
+export interface PaginatedActivity {
+  items: ActivityEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function fetchActivity(params: { page?: number; pageSize?: number; action?: string; resourceType?: string; actor?: string; search?: string } = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v));
+  return apiRequest<PaginatedActivity>(`/api/activity?${qs}`);
 }

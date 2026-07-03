@@ -283,6 +283,24 @@ function initSchema(db: Database.Database) {
       actor_ip TEXT DEFAULT NULL, message TEXT DEFAULT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_certificate_events_cert ON certificate_events(certificate_id, ts);
+
+    -- App-wide activity/audit log (append-only; best-effort writes never block the action).
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id            TEXT PRIMARY KEY,
+      ts            INTEGER NOT NULL DEFAULT (unixepoch()),
+      actor_id      TEXT,
+      actor_name    TEXT NOT NULL,
+      actor_ip      TEXT,
+      action        TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id   TEXT,
+      resource_name TEXT,
+      details       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_log(ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_action ON activity_log(action);
+    CREATE INDEX IF NOT EXISTS idx_activity_resource ON activity_log(resource_type);
+    CREATE INDEX IF NOT EXISTS idx_activity_actor ON activity_log(actor_id);
   `);
 
   // Migrations — add columns that may not exist in older databases

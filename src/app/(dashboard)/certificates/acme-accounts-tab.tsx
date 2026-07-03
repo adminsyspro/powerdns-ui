@@ -95,6 +95,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
   }
 
   async function onDelete(a: AcmeAccount) {
+    setError('');
     const ok = await confirm({
       title: `Supprimer le compte « ${a.name} » ?`,
       description: 'Refusé si des certificats l’utilisent encore.',
@@ -139,7 +140,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
                 <div className="flex-1 space-y-2"><Label>EAB KID (optionnel)</Label><Input value={form.eabKid} onChange={(e) => setForm({ ...form, eabKid: e.target.value })} /></div>
                 <div className="flex-1 space-y-2">
                   <Label>EAB HMAC key {editing ? '(laisser vide = inchangé)' : '(optionnel)'}</Label>
-                  <Input value={form.eabHmacKey} onChange={(e) => setForm({ ...form, eabHmacKey: e.target.value })} placeholder={editing && editing.eabKid ? '•••••• (défini)' : ''} />
+                  <Input value={form.eabHmacKey} onChange={(e) => setForm({ ...form, eabHmacKey: e.target.value })} placeholder={editing && editing.hasEabHmac ? '•••••• (défini)' : ''} />
                 </div>
               </div>
               <div className="flex gap-4">

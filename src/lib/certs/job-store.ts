@@ -132,6 +132,11 @@ export function listActiveJobs(certificateId: string, db: Db = getDb()): CertJob
  * never re-claimed and the cert can silently expire. Requeue any 'running' job
  * whose claimed_at is older than staleMs. runJob is resume-safe (re-checks the
  * ACME order, re-uses the persisted key), so re-running a reclaimed job is safe.
+ * This safety also relies on the single-drainer invariant: only one process
+ * holds the 'cert-engine' lease and drains jobs sequentially, so a reclaimed
+ * job never runs concurrently with a still-running original. A future change
+ * introducing parallel drainers would break this and must not requeue running
+ * jobs by wall-clock alone.
  * next_attempt_at is left untouched so claimNextJob picks it up on the next
  * cycle. Returns the number of jobs reclaimed.
  */

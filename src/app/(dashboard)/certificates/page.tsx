@@ -2,12 +2,14 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck } from 'lucide-react';
+import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
@@ -100,6 +102,74 @@ export default function CertificatesPage() {
     else { setSuccess(`"${cert.name}" deleted.`); load(); }
   }
 
+  const [groupBy, setGroupBy] = React.useState<'none' | 'account' | 'status' | 'connection'>('none');
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  const groups = React.useMemo(() => {
+    if (groupBy === 'none') return null;
+    const val = (c: Certificate) =>
+      groupBy === 'account' ? accountName(c.acmeAccountId) : groupBy === 'status' ? c.status : c.serverUrl;
+    const map = new Map<string, Certificate[]>();
+    for (const c of certs) {
+      const k = val(c) || '—';
+      const arr = map.get(k);
+      if (arr) arr.push(c);
+      else map.set(k, [c]);
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, items]) => ({ key, items }));
+  }, [certs, groupBy, accounts]);
+
+  function renderRow(cert: Certificate) {
+    return (
+      <TableRow key={cert.id}>
+        <TableCell className="font-medium">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Link href={`/certificates/${cert.id}`} className="hover:underline">{cert.name}</Link>
+          </span>
+        </TableCell>
+        <TableCell className="max-w-[220px] truncate text-muted-foreground" title={cert.sans.join(', ')}>
+          {cert.sans.join(', ')}
+        </TableCell>
+        <TableCell className="text-muted-foreground">{accountName(cert.acmeAccountId)}</TableCell>
+        <TableCell><Pill map={STATUS_BADGE} value={cert.status} /></TableCell>
+        <TableCell><Pill map={RENEWAL_BADGE} value={cert.renewalStatus} /></TableCell>
+        <TableCell className="text-muted-foreground">{cert.notAfter ? formatDate(cert.notAfter * 1000) : '—'}</TableCell>
+        <TableCell>
+          <Switch checked={cert.autoRenew} onCheckedChange={(v) => onToggleAutoRenew(cert, v)} aria-label="auto-renew" />
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-1">
+            <Button variant="ghost" size="icon" title="Issue now" onClick={() => onIssue(cert)}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            {cert.hasCert ? (
+              <a href={api.certFullchainDownloadUrl(cert.id)} title="Download public chain" download={`${cert.name}-fullchain.pem`}>
+                <Button variant="ghost" size="icon"><Download className="h-4 w-4" /></Button>
+              </a>
+            ) : (
+              <Button variant="ghost" size="icon" disabled title="Download public chain"><Download className="h-4 w-4" /></Button>
+            )}
+            <Button variant="ghost" size="icon" title="Download key + bundle" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={() => onDownloadBundle(cert)}>
+              <KeyRound className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(cert)}>
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -129,68 +199,62 @@ export default function CertificatesPage() {
               <CreateCertDialog accounts={accounts} onCreated={load} trigger={<Button>New certificate</Button>} />
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>SAN</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Renewal</TableHead>
-                    <TableHead>Expiry</TableHead>
-                    <TableHead>Auto</TableHead>
-                    <TableHead className="text-right">
-                      <span className="inline-flex items-center justify-end gap-2">
-                        Actions
-                        <CreateCertDialog accounts={accounts} onCreated={load} />
-                      </span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {certs.map((cert) => (
-                    <TableRow key={cert.id}>
-                      <TableCell className="font-medium">
-                        <span className="flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <Link href={`/certificates/${cert.id}`} className="hover:underline">{cert.name}</Link>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="group-by" className="text-sm text-muted-foreground">Group by</Label>
+                <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
+                  <SelectTrigger id="group-by" className="h-8 w-[180px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No grouping</SelectItem>
+                    <SelectItem value="account">Account</SelectItem>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="connection">Connection</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>SAN</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Renewal</TableHead>
+                      <TableHead>Expiry</TableHead>
+                      <TableHead>Auto</TableHead>
+                      <TableHead className="text-right">
+                        <span className="inline-flex items-center justify-end gap-2">
+                          Actions
+                          <CreateCertDialog accounts={accounts} onCreated={load} />
                         </span>
-                      </TableCell>
-                      <TableCell className="max-w-[220px] truncate text-muted-foreground" title={cert.sans.join(', ')}>
-                        {cert.sans.join(', ')}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{accountName(cert.acmeAccountId)}</TableCell>
-                      <TableCell><Pill map={STATUS_BADGE} value={cert.status} /></TableCell>
-                      <TableCell><Pill map={RENEWAL_BADGE} value={cert.renewalStatus} /></TableCell>
-                      <TableCell className="text-muted-foreground">{cert.notAfter ? formatDate(cert.notAfter * 1000) : '—'}</TableCell>
-                      <TableCell>
-                        <Switch checked={cert.autoRenew} onCheckedChange={(v) => onToggleAutoRenew(cert, v)} aria-label="auto-renew" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Issue now" onClick={() => onIssue(cert)}>
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                          {cert.hasCert ? (
-                            <a href={api.certFullchainDownloadUrl(cert.id)} title="Download public chain" download={`${cert.name}-fullchain.pem`}>
-                              <Button variant="ghost" size="icon"><Download className="h-4 w-4" /></Button>
-                            </a>
-                          ) : (
-                            <Button variant="ghost" size="icon" disabled title="Download public chain"><Download className="h-4 w-4" /></Button>
-                          )}
-                          <Button variant="ghost" size="icon" title="Download key + bundle" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={() => onDownloadBundle(cert)}>
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(cert)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {groupBy === 'none'
+                      ? certs.map(renderRow)
+                      : groups!.map((g) => (
+                          <React.Fragment key={g.key}>
+                            <TableRow className="hover:bg-transparent">
+                              <TableCell colSpan={8} className="bg-muted/50 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(g.key)}
+                                  className="flex w-full items-center gap-2 text-left text-sm font-medium"
+                                >
+                                  {collapsed.has(g.key) ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                  {g.key}
+                                  <span className="font-normal text-muted-foreground">({g.items.length})</span>
+                                </button>
+                              </TableCell>
+                            </TableRow>
+                            {!collapsed.has(g.key) && g.items.map(renderRow)}
+                          </React.Fragment>
+                        ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </TabsContent>

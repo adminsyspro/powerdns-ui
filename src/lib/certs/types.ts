@@ -108,7 +108,7 @@ export interface CertJob {
   nextAttemptAt: number | null;
 }
 
-export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete';
+export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete' | 'download';
 
 export interface CertEvent {
   id: string;

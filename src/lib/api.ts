@@ -602,6 +602,28 @@ export async function fetchCertEvents(id: string) {
   return apiRequest<CertEvent[]>(`/api/certs/${encodeURIComponent(id)}/events`);
 }
 
+export function fetchCertificate(id: string) {
+  return apiRequest<Certificate>(`/api/certs/${id}`);
+}
+
+export function fetchAcmeAccount(id: string) {
+  return apiRequest<AcmeAccount>(`/api/certs/accounts/${id}`);
+}
+
+export function registerAcmeAccountApi(id: string) {
+  return apiRequest<AcmeAccount>(`/api/certs/accounts/${id}/register`, { method: 'POST' });
+}
+
+/** Direct URL for the public fullchain (used by an <a download> link). */
+export function certFullchainDownloadUrl(id: string): string {
+  return `/api/certs/${id}/download`;
+}
+
+/** Audited private-key bundle download; returns the PEM text. */
+export function downloadCertBundle(id: string) {
+  return apiRequest<string>(`/api/certs/${id}/download`, { method: 'POST' });
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

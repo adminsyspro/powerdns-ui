@@ -47,10 +47,14 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (body.keyDownloadEnabled !== undefined && typeof body.keyDownloadEnabled !== 'boolean') {
       return NextResponse.json({ error: 'keyDownloadEnabled must be a boolean' }, { status: 400 });
     }
+    if (body.category !== undefined && body.category !== null && typeof body.category !== 'string') {
+      return NextResponse.json({ error: 'category must be a string' }, { status: 400 });
+    }
     const updated = updateCertificateSettings(id, {
       autoRenew: body.autoRenew,
       renewBeforeDays: body.renewBeforeDays,
       keyDownloadEnabled: body.keyDownloadEnabled,
+      category: body.category,
     });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);

@@ -573,6 +573,7 @@ export async function createCertificateApi(input: {
   keyType?: 'ecdsa' | 'rsa';
   autoRenew?: boolean;
   renewBeforeDays?: number;
+  category?: string;
 }) {
   return apiRequest<Certificate>('/api/certs', {
     method: 'POST',
@@ -582,7 +583,12 @@ export async function createCertificateApi(input: {
 
 export async function updateCertificateApi(
   id: string,
-  patch: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean }
+  patch: {
+    autoRenew?: boolean;
+    renewBeforeDays?: number;
+    keyDownloadEnabled?: boolean;
+    category?: string | null;
+  }
 ) {
   return apiRequest<Certificate>(`/api/certs/${encodeURIComponent(id)}`, {
     method: 'PATCH',

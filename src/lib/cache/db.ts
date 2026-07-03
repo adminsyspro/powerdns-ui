@@ -255,7 +255,8 @@ function initSchema(db: Database.Database) {
       serial TEXT DEFAULT NULL, fingerprint_sha256 TEXT DEFAULT NULL, issuer TEXT DEFAULT NULL,
       cert_pem TEXT DEFAULT NULL, chain_pem TEXT DEFAULT NULL, privkey_enc TEXT DEFAULT NULL,
       key_download_enabled INTEGER NOT NULL DEFAULT 1, auto_renew INTEGER NOT NULL DEFAULT 1,
-      renew_before_days INTEGER NOT NULL DEFAULT 30, last_issued_at INTEGER DEFAULT NULL,
+      renew_before_days INTEGER NOT NULL DEFAULT 30, category TEXT DEFAULT NULL,
+      last_issued_at INTEGER DEFAULT NULL,
       last_renewal_success_at INTEGER DEFAULT NULL, materialized_at INTEGER DEFAULT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -367,6 +368,13 @@ function initSchema(db: Database.Database) {
   // default to 'auto' (reconciler-managed), preserving existing behaviour.
   if (!izCols.map((c) => c.name).includes('managed')) {
     db.exec("ALTER TABLE integration_zones ADD COLUMN managed TEXT NOT NULL DEFAULT 'auto'");
+  }
+
+  // Migration: add category to certificates (free-text label for grouping in
+  // the UI). NULL = uncategorized; legacy rows are left NULL.
+  const certCols = db.prepare("PRAGMA table_info(certificates)").all() as Array<{ name: string }>;
+  if (!certCols.some((c) => c.name === 'category')) {
+    db.exec('ALTER TABLE certificates ADD COLUMN category TEXT DEFAULT NULL');
   }
 
   // Migration (data cleanup): clear the spurious "Enterprise plan not set: …

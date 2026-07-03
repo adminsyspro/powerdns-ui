@@ -9,9 +9,13 @@ export async function register() {
     startReconcileWorker();
   }
 
-  const { isCertsEnabled } = await import('@/lib/certs/config');
+  const { isCertsEnabled, isCertRenewalEnabled } = await import('@/lib/certs/config');
   if (isCertsEnabled()) {
     const { startCertWorker } = await import('@/lib/certs/cert-worker');
     startCertWorker();
+    if (isCertRenewalEnabled()) {
+      const { startRenewalWorker } = await import('@/lib/certs/renewal-worker');
+      startRenewalWorker();
+    }
   }
 }

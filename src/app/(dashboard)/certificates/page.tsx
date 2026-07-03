@@ -13,6 +13,7 @@ import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
 import type { Certificate, AcmeAccount } from '@/lib/certs/types';
 import { CreateCertDialog } from './create-cert-dialog';
+import { AcmeAccountsTab } from './acme-accounts-tab';
 
 const STATUS_BADGE: Record<string, string> = {
   valid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -187,10 +188,7 @@ export default function CertificatesPage() {
         </TabsContent>
 
         <TabsContent value="accounts">
-          {/* Task 6 replaces this with <AcmeAccountsTab accounts={accounts} onChange={load} /> */}
-          <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-            <p className="text-sm">Comptes ACME — à venir.</p>
-          </div>
+          <AcmeAccountsTab onChange={load} />
         </TabsContent>
       </Tabs>
 

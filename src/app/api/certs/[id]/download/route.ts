@@ -14,11 +14,15 @@ function clientIp(req: NextRequest): string {
   );
 }
 
+// PEM is plain text; apiRequest() on the client only returns the raw body
+// (rather than calling response.json()) when Content-Type includes
+// text/plain, so we serve it as such. The .pem filename plus
+// Content-Disposition: attachment still drive the saved file name/type.
 function pemFile(body: string, filename: string, extraHeaders: Record<string, string> = {}): NextResponse {
   return new NextResponse(body, {
     status: 200,
     headers: {
-      'Content-Type': 'application/x-pem-file',
+      'Content-Type': 'text/plain; charset=utf-8',
       'Content-Disposition': `attachment; filename="${filename}"`,
       ...extraHeaders,
     },

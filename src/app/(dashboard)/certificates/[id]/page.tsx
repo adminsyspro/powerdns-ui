@@ -66,9 +66,9 @@ export default function CertificateDetailPage() {
   }
   async function onDelete() {
     const ok = await confirm({
-      title: `Supprimer « ${cert!.name} » ?`,
-      description: 'Ligne DB + fichiers matérialisés supprimés. Pas de révocation automatique. Irréversible.',
-      confirmLabel: 'Supprimer', variant: 'destructive',
+      title: `Delete "${cert!.name}"?`,
+      description: 'DB row + materialized files deleted. No automatic revocation. Irreversible.',
+      confirmLabel: 'Delete', variant: 'destructive',
     });
     if (!ok) return;
     const res = await api.deleteCertificateApi(id);
@@ -78,9 +78,9 @@ export default function CertificateDetailPage() {
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   if (!cert) return (
     <div className="space-y-6">
-      <PageTitle title="Certificat" />
-      <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error || 'Certificat introuvable.'}</div>
-      <Link href="/certificates" className="text-sm underline">← Retour à la liste</Link>
+      <PageTitle title="Certificate" />
+      <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error || 'Certificate not found.'}</div>
+      <Link href="/certificates" className="text-sm underline">← Back to list</Link>
     </div>
   );
 
@@ -88,20 +88,20 @@ export default function CertificateDetailPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title={`Certificat — ${cert.name}`} />
+      <PageTitle title={`Certificate — ${cert.name}`} />
       <div className="flex items-center justify-between">
-        <Link href="/certificates" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"><ArrowLeft className="h-4 w-4" />Retour</Link>
+        <Link href="/certificates" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"><ArrowLeft className="h-4 w-4" />Back</Link>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onIssue}><RefreshCw className="mr-2 h-4 w-4" />Émettre maintenant</Button>
+          <Button variant="outline" size="sm" onClick={onIssue}><RefreshCw className="mr-2 h-4 w-4" />Issue now</Button>
           {cert.hasCert ? (
             <a href={api.certFullchainDownloadUrl(id)} download={`${cert.name}-fullchain.pem`}>
-              <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" />Chaîne</Button>
+              <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" />Chain</Button>
             </a>
           ) : (
-            <Button variant="outline" size="sm" disabled><Download className="mr-2 h-4 w-4" />Chaîne</Button>
+            <Button variant="outline" size="sm" disabled><Download className="mr-2 h-4 w-4" />Chain</Button>
           )}
-          <Button variant="outline" size="sm" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={onDownloadBundle}><KeyRound className="mr-2 h-4 w-4" />Clé + bundle</Button>
-          <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="mr-2 h-4 w-4" />Supprimer</Button>
+          <Button variant="outline" size="sm" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={onDownloadBundle}><KeyRound className="mr-2 h-4 w-4" />Key + bundle</Button>
+          <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
         </div>
       </div>
       {success && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900 dark:text-green-200">{success}</div>}
@@ -109,45 +109,45 @@ export default function CertificateDetailPage() {
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Aperçu</TabsTrigger>
-          <TabsTrigger value="history">Historique</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-2">
           <Card>
-            <CardHeader><CardTitle className="text-base">État</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">State</CardTitle></CardHeader>
             <CardContent>
-              <Row label="Statut" value={cert.status} />
-              <Row label="Renouvellement" value={cert.renewalStatus} />
-              <Row label="Émis le" value={ts(cert.lastIssuedAt)} />
-              <Row label="Valide du" value={ts(cert.notBefore)} />
-              <Row label="Expire le" value={ts(cert.notAfter)} />
-              <Row label="Dernier renouvellement OK" value={ts(cert.lastRenewalSuccessAt)} />
-              <Row label="Prochaine tentative" value={ts(cert.nextAttemptAt)} />
-              {cert.lastRenewalError && <Row label="Dernière erreur" value={<span className="text-destructive">{cert.errorClass}: {cert.lastRenewalError}</span>} />}
-              <Row label="Matérialisé le" value={ts(cert.materializedAt)} />
+              <Row label="Status" value={cert.status} />
+              <Row label="Renewal" value={cert.renewalStatus} />
+              <Row label="Issued at" value={ts(cert.lastIssuedAt)} />
+              <Row label="Valid from" value={ts(cert.notBefore)} />
+              <Row label="Expires" value={ts(cert.notAfter)} />
+              <Row label="Last successful renewal" value={ts(cert.lastRenewalSuccessAt)} />
+              <Row label="Next attempt" value={ts(cert.nextAttemptAt)} />
+              {cert.lastRenewalError && <Row label="Last error" value={<span className="text-destructive">{cert.errorClass}: {cert.lastRenewalError}</span>} />}
+              <Row label="Materialized at" value={ts(cert.materializedAt)} />
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">Configuration</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Row label="SAN" value={cert.sans.join(', ')} />
-              <Row label="Compte ACME" value={account?.name ?? cert.acmeAccountId} />
-              <Row label="Serveur PDNS" value={cert.serverUrl} />
-              <Row label="Type de clé" value={cert.keyType} />
-              <Row label="Série" value={cert.serial} />
-              <Row label="Empreinte" value={cert.fingerprintSha256} />
-              <Row label="Émetteur" value={cert.issuer} />
+              <Row label="Account" value={account?.name ?? cert.acmeAccountId} />
+              <Row label="PDNS server" value={cert.serverUrl} />
+              <Row label="Key type" value={cert.keyType} />
+              <Row label="Serial" value={cert.serial} />
+              <Row label="Fingerprint" value={cert.fingerprintSha256} />
+              <Row label="Issuer" value={cert.issuer} />
               <div className="flex items-center justify-between pt-2">
-                <Label htmlFor="d-auto">Renouvellement auto</Label>
+                <Label htmlFor="d-auto">Automatic renewal</Label>
                 <Switch id="d-auto" checked={cert.autoRenew} onCheckedChange={(v) => patch({ autoRenew: v })} />
               </div>
               <div className="flex items-center justify-between">
-                <Label htmlFor="d-key">Autoriser le download de la clé</Label>
+                <Label htmlFor="d-key">Allow key download</Label>
                 <Switch id="d-key" checked={cert.keyDownloadEnabled} onCheckedChange={(v) => patch({ keyDownloadEnabled: v })} />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="d-days">Renouveler avant (jours)</Label>
+                <Label htmlFor="d-days">Renew before (days)</Label>
                 <Input id="d-days" type="number" min={1} max={90} defaultValue={cert.renewBeforeDays} className="w-24"
                   onBlur={(e) => {
                     const n = Number(e.target.value);
@@ -160,11 +160,11 @@ export default function CertificateDetailPage() {
 
         <TabsContent value="history">
           {events.length === 0 ? (
-            <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground"><p className="text-sm">Aucun évènement.</p></div>
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground"><p className="text-sm">No events.</p></div>
           ) : (
             <div className="rounded-md border">
               <Table>
-                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Statut</TableHead><TableHead>Acteur</TableHead><TableHead>Message</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Actor</TableHead><TableHead>Message</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {events.map((ev) => (
                     <TableRow key={ev.id}>

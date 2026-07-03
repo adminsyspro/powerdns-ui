@@ -64,7 +64,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
 
   async function onSubmit() {
     setError('');
-    if (!form.name.trim() || !form.directoryUrl.trim()) { setError('Nom et URL de directory requis.'); return; }
+    if (!form.name.trim() || !form.directoryUrl.trim()) { setError('Name and directory URL required.'); return; }
     setBusy(true);
     // AcmeAccountPatch has no `caType` field (immutable after creation), so the
     // common payload below is shared and `caType` is added only for create.
@@ -88,7 +88,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
 
   async function onRegister(a: AcmeAccount) {
     setError('');
-    if (!a.tosAgreed) { setError(`Cochez l’agrément ToS pour « ${a.name} » avant l’enregistrement.`); return; }
+    if (!a.tosAgreed) { setError(`Check the ToS agreement for "${a.name}" before registering.`); return; }
     const res = await api.registerAcmeAccountApi(a.id);
     if (res.error) setError(res.error);
     load();
@@ -97,9 +97,9 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
   async function onDelete(a: AcmeAccount) {
     setError('');
     const ok = await confirm({
-      title: `Supprimer le compte « ${a.name} » ?`,
-      description: 'Refusé si des certificats l’utilisent encore.',
-      confirmLabel: 'Supprimer', variant: 'destructive',
+      title: `Delete account "${a.name}"?`,
+      description: 'Refused if certificates still use it.',
+      confirmLabel: 'Delete', variant: 'destructive',
     });
     if (!ok) return;
     const res = await api.deleteAcmeAccountApi(a.id);
@@ -116,36 +116,36 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
       {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
       <div className="flex items-center justify-end">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button onClick={openCreate}>Ajouter un compte</Button></DialogTrigger>
+          <DialogTrigger asChild><Button onClick={openCreate}>Add account</Button></DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editing ? 'Modifier le compte' : 'Nouveau compte ACME'}</DialogTitle>
-              <DialogDescription>Let’s Encrypt ou tout ACME public (EAB supporté). step-ca arrive en Phase 5.</DialogDescription>
+              <DialogTitle>{editing ? 'Edit account' : 'New ACME account'}</DialogTitle>
+              <DialogDescription>Let&apos;s Encrypt or any public ACME (EAB supported). step-ca is coming in Phase 5.</DialogDescription>
             </DialogHeader>
             {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
             <div className="space-y-4">
-              <div className="space-y-2"><Label>Nom</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div className="space-y-2"><Label>Directory URL</Label><Input value={form.directoryUrl} onChange={(e) => setForm({ ...form, directoryUrl: e.target.value })} /></div>
               <div className="flex gap-4">
                 <div className="flex-1 space-y-2">
-                  <Label>Type de CA</Label>
+                  <Label>CA type</Label>
                   <Select value={form.caType} onValueChange={(v) => setForm({ ...form, caType: v as 'letsencrypt' | 'other' })} disabled={!!editing}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="letsencrypt">Let’s Encrypt</SelectItem><SelectItem value="other">Autre (ACME)</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="letsencrypt">Let&apos;s Encrypt</SelectItem><SelectItem value="other">Other (ACME)</SelectItem></SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1 space-y-2"><Label>Email de contact</Label><Input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} /></div>
+                <div className="flex-1 space-y-2"><Label>Contact email</Label><Input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} /></div>
               </div>
               <div className="flex gap-4">
-                <div className="flex-1 space-y-2"><Label>EAB KID (optionnel)</Label><Input value={form.eabKid} onChange={(e) => setForm({ ...form, eabKid: e.target.value })} /></div>
+                <div className="flex-1 space-y-2"><Label>EAB KID (optional)</Label><Input value={form.eabKid} onChange={(e) => setForm({ ...form, eabKid: e.target.value })} /></div>
                 <div className="flex-1 space-y-2">
-                  <Label>EAB HMAC key {editing ? '(laisser vide = inchangé)' : '(optionnel)'}</Label>
-                  <Input value={form.eabHmacKey} onChange={(e) => setForm({ ...form, eabHmacKey: e.target.value })} placeholder={editing && editing.hasEabHmac ? '•••••• (défini)' : ''} />
+                  <Label>EAB HMAC key {editing ? '(leave blank = unchanged)' : '(optional)'}</Label>
+                  <Input value={form.eabHmacKey} onChange={(e) => setForm({ ...form, eabHmacKey: e.target.value })} placeholder={editing && editing.hasEabHmac ? '•••••• (set)' : ''} />
                 </div>
               </div>
               <div className="flex gap-4">
                 <div className="flex-1 space-y-2">
-                  <Label>Propagation DNS</Label>
+                  <Label>DNS propagation</Label>
                   <Select value={form.propagationMode} onValueChange={(v) => setForm({ ...form, propagationMode: v as FormState['propagationMode'] })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -161,26 +161,26 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="tos" checked={form.tosAgreed} onCheckedChange={(v) => setForm({ ...form, tosAgreed: v === true })} />
-                <Label htmlFor="tos">J’accepte les conditions d’utilisation (ToS) de la CA</Label>
+                <Label htmlFor="tos">I agree to the CA&apos;s Terms of Service (ToS)</Label>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={busy}>Annuler</Button>
-              <Button onClick={onSubmit} disabled={busy}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? 'Enregistrer' : 'Créer'}</Button>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button>
+              <Button onClick={onSubmit} disabled={busy}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? 'Save' : 'Create'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       {accounts.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground"><p className="text-sm">Aucun compte ACME. Ajoutez-en un (Let’s Encrypt staging par défaut).</p></div>
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground"><p className="text-sm">No ACME account. Add one (Let&apos;s Encrypt staging by default).</p></div>
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead><TableHead>CA</TableHead><TableHead>Directory</TableHead>
-                <TableHead>Statut</TableHead><TableHead>ToS</TableHead><TableHead className="text-right">Actions</TableHead>
+                <TableHead>Name</TableHead><TableHead>CA</TableHead><TableHead>Directory</TableHead>
+                <TableHead>Status</TableHead><TableHead>ToS</TableHead><TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,9 +196,9 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
                   <TableCell>{a.tosAgreed ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : '—'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="outline" size="sm" onClick={() => onRegister(a)} disabled={!a.tosAgreed}>Enregistrer</Button>
-                      <Button variant="ghost" size="icon" title="Modifier" onClick={() => openEdit(a)}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" title="Supprimer" onClick={() => onDelete(a)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      <Button variant="outline" size="sm" onClick={() => onRegister(a)} disabled={!a.tosAgreed}>Register</Button>
+                      <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(a)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(a)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>

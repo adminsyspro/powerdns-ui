@@ -82,11 +82,11 @@ const navigation: NavGroup[] = [
     ],
   },
   {
-    title: 'Intégration',
+    title: 'Integration',
     items: [
       { title: 'Cloudflare', href: '/integrations', icon: CloudflareIcon, requiredRole: ['Administrator'] },
       ...(process.env.NEXT_PUBLIC_CERTS_ENABLED === 'true'
-        ? [{ title: 'Certificats SSL', href: '/certificates', icon: ShieldCheck, requiredRole: ['Administrator'] as UserRole[] }]
+        ? [{ title: 'SSL Certificates', href: '/certificates', icon: ShieldCheck, requiredRole: ['Administrator'] as UserRole[] }]
         : []),
     ],
   },

@@ -86,7 +86,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
     const r = await api.fetchZoneForConnection(connectionId, z.id);
     if (zoneReqRef.current !== token) return;
     setRecordsLoading(false);
-    if (r.error || !r.data) { setError(r.error ?? 'échec du chargement de la zone'); return; }
+    if (r.error || !r.data) { setError(r.error ?? 'failed to load zone'); return; }
     const names = new Set<string>();
     for (const rr of r.data.rrsets ?? []) {
       if (SAN_RECORD_TYPES.has(rr.type)) names.add(stripDot(rr.name));
@@ -100,11 +100,11 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   async function onSubmit() {
     setError('');
     if (!name.trim() || sans.length === 0 || !accountId || !connectionId) {
-      setError('Nom, au moins un SAN, un compte et une connexion sont requis.');
+      setError('Name, at least one SAN, an account and a connection are required.');
       return;
     }
     if (!Number.isInteger(renewBeforeDays) || renewBeforeDays < 1 || renewBeforeDays > 90) {
-      setError('Le nombre de jours doit être compris entre 1 et 90.');
+      setError('The number of days must be between 1 and 90.');
       return;
     }
     setBusy(true);
@@ -119,24 +119,24 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
-        <Button>Créer un certificat</Button>
+        <Button>New certificate</Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nouveau certificat</DialogTitle>
-          <DialogDescription>Émission ACME DNS-01. Les SAN sont canonicalisés côté serveur.</DialogDescription>
+          <DialogTitle>New certificate</DialogTitle>
+          <DialogDescription>ACME DNS-01 issuance. SANs are canonicalized server-side.</DialogDescription>
         </DialogHeader>
         {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="cert-name">Nom (identifiant / dossier sur disque)</Label>
+            <Label htmlFor="cert-name">Name (identifier / folder on disk)</Label>
             <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
           </div>
 
           <div className="space-y-2">
-            <Label>Connexion PowerDNS</Label>
+            <Label>PowerDNS connection</Label>
             <Select value={connectionId} onValueChange={onConnectionChange}>
-              <SelectTrigger><SelectValue placeholder="Choisir une connexion" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Choose a connection" /></SelectTrigger>
               <SelectContent>
                 {connections.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
@@ -153,16 +153,16 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
 
           {/* SAN builder */}
           <div className="space-y-2">
-            <Label>Domaines / SAN</Label>
+            <Label>Domains / SAN</Label>
             {!connectionId ? (
-              <p className="text-sm text-muted-foreground">Choisis d’abord une connexion PowerDNS.</p>
+              <p className="text-sm text-muted-foreground">Choose a PowerDNS connection first.</p>
             ) : (
               <div className="space-y-2 rounded-md border p-3">
                 {/* zone typeahead */}
                 <Input
                   value={zoneQuery}
                   onChange={(e) => setZoneQuery(e.target.value)}
-                  placeholder="Rechercher une zone…"
+                  placeholder="Search a zone…"
                 />
                 {zoneResults.length > 0 && (
                   <div className="max-h-40 overflow-auto rounded-md border">
@@ -187,7 +187,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                       <Button type="button" variant="outline" size="sm" onClick={() => addSan(wildcard)}>+ {wildcard}</Button>
                     </div>
                     {recordsLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Chargement des enregistrements…</div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</div>
                     ) : zoneRecordNames.length > 0 ? (
                       <div className="max-h-40 space-y-1 overflow-auto">
                         {zoneRecordNames.map((n) => (
@@ -198,7 +198,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Aucun enregistrement A/AAAA/CNAME dans cette zone.</p>
+                      <p className="text-sm text-muted-foreground">No A/AAAA/CNAME records in this zone.</p>
                     )}
                   </div>
                 )}
@@ -209,7 +209,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                     value={manual}
                     onChange={(e) => setManual(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSan(manual); setManual(''); } }}
-                    placeholder="Ajouter un SAN manuellement (ex. *.autre-zone.com)"
+                    placeholder="Add a SAN manually (e.g. *.other-zone.com)"
                   />
                   <Button type="button" variant="secondary" onClick={() => { addSan(manual); setManual(''); }}>
                     <Plus className="h-4 w-4" />
@@ -224,21 +224,21 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                 {sans.map((s) => (
                   <span key={s} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
                     {s}
-                    <button type="button" onClick={() => removeSan(s)} aria-label={`retirer ${s}`} className="text-muted-foreground hover:text-foreground">
+                    <button type="button" onClick={() => removeSan(s)} aria-label={`remove ${s}`} className="text-muted-foreground hover:text-foreground">
                       <X className="h-3 w-3" />
                     </button>
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Aucun SAN sélectionné.</p>
+              <p className="text-sm text-muted-foreground">No SAN selected.</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label>Compte ACME</Label>
+            <Label>ACME account</Label>
             <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger><SelectValue placeholder="Choisir un compte" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Choose an account" /></SelectTrigger>
               <SelectContent>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
@@ -249,14 +249,14 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
             </Select>
             {accounts.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Aucun compte ACME. Crée-en un dans l’onglet « Comptes ACME » avant de créer un certificat.
+                No ACME account. Create one in the &quot;ACME Accounts&quot; tab before creating a certificate.
               </p>
             )}
           </div>
 
           <div className="flex gap-4">
             <div className="flex-1 space-y-2">
-              <Label>Type de clé</Label>
+              <Label>Key type</Label>
               <Select value={keyType} onValueChange={(v) => setKeyType(v as 'ecdsa' | 'rsa')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -266,7 +266,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
               </Select>
             </div>
             <div className="flex-1 space-y-2">
-              <Label htmlFor="cert-renew-days">Renouveler avant (jours)</Label>
+              <Label htmlFor="cert-renew-days">Renew before (days)</Label>
               <Input id="cert-renew-days" type="number" min={1} max={90} value={renewBeforeDays}
                 onChange={(e) => setRenewBeforeDays(Number(e.target.value))} />
             </div>
@@ -274,13 +274,13 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
 
           <div className="flex items-center gap-2">
             <Switch id="cert-auto" checked={autoRenew} onCheckedChange={setAutoRenew} />
-            <Label htmlFor="cert-auto">Renouvellement automatique</Label>
+            <Label htmlFor="cert-auto">Automatic renewal</Label>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Annuler</Button>
+          <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Cancel</Button>
           <Button onClick={onSubmit} disabled={busy || accounts.length === 0}>
-            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Créer
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -87,16 +87,16 @@ export default function CertificatesPage() {
   async function onDelete(cert: Certificate) {
     setError(''); setSuccess('');
     const ok = await confirm({
-      title: `Supprimer « ${cert.name} » ?`,
+      title: `Delete "${cert.name}"?`,
       description:
-        'La ligne en base et les fichiers matérialisés sur disque seront supprimés. La révocation auprès de la CA n’est pas effectuée automatiquement. Cette action est irréversible.',
-      confirmLabel: 'Supprimer',
+        'The database row and the materialized files on disk will be deleted. Revocation with the CA is not performed automatically. This action is irreversible.',
+      confirmLabel: 'Delete',
       variant: 'destructive',
     });
     if (!ok) return;
     const res = await api.deleteCertificateApi(cert.id);
     if (res.error) setError(res.error);
-    else { setSuccess(`« ${cert.name} » supprimé.`); load(); }
+    else { setSuccess(`"${cert.name}" deleted.`); load(); }
   }
 
   if (isLoading) {
@@ -109,14 +109,14 @@ export default function CertificatesPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Certificats SSL" />
+      <PageTitle title="SSL Certificates" />
       {success && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900 dark:text-green-200">{success}</div>}
       {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
       <Tabs defaultValue="certificates" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="certificates">Certificats</TabsTrigger>
-          <TabsTrigger value="accounts">Comptes ACME</TabsTrigger>
+          <TabsTrigger value="certificates">Certificates</TabsTrigger>
+          <TabsTrigger value="accounts">ACME Accounts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -126,19 +126,19 @@ export default function CertificatesPage() {
 
           {certs.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-              <p className="text-sm">Aucun certificat. Créez-en un pour lancer une émission ACME DNS-01.</p>
+              <p className="text-sm">No certificates. Create one to start an ACME DNS-01 issuance.</p>
             </div>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nom</TableHead>
+                    <TableHead>Name</TableHead>
                     <TableHead>SAN</TableHead>
-                    <TableHead>Compte</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Renouvellement</TableHead>
-                    <TableHead>Expiration</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Renewal</TableHead>
+                    <TableHead>Expiry</TableHead>
                     <TableHead>Auto</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -161,20 +161,20 @@ export default function CertificatesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Émettre maintenant" onClick={() => onIssue(cert)}>
+                          <Button variant="ghost" size="icon" title="Issue now" onClick={() => onIssue(cert)}>
                             <RefreshCw className="h-4 w-4" />
                           </Button>
                           {cert.hasCert ? (
-                            <a href={api.certFullchainDownloadUrl(cert.id)} title="Télécharger la chaîne publique" download={`${cert.name}-fullchain.pem`}>
+                            <a href={api.certFullchainDownloadUrl(cert.id)} title="Download public chain" download={`${cert.name}-fullchain.pem`}>
                               <Button variant="ghost" size="icon"><Download className="h-4 w-4" /></Button>
                             </a>
                           ) : (
-                            <Button variant="ghost" size="icon" disabled title="Télécharger la chaîne publique"><Download className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" disabled title="Download public chain"><Download className="h-4 w-4" /></Button>
                           )}
-                          <Button variant="ghost" size="icon" title="Télécharger clé + bundle" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={() => onDownloadBundle(cert)}>
+                          <Button variant="ghost" size="icon" title="Download key + bundle" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={() => onDownloadBundle(cert)}>
                             <KeyRound className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" title="Supprimer" onClick={() => onDelete(cert)}>
+                          <Button variant="ghost" size="icon" title="Delete" onClick={() => onDelete(cert)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>

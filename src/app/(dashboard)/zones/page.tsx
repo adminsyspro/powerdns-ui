@@ -15,7 +15,7 @@ import { ZonesTable } from '@/components/zones/zones-table';
 import { CreateZoneDialog } from '@/components/zones/create-zone-dialog';
 import { useCachedZones, useZoneSync } from '@/hooks/use-pdns';
 import { useConfirm } from '@/hooks/use-confirm';
-import { useAuthStore, useServerConnectionStore, useActivityLogStore } from '@/stores';
+import { useAuthStore, useServerConnectionStore } from '@/stores';
 import { formatRelativeTime, getRecordTypeColor } from '@/lib/utils';
 import * as api from '@/lib/api';
 import type { SearchResult } from '@/types/powerdns';
@@ -23,8 +23,6 @@ import type { SearchResult } from '@/types/powerdns';
 export default function ZonesPage() {
   const { activeConnection } = useServerConnectionStore();
   const { user } = useAuthStore();
-  const { addLog } = useActivityLogStore();
-  const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
   // "Create anywhere" + orphan affordances (orphan filter, orphan account option,
   // full group picker): Administrators and Operators only. Managers are scoped by
@@ -184,7 +182,6 @@ export default function ZonesPage() {
     if (result.error) {
       alert(`Error deleting zone: ${result.error}`);
     } else {
-      addLog({ action: 'Zone Deleted', resource: zoneId, user: auditUser, details: '' });
       await sync();
       refetch();
     }
@@ -203,8 +200,6 @@ export default function ZonesPage() {
       const result = await api.deleteZone(id);
       if (result.error) {
         errors++;
-      } else {
-        addLog({ action: 'Zone Deleted', resource: id, user: auditUser, details: 'Bulk delete' });
       }
     }
     if (errors > 0) alert(`${errors} zone(s) could not be deleted.`);
@@ -216,8 +211,6 @@ export default function ZonesPage() {
     const result = await api.notifyZone(zoneId);
     if (result.error) {
       alert(`Error sending NOTIFY: ${result.error}`);
-    } else {
-      addLog({ action: 'NOTIFY Sent', resource: zoneId, user: auditUser, details: '' });
     }
   };
 
@@ -258,14 +251,12 @@ export default function ZonesPage() {
       alert(`Error creating zone: ${result.error}`);
       return;
     }
-    addLog({ action: 'Zone Created', resource: formData.name, user: auditUser, details: '' });
     setCreateDialogOpen(false);
     await sync();
     refetch();
   };
 
   const handleImportSuccess = async (newZoneId: string) => {
-    addLog({ action: 'Zone Imported', resource: newZoneId, user: auditUser, details: 'BIND import' });
     await sync();
     refetch();
     router.push(`/zones/${encodeURIComponent(newZoneId)}`);

@@ -32,7 +32,7 @@ import { normalizeRecordContent, makeRrsetKey } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
-import { useActivityLogStore, useAuthStore, usePendingChangesStore } from '@/stores';
+import { useAuthStore, usePendingChangesStore } from '@/stores';
 import * as api from '@/lib/api';
 
 // ---- Zone Switcher ----
@@ -265,9 +265,7 @@ export default function ZoneDetailPage() {
   const router = useRouter();
   const zoneId = decodeURIComponent(params.id as string);
   const { user } = useAuthStore();
-  const { addLog } = useActivityLogStore();
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
-  const auditUser = user?.username || 'unknown';
   const isAdmin = user?.role === 'Administrator';
   // All-zone / orphan privilege (Settings dialog "No group" option, reassign to
   // any group): Administrators and Operators only; Managers are scoped, so the
@@ -638,7 +636,6 @@ export default function ZoneDetailPage() {
   };
 
   const handleApplySuccess = () => {
-    addLog({ action: 'Records Updated', resource: zoneName, user: auditUser, details: `${pendingChanges.length} changes applied` });
     refetch();
     fetchRecords();
     loadChangeCounts();
@@ -652,7 +649,6 @@ export default function ZoneDetailPage() {
       alert(`Error sending NOTIFY: ${result.error}`);
       return;
     }
-    addLog({ action: 'NOTIFY Sent', resource: zoneId, user: auditUser, details: '' });
     if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
     setNotifySent(true);
     notifyTimerRef.current = setTimeout(() => setNotifySent(false), 2000);
@@ -664,12 +660,6 @@ export default function ZoneDetailPage() {
       // Thrown so ZoneSettingsDialog surfaces it inline and stays open.
       throw new Error(result.error);
     }
-    addLog({
-      action: 'Zone Settings Updated',
-      resource: zoneId,
-      user: auditUser,
-      details: `kind=${payload.kind}`,
-    });
     // Refresh the SQLite cache (list / ZoneSwitcher / dashboard) AND the detail view.
     await sync();
     refetch();
@@ -687,7 +677,6 @@ export default function ZoneDetailPage() {
     if (result.error) {
       alert(`Error deleting zone: ${result.error}`);
     } else {
-      addLog({ action: 'Zone Deleted', resource: zoneId, user: auditUser, details: '' });
       router.push('/zones');
     }
   };
@@ -1084,9 +1073,7 @@ export default function ZoneDetailPage() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         mode={{ type: 'merge', zoneId, zoneName: zone.name }}
-        onMergeStaged={() => {
-          addLog({ action: 'Zone Import Staged', resource: zoneName, user: auditUser, details: 'BIND import' });
-        }}
+        onMergeStaged={() => {}}
       />
     </div>
     </TooltipProvider>

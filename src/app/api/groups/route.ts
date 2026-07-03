@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContextFromHeaders, requireAdmin, requireAuth, canSeeAllZones, authzErrorResponse } from '@/lib/auth/authz';
 import { listGroups, listGroupsBySlugs, getGroupRowBySlug, createGroup, isValidSlug } from '@/lib/cache/groups';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // GET /api/groups — Administrators and Operators see all groups (they manage all
 // zones, so they need every account for the zone group picker/filter); Users and
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 // POST /api/groups — create a group (Administrator only).
 export async function POST(request: NextRequest) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const body = await request.json();
     const slug = String(body.slug ?? '').trim().toLowerCase();
     const name = String(body.name ?? '').trim();
@@ -36,6 +37,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A group with this slug already exists' }, { status: 409 });
     }
     const group = createGroup(slug, name, description);
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'create', resourceType: 'group',
+      resourceId: group.slug, resourceName: group.name,
+      details: null,
+    });
     return NextResponse.json(group, { status: 201 });
   } catch (e) {
     return authzErrorResponse(e);

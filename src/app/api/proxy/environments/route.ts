@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { generateProxyToken, hashToken } from '@/lib/proxy/token';
 import type { ProxyEnvironmentRow } from '@/types/proxy';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 function toResponse(row: ProxyEnvironmentRow, zoneCount?: number) {
   return {
@@ -118,9 +118,7 @@ export async function POST(request: NextRequest) {
   const row = db.prepare('SELECT * FROM proxy_environments WHERE id = ?').get(id) as ProxyEnvironmentRow;
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'create', resourceType: 'proxy_env',
     resourceId: id, resourceName: row.name,
     details: isFull ? 'full-access' : `${zones?.length ?? 0} zone(s)`,

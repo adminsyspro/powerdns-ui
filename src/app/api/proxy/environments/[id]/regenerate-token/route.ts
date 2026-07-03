@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { generateProxyToken, hashToken } from '@/lib/proxy/token';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 // POST /api/proxy/environments/[id]/regenerate-token
 export async function POST(
@@ -30,9 +30,7 @@ export async function POST(
   ).run(tokenHash, id);
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_key',
     resourceId: id, resourceName: existing?.name ?? id,
     details: 'token regenerated',

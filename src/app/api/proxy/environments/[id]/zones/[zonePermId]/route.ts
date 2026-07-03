@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import type { ProxyZonePermissionRow, ProxyRecordRuleRow } from '@/types/proxy';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 function getZoneWithRules(zonePermId: string) {
   const db = getDb();
@@ -99,9 +99,7 @@ export async function PUT(
   transaction();
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
     resourceId: id, resourceName: id,
     details: `zone permission updated: ${zoneName ?? existing.zone_name}`,
@@ -143,9 +141,7 @@ export async function DELETE(
   db.prepare('DELETE FROM proxy_zone_permissions WHERE id = ?').run(zonePermId);
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
     resourceId: id, resourceName: id,
     details: `zone permission removed: ${existing?.zone_name ?? zonePermId}`,

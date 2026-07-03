@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { normalizeNameserverPools } from '@/lib/ns-pools';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 const SETTING_KEY = 'ns_pools';
 
@@ -47,9 +47,7 @@ export async function PUT(request: NextRequest) {
   );
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'update', resourceType: 'setting',
     resourceId: 'ns-pools', resourceName: 'ns-pools',
     details: `${pools.length} pool(s)`,

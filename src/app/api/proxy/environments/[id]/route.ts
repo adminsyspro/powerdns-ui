@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { getZonePermissions } from '@/lib/proxy/access-control';
 import type { ProxyEnvironmentRow } from '@/types/proxy';
-import { logActivity, clientIp } from '@/lib/activity/log';
+import { logActivity, actorFromHeaders } from '@/lib/activity/log';
 
 // GET /api/proxy/environments/[id]
 export async function GET(
@@ -135,9 +135,7 @@ export async function PUT(
   const zones = getZonePermissions(id);
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'update', resourceType: 'proxy_env',
     resourceId: id, resourceName: updated.name,
     details: `active=${updated.active === 1}, full-access=${updated.full_access === 1}, read-only=${updated.read_only === 1}`,
@@ -181,9 +179,7 @@ export async function DELETE(
   db.prepare('DELETE FROM proxy_environments WHERE id = ?').run(id);
 
   logActivity({
-    actorId: request.headers.get('x-user-id'),
-    actorName: request.headers.get('x-user-name') || 'unknown',
-    actorIp: clientIp(request),
+    ...actorFromHeaders(request),
     action: 'delete', resourceType: 'proxy_env',
     resourceId: id, resourceName: existing?.name ?? id,
     details: null,

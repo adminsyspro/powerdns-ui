@@ -3,6 +3,7 @@ import { parseBind } from '@/lib/bind/parser';
 import { pdnsProxy, getConnectionFromRequest, forwardPdnsResponse } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireCreateInGroup, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { autoProvisionZone } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     const ctx = getAuthContextFromHeaders(request);
     const account = typeof body.account === 'string' ? body.account.trim() : '';
-    requireCreateInGroup(ctx, account);
+    const authed = requireCreateInGroup(ctx, account);
     body.account = account; // forward exactly the authorized account (prevents type-confusion)
 
     if (typeof body.content !== 'string') {
@@ -86,6 +87,12 @@ export async function POST(request: NextRequest) {
         try {
           autoProvisionZone(conn.url, canonical, String(body.kind ?? ''), account);
         } catch { /* never block zone creation on integration errors */ }
+        logActivity({
+          actorId: authed.userId, actorName: authed.username, actorIp: clientIp(request),
+          action: 'create', resourceType: 'zone',
+          resourceId: zoneName, resourceName: zoneName,
+          details: `BIND import (${preview.rrsets.length} rrsets)`,
+        });
       }
       return forwardPdnsResponse(response);
     } catch (err) {

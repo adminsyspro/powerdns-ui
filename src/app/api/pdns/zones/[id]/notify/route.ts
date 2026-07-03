@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,6 +20,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones/${id}/notify`, {
       method: 'PUT',
     });
+    if (response.ok) {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: 'NOTIFY',
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

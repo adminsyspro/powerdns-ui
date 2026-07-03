@@ -13,6 +13,7 @@ import {
 } from '@/lib/integrations/store';
 import { getSyncState } from '@/lib/integrations/sync';
 import type { IntegrationConfig } from '@/lib/integrations/types';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // Provider-side peer/TSIG objects only stay valid while the settings they
 // were created from are unchanged.
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 // PUT /api/integrations/[id] — update settings (token only when provided)
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const existing = getIntegration(id);
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -112,6 +113,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       active: typeof body.active === 'boolean' ? body.active : undefined,
       ...(credentials ? { credentials } : {}),
     });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'integration',
+      resourceId: id, resourceName: updated?.name ?? existing.name,
+      details: `active=${body.active}${body.apiToken ? ', token rotated' : ''}`,
+    });
     return NextResponse.json(updated);
   } catch (e) {
     return authzErrorResponse(e);
@@ -121,9 +128,16 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // DELETE /api/integrations/[id] — remove the instance (remote zones untouched)
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
+    const existing = getIntegration(id);
     deleteIntegration(id);
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'delete', resourceType: 'integration',
+      resourceId: id, resourceName: existing?.name ?? id,
+      details: null,
+    });
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     return authzErrorResponse(e);

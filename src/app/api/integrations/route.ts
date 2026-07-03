@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { createIntegration, listIntegrations, sanitizeConfig } from '@/lib/integrations/store';
 import { connectionExists } from '@/lib/integrations/connections';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // GET /api/integrations — list instances (credentials never leave the server)
 export async function GET(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
 // POST /api/integrations — create an instance
 export async function POST(request: NextRequest) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const body = await request.json();
     const name = String(body.name ?? '').trim();
     const apiToken = String(body.apiToken ?? '').trim();
@@ -46,6 +47,12 @@ export async function POST(request: NextRequest) {
         apiToken,
         tsigSecret: body.tsigSecret ? String(body.tsigSecret) : undefined,
       },
+    });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'create', resourceType: 'integration',
+      resourceId: integration.id, resourceName: integration.name,
+      details: `${body.provider ?? 'cloudflare'} acct ${config.accountId ?? ''}, mode ${config.mode ?? ''}`,
     });
     return NextResponse.json(integration, { status: 201 });
   } catch (e) {

@@ -84,6 +84,7 @@ export interface Certificate {
   autoRenew: boolean;
   renewBeforeDays: number;
   category: string | null;
+  comment: string | null;
   lastIssuedAt: number | null;
   lastRenewalSuccessAt: number | null;
   materializedAt: number | null;

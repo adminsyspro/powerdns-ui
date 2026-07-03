@@ -50,11 +50,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (body.category !== undefined && body.category !== null && typeof body.category !== 'string') {
       return NextResponse.json({ error: 'category must be a string' }, { status: 400 });
     }
+    if (body.comment !== undefined && body.comment !== null && typeof body.comment !== 'string') {
+      return NextResponse.json({ error: 'comment must be a string' }, { status: 400 });
+    }
     const updated = updateCertificateSettings(id, {
       autoRenew: body.autoRenew,
       renewBeforeDays: body.renewBeforeDays,
       keyDownloadEnabled: body.keyDownloadEnabled,
       category: body.category,
+      comment: body.comment,
     });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);

@@ -574,6 +574,7 @@ export async function createCertificateApi(input: {
   autoRenew?: boolean;
   renewBeforeDays?: number;
   category?: string;
+  comment?: string;
 }) {
   return apiRequest<Certificate>('/api/certs', {
     method: 'POST',
@@ -588,6 +589,7 @@ export async function updateCertificateApi(
     renewBeforeDays?: number;
     keyDownloadEnabled?: boolean;
     category?: string | null;
+    comment?: string | null;
   }
 ) {
   return apiRequest<Certificate>(`/api/certs/${encodeURIComponent(id)}`, {

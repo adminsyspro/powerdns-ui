@@ -60,6 +60,9 @@ export async function POST(request: NextRequest) {
     if (body.category !== undefined && typeof body.category !== 'string') {
       return NextResponse.json({ error: 'category must be a string' }, { status: 400 });
     }
+    if (body.comment !== undefined && typeof body.comment !== 'string') {
+      return NextResponse.json({ error: 'comment must be a string' }, { status: 400 });
+    }
     try {
       const cert = createCertificate({
         name,
@@ -70,6 +73,7 @@ export async function POST(request: NextRequest) {
         autoRenew: body.autoRenew === undefined ? undefined : body.autoRenew,
         renewBeforeDays: body.renewBeforeDays,
         category: body.category,
+        comment: body.comment,
       });
       return NextResponse.json(cert, { status: 201 });
     } catch (err: any) {

@@ -15,7 +15,7 @@ const SAFE_COLS =
   `id, name, acme_account_id, connection_id, server_url, sans_json, key_type, status,
    renewal_status, last_renewal_error, error_class, next_attempt_at, not_before, not_after,
    serial, fingerprint_sha256, issuer, (cert_pem IS NOT NULL) AS has_cert,
-   key_download_enabled, auto_renew, renew_before_days, category, last_issued_at,
+   key_download_enabled, auto_renew, renew_before_days, category, comment, last_issued_at,
    last_renewal_success_at, materialized_at, created_at, updated_at`;
 
 function rowToCertificate(r: any): Certificate {
@@ -30,7 +30,7 @@ function rowToCertificate(r: any): Certificate {
     serial: r.serial ?? null, fingerprintSha256: r.fingerprint_sha256 ?? null,
     issuer: r.issuer ?? null, hasCert: !!r.has_cert,
     keyDownloadEnabled: r.key_download_enabled === 1, autoRenew: r.auto_renew === 1,
-    renewBeforeDays: r.renew_before_days, category: r.category ?? null,
+    renewBeforeDays: r.renew_before_days, category: r.category ?? null, comment: r.comment ?? null,
     lastIssuedAt: r.last_issued_at ?? null, lastRenewalSuccessAt: r.last_renewal_success_at ?? null,
     materializedAt: r.materialized_at ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
@@ -41,6 +41,7 @@ export function createCertificate(
   input: {
     name: string; acmeAccountId: string; connectionId: string; sans: string[];
     keyType?: KeyType; autoRenew?: boolean; renewBeforeDays?: number; category?: string;
+    comment?: string;
   },
   db: Db = getDb()
 ): Certificate {
@@ -60,13 +61,13 @@ export function createCertificate(
   const id = randomUUID();
   db.prepare(
     `INSERT INTO certificates
-      (id, name, acme_account_id, connection_id, server_url, sans_json, key_type, auto_renew, renew_before_days, category)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`
+      (id, name, acme_account_id, connection_id, server_url, sans_json, key_type, auto_renew, renew_before_days, category, comment)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id, name, input.acmeAccountId, input.connectionId, serverUrl,
     JSON.stringify(sans), input.keyType ?? 'ecdsa',
     input.autoRenew === false ? 0 : 1, input.renewBeforeDays ?? 30,
-    input.category?.trim() || null,
+    input.category?.trim() || null, input.comment?.trim() || null,
   );
   return getCertificate(id, db)!;
 }
@@ -153,7 +154,7 @@ export function updateCertificateSettings(
   id: string,
   patch: {
     autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean;
-    category?: string | null;
+    category?: string | null; comment?: string | null;
   },
   db: Db = getDb()
 ): Certificate | undefined {
@@ -165,6 +166,7 @@ export function updateCertificateSettings(
        renew_before_days = COALESCE(?, renew_before_days),
        key_download_enabled = COALESCE(?, key_download_enabled),
        category = CASE WHEN ? = 1 THEN ? ELSE category END,
+       comment = CASE WHEN ? = 1 THEN ? ELSE comment END,
        updated_at = unixepoch()
      WHERE id = ?`
   ).run(
@@ -173,6 +175,8 @@ export function updateCertificateSettings(
     patch.keyDownloadEnabled === undefined ? null : (patch.keyDownloadEnabled ? 1 : 0),
     patch.category === undefined ? 0 : 1,
     patch.category === undefined ? null : (patch.category?.trim() || null),
+    patch.comment === undefined ? 0 : 1,
+    patch.comment === undefined ? null : (patch.comment?.trim() || null),
     id,
   );
   return getCertificate(id, db);

@@ -17,20 +17,29 @@ import {
 } from '@/components/dashboard/stats';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useServerConnectionStore, useActivityLogStore } from '@/stores';
+import { useServerConnectionStore } from '@/stores';
 import { useCachedZoneStats, useCachedZones, useStatistics, statsToMap } from '@/hooks/use-pdns';
 import { formatRelativeTime, getZoneKindColor } from '@/lib/utils';
+import * as api from '@/lib/api';
 
 export default function DashboardPage() {
   const { activeConnection, connections } = useServerConnectionStore();
-  const { logs, getRecentLogs } = useActivityLogStore();
   const { data: zoneStats, isLoading: statsLoading } = useCachedZoneStats();
   const { data: recentZonesData } = useCachedZones({ page: 1, pageSize: 5, sortBy: 'serial', sortOrder: 'desc' });
   const { data: statistics } = useStatistics();
 
   const serverStats = statsToMap(statistics);
-  const recentLogs = getRecentLogs(5);
   const recentZones = recentZonesData?.items || [];
+
+  const [activity, setActivity] = React.useState<import('@/lib/activity/log').ActivityEntry[]>([]);
+  React.useEffect(() => {
+    api.fetchActivity({ pageSize: 100 }).then((r) => { if (r.data) setActivity(r.data.items); });
+  }, []);
+  const activityChartLogs = React.useMemo(
+    () => activity.map((e) => ({ action: e.action, timestamp: new Date(e.ts * 1000) })),
+    [activity]
+  );
+  const recentLogs = activity.slice(0, 5);
 
   // Proxy stats
   interface ProxyStats {
@@ -143,7 +152,7 @@ export default function DashboardPage() {
 
       {/* Row 4: Activity chart + Recent activity list */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <ActivityChart logs={logs} />
+        <ActivityChart logs={activityChartLogs} />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
@@ -162,18 +171,20 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {recentLogs.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between">
+                {recentLogs.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
                         <Activity className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{log.action}</p>
-                        <p className="text-xs text-muted-foreground">{log.resource} &bull; {log.user}</p>
+                        <p className="text-sm font-medium capitalize">{entry.action}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.resourceType}{entry.resourceName ? `: ${entry.resourceName}` : ''} &bull; {entry.actorName}
+                        </p>
                       </div>
                     </div>
-                    <span className="text-xs text-muted-foreground">{formatRelativeTime(log.timestamp)}</span>
+                    <span className="text-xs text-muted-foreground">{formatRelativeTime(new Date(entry.ts * 1000))}</span>
                   </div>
                 ))}
               </div>

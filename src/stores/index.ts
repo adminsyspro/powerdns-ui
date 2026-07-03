@@ -7,7 +7,6 @@ import type {
   ServerConnection,
   User,
   ZoneTemplate,
-  ActivityLog,
 } from '@/types/powerdns';
 import * as api from '@/lib/api';
 import { generateId } from '@/lib/utils';
@@ -249,37 +248,6 @@ export const useTemplatesStore = create<TemplatesStore>()(
     }),
     {
       name: 'pdns-templates',
-    }
-  )
-);
-
-// Activity Log Store
-interface ActivityLogStore {
-  logs: ActivityLog[];
-  addLog: (log: Omit<ActivityLog, 'id' | 'timestamp'>) => void;
-  clearLogs: () => void;
-  getRecentLogs: (limit?: number) => ActivityLog[];
-}
-
-export const useActivityLogStore = create<ActivityLogStore>()(
-  persist(
-    (set, get) => ({
-      logs: [],
-      addLog: (log) => {
-        const newLog: ActivityLog = {
-          ...log,
-          id: generateId(),
-          timestamp: new Date(),
-        };
-        set((state) => ({
-          logs: [newLog, ...state.logs].slice(0, 1000), // Keep last 1000 logs
-        }));
-      },
-      clearLogs: () => set({ logs: [] }),
-      getRecentLogs: (limit = 10) => get().logs.slice(0, limit),
-    }),
-    {
-      name: 'pdns-activity-logs',
     }
   )
 );

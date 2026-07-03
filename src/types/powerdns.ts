@@ -200,16 +200,6 @@ export interface ApiKey {
   created_at: Date;
 }
 
-// Activity Log
-export interface ActivityLog {
-  id: string;
-  action: string;
-  resource: string;
-  user: string;
-  details: string;
-  timestamp: Date;
-}
-
 // Server Connection Config
 export interface ServerConnection {
   id: string;
@@ -232,7 +222,6 @@ export interface DashboardStats {
   masterZones: number;
   slaveZones: number;
   dnssecEnabled: number;
-  recentChanges: ActivityLog[];
   queryStats?: {
     total: number;
     success: number;

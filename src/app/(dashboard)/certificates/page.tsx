@@ -12,6 +12,7 @@ import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
 import type { Certificate, AcmeAccount } from '@/lib/certs/types';
+import { CreateCertDialog } from './create-cert-dialog';
 
 const STATUS_BADGE: Record<string, string> = {
   valid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -119,8 +120,7 @@ export default function CertificatesPage() {
 
         <TabsContent value="certificates" className="space-y-4">
           <div className="flex items-center justify-end">
-            {/* Task 5 replaces this with <CreateCertDialog accounts={accounts} onCreated={load} /> */}
-            <Button disabled>Créer un certificat</Button>
+            <CreateCertDialog accounts={accounts} onCreated={load} />
           </div>
 
           {certs.length === 0 ? (

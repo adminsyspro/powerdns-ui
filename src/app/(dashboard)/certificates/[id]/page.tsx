@@ -55,7 +55,7 @@ export default function CertificateDetailPage() {
   async function onIssue() {
     setError(''); setSuccess('');
     const res = await api.issueCertificateApi(id);
-    if (res.error) setError(res.error); else { setSuccess('Émission enfilée.'); load(); }
+    if (res.error) setError(res.error); else { setSuccess('Issuance queued.'); load(); }
   }
   async function onDownloadBundle() {
     setError('');

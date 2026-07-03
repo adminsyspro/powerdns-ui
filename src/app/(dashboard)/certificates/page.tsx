@@ -63,7 +63,7 @@ export default function CertificatesPage() {
     setError(''); setSuccess('');
     const res = await api.issueCertificateApi(cert.id);
     if (res.error) setError(res.error);
-    else { setSuccess(`Émission enfilée pour « ${cert.name} ».`); load(); }
+    else { setSuccess(`Issuance queued for "${cert.name}".`); load(); }
   }
 
   async function onToggleAutoRenew(cert: Certificate, next: boolean) {

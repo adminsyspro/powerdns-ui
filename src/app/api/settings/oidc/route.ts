@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getOidcConfig, saveOidcConfig, getPublicBaseUrl } from '@/lib/auth/oidc';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // GET /api/settings/oidc — current config (client secret never returned).
 export async function GET(request: NextRequest) {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
 // PUT /api/settings/oidc — save config.
 export async function PUT(request: NextRequest) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const body = await request.json();
     if (body.enabled) {
       const issuer = String(body.issuerUrl ?? '').trim();
@@ -52,6 +53,14 @@ export async function PUT(request: NextRequest) {
       }
     }
     saveOidcConfig(body);
+
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'setting',
+      resourceId: 'oidc', resourceName: 'oidc',
+      details: `enabled=${!!body.enabled}`,
+    });
+
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

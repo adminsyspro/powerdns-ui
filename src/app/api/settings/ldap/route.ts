@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 const LDAP_KEYS = [
   'ldap_enabled',
@@ -73,6 +74,15 @@ export async function PUT(request: NextRequest) {
     }
   });
   transaction();
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'setting',
+    resourceId: 'ldap', resourceName: 'ldap',
+    details: `enabled=${!!body.enabled}`,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt } from '@/lib/crypto';
-import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let ctx: AuthContext;
   try {
-    requireAdmin(request);
+    ctx = requireAdmin(request);
   } catch (e) {
     return authzErrorResponse(e);
   }
@@ -48,6 +50,15 @@ export async function PUT(
     version: string | null; is_default: number; last_connected: number | null;
   };
 
+  if (fields.length > 1) {
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'connection',
+      resourceId: id, resourceName: row.name,
+      details: row.url,
+    });
+  }
+
   return NextResponse.json({
     id: row.id,
     name: row.name,
@@ -62,18 +73,28 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let ctx: AuthContext;
   try {
-    requireAdmin(request);
+    ctx = requireAdmin(request);
   } catch (e) {
     return authzErrorResponse(e);
   }
   const { id } = await params;
   const db = getDb();
 
+  const existing = db.prepare('SELECT name FROM server_connections WHERE id = ?').get(id) as { name: string } | undefined;
+
   const result = db.prepare('DELETE FROM server_connections WHERE id = ?').run(id);
   if (result.changes === 0) {
     return NextResponse.json({ error: 'Connection not found' }, { status: 404 });
   }
+
+  logActivity({
+    actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+    action: 'delete', resourceType: 'connection',
+    resourceId: id, resourceName: existing?.name ?? id,
+    details: null,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { encrypt } from '@/lib/crypto';
-import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
+import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // SECURITY: the decrypted PowerDNS API key MUST NOT leave the server. The proxy
 // resolves it server-side from the stored connection (see pdns-proxy.ts), so
@@ -33,8 +34,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  let ctx: AuthContext;
   try {
-    requireAdmin(request);
+    ctx = requireAdmin(request);
   } catch (e) {
     return authzErrorResponse(e);
   }
@@ -59,6 +61,13 @@ export async function POST(request: NextRequest) {
     `INSERT INTO server_connections (id, name, url, api_key, version, is_default)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(id, name, url, encryptedApiKey, version ?? null, isDefault ? 1 : 0);
+
+  logActivity({
+    actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+    action: 'create', resourceType: 'connection',
+    resourceId: id, resourceName: name,
+    details: url,
+  });
 
   return NextResponse.json({
     id,

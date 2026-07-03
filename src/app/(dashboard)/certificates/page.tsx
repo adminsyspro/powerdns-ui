@@ -14,6 +14,7 @@ import * as api from '@/lib/api';
 import type { Certificate, AcmeAccount } from '@/lib/certs/types';
 import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
+import { CertsOverview } from './certs-overview';
 
 const STATUS_BADGE: Record<string, string> = {
   valid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -120,6 +121,7 @@ export default function CertificatesPage() {
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
+          <CertsOverview certs={certs} />
           <div className="flex items-center justify-end">
             <CreateCertDialog accounts={accounts} onCreated={load} />
           </div>

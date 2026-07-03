@@ -16,10 +16,11 @@ import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
 const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 const stripDot = (s: string) => s.replace(/\.$/, '');
 
-export function CreateCertDialog({ accounts, onCreated, trigger }: { accounts: AcmeAccount[]; onCreated: () => void; trigger?: React.ReactNode }) {
+export function CreateCertDialog({ accounts, onCreated, trigger, categories }: { accounts: AcmeAccount[]; onCreated: () => void; trigger?: React.ReactNode; categories?: string[] }) {
   const [open, setOpen] = React.useState(false);
   const [connections, setConnections] = React.useState<ServerConnection[]>([]);
   const [name, setName] = React.useState('');
+  const [category, setCategory] = React.useState('');
   const [sans, setSans] = React.useState<string[]>([]);
   const [accountId, setAccountId] = React.useState('');
   const [connectionId, setConnectionId] = React.useState('');
@@ -61,7 +62,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger }: { accounts: A
   }, [zoneQuery, connectionId, open]);
 
   function reset() {
-    setName(''); setSans([]); setAccountId(''); setConnectionId('');
+    setName(''); setCategory(''); setSans([]); setAccountId(''); setConnectionId('');
     setKeyType('ecdsa'); setAutoRenew(true); setRenewBeforeDays(30); setError('');
     setZoneQuery(''); setZoneResults([]); setSelectedZone(null); setZoneRecordNames([]); setManual('');
   }
@@ -110,6 +111,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger }: { accounts: A
     setBusy(true);
     const res = await api.createCertificateApi({
       name: name.trim(), acmeAccountId: accountId, connectionId, sans, keyType, autoRenew, renewBeforeDays,
+      category: category.trim() || undefined,
     });
     setBusy(false);
     if (res.error) { setError(res.error); return; }
@@ -135,6 +137,14 @@ export function CreateCertDialog({ accounts, onCreated, trigger }: { accounts: A
           <div className="space-y-2">
             <Label htmlFor="cert-name">Name (identifier / folder on disk)</Label>
             <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cert-category">Category</Label>
+            <Input id="cert-category" list="cert-category-list" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Production (optional)" />
+            <datalist id="cert-category-list">
+              {(categories ?? []).map((c) => <option key={c} value={c} />)}
+            </datalist>
           </div>
 
           <div className="space-y-2">

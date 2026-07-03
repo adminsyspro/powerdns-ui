@@ -48,7 +48,7 @@ export default function CertificateDetailPage() {
 
   React.useEffect(() => { load(); }, [load]);
 
-  async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean }) {
+  async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
     if (res.error) setError(res.error); else setCert(res.data ?? cert);
   }
@@ -138,6 +138,11 @@ export default function CertificateDetailPage() {
               <Row label="Serial" value={cert.serial} />
               <Row label="Fingerprint" value={cert.fingerprintSha256} />
               <Row label="Issuer" value={cert.issuer} />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="d-category">Category</Label>
+                <Input id="d-category" defaultValue={cert.category ?? ''} className="w-40"
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v !== (cert.category ?? '')) patch({ category: v || null }); }} />
+              </div>
               <div className="flex items-center justify-between pt-2">
                 <Label htmlFor="d-auto">Automatic renewal</Label>
                 <Switch id="d-auto" checked={cert.autoRenew} onCheckedChange={(v) => patch({ autoRenew: v })} />

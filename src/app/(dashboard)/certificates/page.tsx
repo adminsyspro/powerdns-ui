@@ -62,6 +62,11 @@ export default function CertificatesPage() {
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
+  const categories = React.useMemo(
+    () => [...new Set(certs.map((c) => c.category).filter((x): x is string => !!x))].sort(),
+    [certs],
+  );
+
   async function onIssue(cert: Certificate) {
     setError(''); setSuccess('');
     const res = await api.issueCertificateApi(cert.id);
@@ -102,7 +107,7 @@ export default function CertificatesPage() {
     else { setSuccess(`"${cert.name}" deleted.`); load(); }
   }
 
-  const [groupBy, setGroupBy] = React.useState<'none' | 'account' | 'status' | 'connection'>('none');
+  const [groupBy, setGroupBy] = React.useState<'none' | 'category' | 'account' | 'status' | 'connection'>('category');
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
 
   function toggleGroup(key: string) {
@@ -116,7 +121,7 @@ export default function CertificatesPage() {
   const groups = React.useMemo(() => {
     if (groupBy === 'none') return null;
     const val = (c: Certificate) =>
-      groupBy === 'account' ? accountName(c.acmeAccountId) : groupBy === 'status' ? c.status : c.serverUrl;
+      groupBy === 'category' ? (c.category || 'Uncategorized') : groupBy === 'account' ? accountName(c.acmeAccountId) : groupBy === 'status' ? c.status : c.serverUrl;
     const map = new Map<string, Certificate[]>();
     for (const c of certs) {
       const k = val(c) || '—';
@@ -196,7 +201,7 @@ export default function CertificatesPage() {
           {certs.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground space-y-3">
               <p className="text-sm">No certificates yet. Create one to start an ACME DNS-01 issuance.</p>
-              <CreateCertDialog accounts={accounts} onCreated={load} trigger={<Button>New certificate</Button>} />
+              <CreateCertDialog accounts={accounts} onCreated={load} categories={[]} trigger={<Button>New certificate</Button>} />
             </div>
           ) : (
             <div className="space-y-3">
@@ -205,6 +210,7 @@ export default function CertificatesPage() {
                 <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
                   <SelectTrigger id="group-by" className="h-8 w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="category">Category</SelectItem>
                     <SelectItem value="none">No grouping</SelectItem>
                     <SelectItem value="account">Account</SelectItem>
                     <SelectItem value="status">Status</SelectItem>
@@ -226,7 +232,7 @@ export default function CertificatesPage() {
                       <TableHead className="text-right">
                         <span className="inline-flex items-center justify-end gap-2">
                           Actions
-                          <CreateCertDialog accounts={accounts} onCreated={load} />
+                          <CreateCertDialog accounts={accounts} onCreated={load} categories={categories} />
                         </span>
                       </TableHead>
                     </TableRow>

@@ -5,6 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string; keyId: string }> };
 
@@ -21,19 +22,27 @@ async function authorize(request: NextRequest, params: RouteContext['params']) {
     throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
   }
   requireZoneAccess(ctx, { account: account ?? '' }, 'write-zone');
-  return { conn, id, keyId };
+  return { ctx, conn, id, keyId };
 }
 
 // PUT /api/pdns/zones/[id]/cryptokeys/[keyId] - Update a key (activate/deactivate/publish)
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
-    const { conn, id, keyId } = await authorize(request, params);
+    const { ctx, conn, id, keyId } = await authorize(request, params);
     const body = await request.json();
     const response = await pdnsProxy(
       request,
       `/servers/${conn.serverId}/zones/${id}/cryptokeys/${keyId}`,
       { method: 'PUT', body: JSON.stringify(body) }
     );
+    if (response.ok) {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: `DNSSEC key ${keyId} ${body.active === true ? 'activated' : body.active === false ? 'deactivated' : 'updated'}`,
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);
@@ -45,12 +54,20 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // DELETE /api/pdns/zones/[id]/cryptokeys/[keyId] - Delete a key
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
-    const { conn, id, keyId } = await authorize(request, params);
+    const { ctx, conn, id, keyId } = await authorize(request, params);
     const response = await pdnsProxy(
       request,
       `/servers/${conn.serverId}/zones/${id}/cryptokeys/${keyId}`,
       { method: 'DELETE' }
     );
+    if (response.ok || response.status === 204) {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: `DNSSEC key ${keyId} deleted`,
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

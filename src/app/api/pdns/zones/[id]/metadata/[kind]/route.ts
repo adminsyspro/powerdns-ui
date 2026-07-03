@@ -5,6 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string; kind: string }> };
 
@@ -30,7 +31,7 @@ async function authorize(
     throw new AuthzError(403, 'Zone not found in cache; sync required before scoped access');
   }
   requireZoneAccess(ctx, { account: account ?? '' }, action);
-  return { conn, id, kind: kindUpper };
+  return { ctx, conn, id, kind: kindUpper };
 }
 
 // GET /api/pdns/zones/[id]/metadata/[kind] - Read one metadata kind.
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 // An empty list removes the kind entirely (DELETE on PowerDNS).
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
-    const { conn, id, kind } = await authorize(request, params, 'write-zone');
+    const { ctx, conn, id, kind } = await authorize(request, params, 'write-zone');
     const body = await request.json();
     const metadata = Array.isArray(body.metadata)
       ? body.metadata.filter((v: unknown): v is string => typeof v === 'string' && v.trim() !== '')
@@ -72,6 +73,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       // PowerDNS answers 404 when deleting a kind that was never set — for the
       // caller "no values" is already true, so treat it as success.
       if (response.status === 404 || response.ok) {
+        logActivity({
+          actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+          action: 'update', resourceType: 'zone',
+          resourceId: id, resourceName: id,
+          details: `metadata ${kind} cleared`,
+        });
         return NextResponse.json({ kind, metadata: [] });
       }
       return forwardPdnsResponse(response);
@@ -82,6 +89,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       `/servers/${conn.serverId}/zones/${id}/metadata/${kind}`,
       { method: 'PUT', body: JSON.stringify({ kind, metadata }) }
     );
+    if (response.ok) {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'zone',
+        resourceId: id, resourceName: id,
+        details: `metadata ${kind} set (${metadata.length} value(s))`,
+      });
+    }
     return forwardPdnsResponse(response);
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

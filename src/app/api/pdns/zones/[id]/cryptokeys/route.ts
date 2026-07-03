@@ -5,6 +5,7 @@ import {
   AuthzError, authzErrorResponse,
 } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -54,6 +55,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!response.ok || response.status === 204) return forwardPdnsResponse(response);
 
     const { privatekey: _privatekey, ...key } = (await response.json()) as Record<string, unknown>;
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'zone',
+      resourceId: id, resourceName: id,
+      details: `DNSSEC key created (${String(key.keytype ?? '')})`,
+    });
     return NextResponse.json(key, { status: response.status });
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

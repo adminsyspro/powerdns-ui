@@ -3,13 +3,14 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { startSync, getSyncState } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // POST /api/integrations/[id]/sync — reconcile scoped zones to the provider
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const integration = getIntegration(id);
     if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -24,7 +25,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!result.started) {
       return NextResponse.json({ error: result.reason }, { status: 409 });
     }
-    return NextResponse.json({ sync: getSyncState(id, conn.url) }, { status: 202 });
+    const state = getSyncState(id, conn.url);
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'integration',
+      resourceId: id, resourceName: integration.name,
+      details: `sync started (${state.total} zones scoped)`,
+    });
+    return NextResponse.json({ sync: state }, { status: 202 });
   } catch (e) {
     return authzErrorResponse(e);
   }

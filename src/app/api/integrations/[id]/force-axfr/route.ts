@@ -3,13 +3,14 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { forceZoneAxfr } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // POST /api/integrations/[id]/force-axfr — re-trigger the transfer of one zone
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const integration = getIntegration(id);
     if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -25,6 +26,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!zoneName) return NextResponse.json({ error: 'zoneName is required' }, { status: 400 });
     const result = await forceZoneAxfr(id, conn.url, zoneName);
     if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'integration',
+      resourceId: id, resourceName: integration.name,
+      details: `force AXFR: ${zoneName}`,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return authzErrorResponse(e);

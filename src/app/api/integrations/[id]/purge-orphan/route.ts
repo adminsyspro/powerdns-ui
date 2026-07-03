@@ -3,13 +3,14 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { purgeOrphanZone } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // POST /api/integrations/[id]/purge-orphan — delete one orphaned remote zone now
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const body = await request.json();
     const zoneName = typeof body.zoneName === 'string' ? body.zoneName.trim() : '';
@@ -24,6 +25,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const canonical = zoneName.endsWith('.') ? zoneName : `${zoneName}.`;
     const result = await purgeOrphanZone(id, conn.url, canonical);
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'delete', resourceType: 'integration',
+      resourceId: id, resourceName: integration.name,
+      details: `purged orphan zone: ${canonical}`,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return authzErrorResponse(e);

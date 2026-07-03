@@ -3,6 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getIntegration } from '@/lib/integrations/store';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { setZoneCustomNsSet } from '@/lib/integrations/sync';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 // nameservers (nsSet: null). Applied directly to Cloudflare.
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     const integration = getIntegration(id);
     if (!integration) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -31,6 +32,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const nsSet: number | null = body.nsSet;
     const result = await setZoneCustomNsSet(id, conn.url, zoneName, nsSet);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'custom_ns_set',
+      resourceId: id, resourceName: zoneName,
+      details: nsSet === null ? `${zoneName}: reset to Cloudflare-default NS` : `${zoneName}: NS set ${nsSet}`,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return authzErrorResponse(e);

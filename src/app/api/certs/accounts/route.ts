@@ -3,6 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { createAcmeAccount, listAcmeAccounts } from '@/lib/certs/store';
 import type { CaType, PropagationMode } from '@/lib/certs/types';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 const CA_TYPES: CaType[] = ['letsencrypt', 'step-ca', 'other'];
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     let body: any;
     try {
       body = await request.json();
@@ -61,6 +62,12 @@ export async function POST(request: NextRequest) {
         propagationMode,
         propagationResolver: body.propagationResolver ? String(body.propagationResolver) : null,
         tosAgreed: body.tosAgreed === true,
+      });
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'create', resourceType: 'acme_account',
+        resourceId: account.id, resourceName: account.name,
+        details: `${account.caType} @ ${account.directoryUrl}`,
       });
       return NextResponse.json(account, { status: 201 });
     } catch (err: any) {

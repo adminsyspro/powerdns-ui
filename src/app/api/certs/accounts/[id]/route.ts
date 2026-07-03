@@ -3,6 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccountIfUnused } from '@/lib/certs/store';
 import type { PropagationMode } from '@/lib/certs/types';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     let body: any;
     try {
@@ -63,6 +64,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         tosAgreed: body.tosAgreed !== undefined ? body.tosAgreed === true : undefined,
       });
       if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'update', resourceType: 'acme_account',
+        resourceId: id, resourceName: updated.name,
+        details: `${updated.caType} @ ${updated.directoryUrl}`,
+      });
       return NextResponse.json(updated);
     } catch (err: any) {
       // UNIQUE(name) collision etc.
@@ -78,8 +85,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
+    const account = getAcmeAccount(id);
     const outcome = deleteAcmeAccountIfUnused(id);
     if (outcome.result === 'not-found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (outcome.result === 'in-use') {
@@ -87,6 +95,14 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
         { error: `Account is used by ${outcome.inUse} certificate(s); delete those first` },
         { status: 409 }
       );
+    }
+    if (outcome.result === 'deleted') {
+      logActivity({
+        actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+        action: 'delete', resourceType: 'acme_account',
+        resourceId: id, resourceName: account?.name ?? id,
+        details: null,
+      });
     }
     return new NextResponse(null, { status: 204 });
   } catch (e) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { getZonePermissions } from '@/lib/proxy/access-control';
 import type { ProxyEnvironmentRow } from '@/types/proxy';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // GET /api/proxy/environments/[id]
 export async function GET(
@@ -133,6 +134,15 @@ export async function PUT(
   const updated = db.prepare('SELECT * FROM proxy_environments WHERE id = ?').get(id) as ProxyEnvironmentRow;
   const zones = getZonePermissions(id);
 
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'proxy_env',
+    resourceId: id, resourceName: updated.name,
+    details: `active=${updated.active === 1}, full-access=${updated.full_access === 1}, read-only=${updated.read_only === 1}`,
+  });
+
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
@@ -159,7 +169,8 @@ export async function DELETE(
 
   const { id } = await params;
   const db = getDb();
-  const existing = db.prepare('SELECT id FROM proxy_environments WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT id, name FROM proxy_environments WHERE id = ?').get(id) as
+    { id: string; name: string } | undefined;
 
   if (!existing) {
     return NextResponse.json({ error: 'Environment not found' }, { status: 404 });
@@ -168,6 +179,15 @@ export async function DELETE(
   db.prepare('DELETE FROM proxy_record_rules WHERE zone_perm_id IN (SELECT id FROM proxy_zone_permissions WHERE environment_id = ?)').run(id);
   db.prepare('DELETE FROM proxy_zone_permissions WHERE environment_id = ?').run(id);
   db.prepare('DELETE FROM proxy_environments WHERE id = ?').run(id);
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'delete', resourceType: 'proxy_env',
+    resourceId: id, resourceName: existing?.name ?? id,
+    details: null,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/cache/db';
 import { generateProxyToken, hashToken } from '@/lib/proxy/token';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // POST /api/proxy/environments/[id]/regenerate-token
 export async function POST(
@@ -14,7 +15,8 @@ export async function POST(
 
   const { id } = await params;
   const db = getDb();
-  const existing = db.prepare('SELECT id FROM proxy_environments WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT id, name FROM proxy_environments WHERE id = ?').get(id) as
+    { id: string; name: string } | undefined;
 
   if (!existing) {
     return NextResponse.json({ error: 'Environment not found' }, { status: 404 });
@@ -26,6 +28,15 @@ export async function POST(
   db.prepare(
     'UPDATE proxy_environments SET token_sha512 = ?, updated_at = unixepoch() WHERE id = ?'
   ).run(tokenHash, id);
+
+  logActivity({
+    actorId: request.headers.get('x-user-id'),
+    actorName: request.headers.get('x-user-name') || 'unknown',
+    actorIp: clientIp(request),
+    action: 'update', resourceType: 'proxy_key',
+    resourceId: id, resourceName: existing?.name ?? id,
+    details: 'token regenerated',
+  });
 
   return NextResponse.json({
     token: rawToken, // Only returned once

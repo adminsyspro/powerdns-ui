@@ -5,6 +5,7 @@ import { findZoneLink } from '@/lib/integrations/sync';
 import { getIntegrationCredentials } from '@/lib/integrations/store';
 import { listDnsRecords, setRecordProxied } from '@/lib/integrations/cloudflare';
 import { canonZone, authorizeZone } from '@/lib/integrations/zone-auth';
+import { logActivity, clientIp } from '@/lib/activity/log';
 
 // Cloudflare can only proxy these record types.
 const PROXYABLE_TYPES = new Set(['A', 'AAAA', 'CNAME']);
@@ -82,6 +83,14 @@ export async function PUT(request: NextRequest) {
     for (const record of matching) {
       await setRecordProxied(creds, found.link.remoteZoneId!, record.id, proxied);
     }
+    logActivity({
+      actorId: request.headers.get('x-user-id'),
+      actorName: request.headers.get('x-user-name') || 'unknown',
+      actorIp: clientIp(request),
+      action: 'update', resourceType: 'integration',
+      resourceId: found.integration.id, resourceName: found.integration.name,
+      details: `CF proxy ${proxied ? 'on' : 'off'}: ${recordName} ${type} in ${zone} (${matching.length} record(s))`,
+    });
     return NextResponse.json({ ok: true, updated: matching.length, proxied });
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);

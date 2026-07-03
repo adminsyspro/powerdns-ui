@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    requireAdmin(request);
+    const ctx = requireAdmin(request);
     const { id } = await params;
     let body: any;
     try {
@@ -62,6 +62,18 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       comment: body.comment,
     });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    logActivity({
+      actorId: ctx.userId, actorName: ctx.username, actorIp: clientIp(request),
+      action: 'update', resourceType: 'certificate',
+      resourceId: id, resourceName: updated.name,
+      details: [
+        body.autoRenew !== undefined ? `autoRenew=${body.autoRenew}` : null,
+        body.renewBeforeDays !== undefined ? `renewBeforeDays=${body.renewBeforeDays}` : null,
+        body.keyDownloadEnabled !== undefined ? `keyDownload=${body.keyDownloadEnabled}` : null,
+        body.category !== undefined ? 'category' : null,
+        body.comment !== undefined ? 'comment' : null,
+      ].filter(Boolean).join(', ') || 'settings',
+    });
     return NextResponse.json(updated);
   } catch (e) {
     return authzErrorResponse(e);

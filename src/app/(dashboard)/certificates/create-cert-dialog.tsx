@@ -28,7 +28,10 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
 
   React.useEffect(() => {
     if (!open) return;
-    api.fetchConnections().then((r) => setConnections(r.data ?? []));
+    api.fetchConnections().then((r) => {
+      if (r.error) { setError(r.error); return; }
+      setConnections(r.data ?? []);
+    });
   }, [open]);
 
   function reset() {
@@ -41,6 +44,10 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
     const sans = sansText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     if (!name.trim() || sans.length === 0 || !accountId || !connectionId) {
       setError('Nom, au moins un SAN, un compte et une connexion sont requis.');
+      return;
+    }
+    if (!Number.isInteger(renewBeforeDays) || renewBeforeDays < 1 || renewBeforeDays > 90) {
+      setError('Le nombre de jours doit être compris entre 1 et 90.');
       return;
     }
     setBusy(true);
@@ -117,7 +124,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Annuler</Button>
+          <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Annuler</Button>
           <Button onClick={onSubmit} disabled={busy}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Créer
           </Button>

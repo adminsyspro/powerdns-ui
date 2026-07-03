@@ -170,3 +170,46 @@ export function updateCertificateSettings(
   );
   return getCertificate(id, db);
 }
+
+/**
+ * Public leaf + chain for download / bundling. Returns null when the cert has
+ * not been issued yet (cert_pem IS NULL). Never touches privkey_enc.
+ */
+export function getCertificateBundle(
+  id: string,
+  db: Db = getDb()
+): { certPem: string; chainPem: string | null } | null {
+  const row = db.prepare(`SELECT cert_pem, chain_pem FROM certificates WHERE id = ?`).get(id) as
+    | { cert_pem: string | null; chain_pem: string | null }
+    | undefined;
+  if (!row || !row.cert_pem) return null;
+  return { certPem: row.cert_pem, chainPem: row.chain_pem ?? null };
+}
+
+/** Mark that a renewal job has been queued for this cert (UI signal). */
+export function markCertificateRenewalQueued(id: string, db: Db = getDb()): void {
+  db.prepare(
+    `UPDATE certificates SET renewal_status = 'queued', updated_at = unixepoch() WHERE id = ?`
+  ).run(id);
+}
+
+/**
+ * IDs of certificates due for automatic renewal: issued (cert_pem present),
+ * auto_renew on, inside the renew_before_days window, past any backoff gate,
+ * and without an already-active job. Uses idx_certificates_renewal /
+ * idx_certificates_next_attempt.
+ */
+export function selectCertificatesDueForRenewal(db: Db = getDb()): string[] {
+  return db
+    .prepare(
+      `SELECT id FROM certificates
+       WHERE auto_renew = 1
+         AND cert_pem IS NOT NULL
+         AND not_after IS NOT NULL
+         AND (not_after - renew_before_days * 86400) <= unixepoch()
+         AND (next_attempt_at IS NULL OR next_attempt_at <= unixepoch())
+         AND id NOT IN (SELECT certificate_id FROM certificate_jobs WHERE state IN ('queued','running'))`
+    )
+    .all()
+    .map((r: any) => r.id as string);
+}

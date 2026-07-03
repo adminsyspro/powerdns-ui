@@ -125,3 +125,23 @@ export function listActiveJobs(certificateId: string, db: Db = getDb()): CertJob
     .all(certificateId)
     .map(rowToJob);
 }
+
+/**
+ * Reconcile orphaned jobs: a job stuck in state='running' whose worker died
+ * (lease expired, no heartbeat) leaves the row 'running' forever, so it is
+ * never re-claimed and the cert can silently expire. Requeue any 'running' job
+ * whose claimed_at is older than staleMs. runJob is resume-safe (re-checks the
+ * ACME order, re-uses the persisted key), so re-running a reclaimed job is safe.
+ * next_attempt_at is left untouched so claimNextJob picks it up on the next
+ * cycle. Returns the number of jobs reclaimed.
+ */
+export function reclaimStuckJobs(staleMs: number, db: Db = getDb()): number {
+  const staleSeconds = Math.floor(staleMs / 1000);
+  return db
+    .prepare(
+      `UPDATE certificate_jobs
+       SET state='queued', owner=NULL
+       WHERE state='running' AND claimed_at IS NOT NULL AND claimed_at <= unixepoch() - ?`
+    )
+    .run(staleSeconds).changes;
+}

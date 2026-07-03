@@ -1,23 +1,26 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as api from '@/lib/api';
 import type { AcmeAccount } from '@/lib/certs/types';
-import type { ServerConnection } from '@/types/powerdns';
+import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
+
+const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
+const stripDot = (s: string) => s.replace(/\.$/, '');
 
 export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccount[]; onCreated: () => void }) {
   const [open, setOpen] = React.useState(false);
   const [connections, setConnections] = React.useState<ServerConnection[]>([]);
   const [name, setName] = React.useState('');
-  const [sansText, setSansText] = React.useState('');
+  const [sans, setSans] = React.useState<string[]>([]);
   const [accountId, setAccountId] = React.useState('');
   const [connectionId, setConnectionId] = React.useState('');
   const [keyType, setKeyType] = React.useState<'ecdsa' | 'rsa'>('ecdsa');
@@ -25,6 +28,14 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
   const [renewBeforeDays, setRenewBeforeDays] = React.useState(30);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
+
+  // Zone builder state
+  const [zoneQuery, setZoneQuery] = React.useState('');
+  const [zoneResults, setZoneResults] = React.useState<ZoneListItem[]>([]);
+  const [selectedZone, setSelectedZone] = React.useState<ZoneListItem | null>(null);
+  const [zoneRecordNames, setZoneRecordNames] = React.useState<string[]>([]);
+  const [recordsLoading, setRecordsLoading] = React.useState(false);
+  const [manual, setManual] = React.useState('');
 
   React.useEffect(() => {
     if (!open) return;
@@ -34,14 +45,53 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
     });
   }, [open]);
 
+  // Debounced zone typeahead, scoped to the selected connection.
+  React.useEffect(() => {
+    if (!open || !connectionId || zoneQuery.trim().length < 1) { setZoneResults([]); return; }
+    const q = zoneQuery.trim();
+    const t = setTimeout(async () => {
+      const r = await api.fetchZonesForConnection(connectionId, q);
+      if (!r.error) setZoneResults(r.data?.items ?? []);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [zoneQuery, connectionId, open]);
+
   function reset() {
-    setName(''); setSansText(''); setAccountId(''); setConnectionId('');
+    setName(''); setSans([]); setAccountId(''); setConnectionId('');
     setKeyType('ecdsa'); setAutoRenew(true); setRenewBeforeDays(30); setError('');
+    setZoneQuery(''); setZoneResults([]); setSelectedZone(null); setZoneRecordNames([]); setManual('');
   }
+
+  function onConnectionChange(v: string) {
+    setConnectionId(v);
+    setSelectedZone(null); setZoneRecordNames([]); setZoneQuery(''); setZoneResults([]);
+  }
+
+  function addSan(v: string) {
+    const s = v.trim();
+    if (!s) return;
+    setSans((prev) => (prev.some((x) => x.toLowerCase() === s.toLowerCase()) ? prev : [...prev, s]));
+  }
+  function removeSan(v: string) { setSans((prev) => prev.filter((x) => x !== v)); }
+  function toggleSan(v: string, checked: boolean) { checked ? addSan(v) : removeSan(v); }
+
+  async function selectZone(z: ZoneListItem) {
+    setSelectedZone(z); setZoneResults([]); setZoneQuery(''); setZoneRecordNames([]); setRecordsLoading(true);
+    const r = await api.fetchZoneForConnection(connectionId, z.id);
+    setRecordsLoading(false);
+    if (r.error || !r.data) { setError(r.error ?? 'échec du chargement de la zone'); return; }
+    const names = new Set<string>();
+    for (const rr of r.data.rrsets ?? []) {
+      if (SAN_RECORD_TYPES.has(rr.type)) names.add(stripDot(rr.name));
+    }
+    setZoneRecordNames([...names].sort());
+  }
+
+  const apex = selectedZone ? stripDot(selectedZone.name) : '';
+  const wildcard = apex ? `*.${apex}` : '';
 
   async function onSubmit() {
     setError('');
-    const sans = sansText.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     if (!name.trim() || sans.length === 0 || !accountId || !connectionId) {
       setError('Nom, au moins un SAN, un compte et une connexion sont requis.');
       return;
@@ -75,10 +125,101 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
             <Label htmlFor="cert-name">Nom (identifiant / dossier sur disque)</Label>
             <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="cert-sans">SAN (un par ligne ou séparés par des virgules)</Label>
-            <Textarea id="cert-sans" rows={3} value={sansText} onChange={(e) => setSansText(e.target.value)} placeholder={'example.com\n*.example.com'} />
+            <Label>Connexion PowerDNS</Label>
+            <Select value={connectionId} onValueChange={onConnectionChange}>
+              <SelectTrigger><SelectValue placeholder="Choisir une connexion" /></SelectTrigger>
+              <SelectContent>
+                {connections.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* SAN builder */}
+          <div className="space-y-2">
+            <Label>Domaines / SAN</Label>
+            {!connectionId ? (
+              <p className="text-sm text-muted-foreground">Choisis d’abord une connexion PowerDNS.</p>
+            ) : (
+              <div className="space-y-2 rounded-md border p-3">
+                {/* zone typeahead */}
+                <Input
+                  value={zoneQuery}
+                  onChange={(e) => setZoneQuery(e.target.value)}
+                  placeholder="Rechercher une zone…"
+                />
+                {zoneResults.length > 0 && (
+                  <div className="max-h-40 overflow-auto rounded-md border">
+                    {zoneResults.map((z) => (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => selectZone(z)}
+                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
+                      >
+                        {stripDot(z.name)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedZone && (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{apex}</span>
+                      <Button type="button" variant="outline" size="sm" onClick={() => addSan(apex)}>+ {apex}</Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => addSan(wildcard)}>+ {wildcard}</Button>
+                    </div>
+                    {recordsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Chargement des enregistrements…</div>
+                    ) : zoneRecordNames.length > 0 ? (
+                      <div className="max-h-40 space-y-1 overflow-auto">
+                        {zoneRecordNames.map((n) => (
+                          <label key={n} className="flex items-center gap-2 text-sm">
+                            <Checkbox checked={sans.includes(n)} onCheckedChange={(v) => toggleSan(n, v === true)} />
+                            <span>{n}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Aucun enregistrement A/AAAA/CNAME dans cette zone.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* manual add */}
+                <div className="flex gap-2">
+                  <Input
+                    value={manual}
+                    onChange={(e) => setManual(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSan(manual); setManual(''); } }}
+                    placeholder="Ajouter un SAN manuellement (ex. *.autre-zone.com)"
+                  />
+                  <Button type="button" variant="secondary" onClick={() => { addSan(manual); setManual(''); }}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* selected SAN chips */}
+            {sans.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {sans.map((s) => (
+                  <span key={s} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
+                    {s}
+                    <button type="button" onClick={() => removeSan(s)} aria-label={`retirer ${s}`} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun SAN sélectionné.</p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <Label>Compte ACME</Label>
             <Select value={accountId} onValueChange={setAccountId}>
@@ -92,15 +233,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Connexion PowerDNS</Label>
-            <Select value={connectionId} onValueChange={setConnectionId}>
-              <SelectTrigger><SelectValue placeholder="Choisir une connexion" /></SelectTrigger>
-              <SelectContent>
-                {connections.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
+
           <div className="flex gap-4">
             <div className="flex-1 space-y-2">
               <Label>Type de clé</Label>
@@ -118,6 +251,7 @@ export function CreateCertDialog({ accounts, onCreated }: { accounts: AcmeAccoun
                 onChange={(e) => setRenewBeforeDays(Number(e.target.value))} />
             </div>
           </div>
+
           <div className="flex items-center gap-2">
             <Switch id="cert-auto" checked={autoRenew} onCheckedChange={setAutoRenew} />
             <Label htmlFor="cert-auto">Renouvellement automatique</Label>

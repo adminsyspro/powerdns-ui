@@ -685,6 +685,22 @@ export async function fetchCachedZones(params: CachedZonesParams) {
   return apiRequest<PaginatedZonesResponse>(`/api/zones/cached?${searchParams}`);
 }
 
+/** Cached-zone typeahead scoped to a specific connection (not the active one). */
+export function fetchZonesForConnection(connectionId: string, search: string) {
+  const qs = new URLSearchParams({ page: '1', pageSize: '20', search });
+  return apiRequest<PaginatedZonesResponse>(`/api/zones/cached?${qs}`, {}, { connectionId });
+}
+
+/**
+ * Full zone (with rrsets) scoped to a specific connection. Uses the
+ * connection-aware `/api/pdns/zones/[id]` route (which always fetches with
+ * `?rrsets=true` server-side) — NOT the legacy env-pinned `/api/zones/[id]`
+ * route, which ignores the `x-pdns-connection-id` header entirely.
+ */
+export function fetchZoneForConnection(connectionId: string, zoneId: string) {
+  return apiRequest<Zone>(`/api/pdns/zones/${encodeURIComponent(zoneId)}`, {}, { connectionId });
+}
+
 export interface ZoneCacheStats {
   total: number;
   native: number;

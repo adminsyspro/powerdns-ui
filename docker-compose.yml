@@ -17,8 +17,17 @@ services:
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
       # Set FORCE_HTTPS=true in .env when served over HTTPS (Secure cookies).
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
+      - CERTS_ENABLED=${CERTS_ENABLED:-false}
+      - NEXT_PUBLIC_CERTS_ENABLED=${NEXT_PUBLIC_CERTS_ENABLED:-false}
+      - INTERNAL_CA_ENABLED=${INTERNAL_CA_ENABLED:-false}
+      - NEXT_PUBLIC_INTERNAL_CA_ENABLED=${NEXT_PUBLIC_INTERNAL_CA_ENABLED:-false}
+      - INTERNAL_CA_DIRECTORY_URL=${INTERNAL_CA_DIRECTORY_URL:-https://step-ca:9000/acme/acme/directory}
+      - INTERNAL_CA_ROOT_FILE=${INTERNAL_CA_ROOT_FILE:-/etc/step-ca-public/root_ca.crt}
+      - INTERNAL_CA_INTERMEDIATE_FILE=${INTERNAL_CA_INTERMEDIATE_FILE:-/etc/step-ca-public/intermediate_ca.crt}
+      - INTERNAL_CA_PROPAGATION_RESOLVER=${INTERNAL_CA_PROPAGATION_RESOLVER:-}
     volumes:
       - powerdns-ui-data:/app/data
+      - step-ca-certs:/etc/step-ca-public:ro
     restart: unless-stopped
 
   # Optional: PowerDNS server for testing
@@ -42,6 +51,44 @@ services:
       - powerdns-data:/var/lib/powerdns
     restart: unless-stopped
 
+  # Optional bundled private ACME CA. Start with: docker compose --profile internal-ca up -d
+  step-ca:
+    image: smallstep/step-ca:latest
+    container_name: step-ca
+    profiles: ["internal-ca"]
+    environment:
+      - DOCKER_STEPCA_INIT_NAME=PowerDNS UI Internal CA
+      # MUST include the compose service name so the CA's own TLS cert has it as a SAN
+      # (root trust does NOT bypass hostname/SNI verification).
+      - DOCKER_STEPCA_INIT_DNS_NAMES=step-ca,localhost
+      # Creates a passwordless (for clients) ACME provisioner named "acme"
+      # => directory at /acme/acme/directory.
+      - DOCKER_STEPCA_INIT_ACME=true
+      - DOCKER_STEPCA_INIT_PASSWORD_FILE=/run/secrets/step_ca_password
+    secrets:
+      - step_ca_password
+    volumes:
+      # Full CA state incl. secrets/ — NEVER mounted into the app.
+      - step-ca-data:/home/step
+      # Public certs only (root_ca.crt + intermediate_ca.crt) — shared read-only with the app.
+      - step-ca-certs:/home/step/certs
+    # Not published to the host by default: the app reaches it on the internal
+    # compose network as step-ca:9000. Uncomment to expose:
+    # ports:
+    #   - "9000:9000"
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000", "--root", "/home/step/certs/root_ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
   powerdns-data:
   powerdns-ui-data:
+  step-ca-data:
+  step-ca-certs:
+
+secrets:
+  step_ca_password:
+    file: ./secrets/step_ca_password.txt

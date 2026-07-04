@@ -60,3 +60,4 @@ docs/superpowers/
 # Local dev / subagent-driven scratch artifacts (never commit)
 .superpowers/
 dev-server.log
+secrets/

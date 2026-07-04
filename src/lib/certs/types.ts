@@ -24,6 +24,18 @@ export interface AcmeAccount {
   updatedAt: number;
 }
 
+/** Read-only status of the bundled internal CA (step-ca) for the "Internal CA" panel. */
+export interface InternalCaStatus {
+  enabled: boolean;                      // isInternalCaEnabled()
+  ready: boolean;                        // directory URL set + root file readable
+  directoryUrl: string | null;
+  rootPem: string | null;                // public root, for "Download root"
+  rootFingerprintSha256: string | null;
+  rootNotAfter: number | null;           // epoch seconds
+  intermediateNotAfter: number | null;   // epoch seconds
+  account: { id: string; name: string; status: AcmeAccountStatus } | null;
+}
+
 export interface AcmeAccountInput {
   name: string;
   caType: CaType;

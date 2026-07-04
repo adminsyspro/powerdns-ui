@@ -59,6 +59,11 @@ export function getAcmeAccount(id: string, db: Db = getDb()): AcmeAccount | unde
   return r ? rowToAccount(r) : undefined;
 }
 
+export function getAcmeAccountByName(name: string, db: Db = getDb()): AcmeAccount | undefined {
+  const r = db.prepare(`SELECT ${SAFE_COLS} FROM acme_accounts WHERE name = ?`).get(name);
+  return r ? rowToAccount(r) : undefined;
+}
+
 /**
  * Public-CA roots pinned to accounts, for the ACME trust interceptor.
  * root_pem is a public certificate (not a secret), so it is safe to read here;

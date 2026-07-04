@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest) {
     ...actorFromHeaders(request),
     action: 'update', resourceType: 'setting',
     resourceId: 'ldap', resourceName: 'ldap',
-    details: `enabled=${!!body.enabled}`,
+    details: `enabled=${!!body.enabled}${body.url ? `, url=${body.url}` : ''}${body.baseDN ? `, baseDN=${body.baseDN}` : ''}`,
   });
 
   return NextResponse.json({ success: true });

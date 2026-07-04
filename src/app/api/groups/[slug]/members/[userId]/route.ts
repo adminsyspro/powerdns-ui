@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { getGroupRowBySlug, removeManualMember } from '@/lib/cache/groups';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
+import { getDb } from '@/lib/cache/db';
 
 // DELETE /api/groups/[slug]/members/[userId] — remove a MANUAL membership only.
 // 409 if the user's membership comes solely from LDAP/OIDC (not hand-removable).
@@ -24,11 +25,12 @@ export async function DELETE(
       }
       return NextResponse.json({ error: 'Membership not found' }, { status: 404 });
     }
+    const u = getDb().prepare('SELECT username FROM users WHERE id = ?').get(userId) as { username: string } | undefined;
     logActivity({
       ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'group',
       resourceId: slug, resourceName: group.name,
-      details: `removed member ${userId}`,
+      details: `removed member ${u?.username ?? userId}`,
     });
     return NextResponse.json({ success: true });
   } catch (e) {

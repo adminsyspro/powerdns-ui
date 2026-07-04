@@ -63,12 +63,16 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       body: JSON.stringify(body),
     });
     if (response.ok) {
-      const count = Array.isArray(body.rrsets) ? body.rrsets.length : 0;
+      const rrsets: any[] = Array.isArray(body.rrsets) ? body.rrsets : [];
+      const changeList = rrsets.slice(0, 5)
+        .map((r) => `${r.changetype ?? '?'} ${r.name ?? ''} ${r.type ?? ''}`.replace(/\s+/g, ' ').trim())
+        .join('; ');
+      const details = rrsets.length > 5 ? `${changeList}; +${rrsets.length - 5} more` : (changeList || '0 changes');
       logActivity({
         ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'record',
         resourceId: id, resourceName: id,
-        details: `${count} rrset change(s)`,
+        details,
       });
     }
     return forwardPdnsResponse(response);

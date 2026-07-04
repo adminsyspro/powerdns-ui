@@ -27,14 +27,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await request.json();
     const userId = String(body.userId ?? '');
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    const user = getDb().prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    const user = getDb().prepare('SELECT id, username FROM users WHERE id = ?').get(userId) as { id: string; username: string } | undefined;
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
     addManualMember(group.id, userId);
     logActivity({
       ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'group',
       resourceId: slug, resourceName: group.name,
-      details: `added member ${userId}`,
+      details: `added member ${user.username}`,
     });
     return NextResponse.json(listMembers(group.id), { status: 201 });
   } catch (e) {

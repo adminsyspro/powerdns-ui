@@ -121,7 +121,9 @@ export async function POST(request: NextRequest) {
     ...actorFromHeaders(request),
     action: 'create', resourceType: 'proxy_env',
     resourceId: id, resourceName: row.name,
-    details: isFull ? 'full-access' : `${zones?.length ?? 0} zone(s)`,
+    details: isFull
+      ? `full-access${readOnly ? ', read-only' : ''}`
+      : `scoped: ${zones && zones.length ? zones.map((z) => z.zoneName).filter(Boolean).join(', ') : 'no zones'}${readOnly ? ', read-only' : ''}`,
   });
 
   return NextResponse.json({

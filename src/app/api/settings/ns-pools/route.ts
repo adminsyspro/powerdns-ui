@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
     ...actorFromHeaders(request),
     action: 'update', resourceType: 'setting',
     resourceId: 'ns-pools', resourceName: 'ns-pools',
-    details: `${pools.length} pool(s)`,
+    details: `pools: ${pools.length > 10 ? `${pools.slice(0, 10).map((p) => p.name).join(', ')}, +${pools.length - 10} more` : (pools.map((p) => p.name).join(', ') || 'none')}`,
   });
 
   return NextResponse.json({ pools });

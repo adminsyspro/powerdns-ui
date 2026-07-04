@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest) {
       ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'setting',
       resourceId: 'oidc', resourceName: 'oidc',
-      details: `enabled=${!!body.enabled}`,
+      details: `enabled=${!!body.enabled}${body.issuerUrl ? `, issuer=${body.issuerUrl}` : ''}${body.clientId ? `, clientId=${body.clientId}` : ''}`,
     });
 
     return NextResponse.json({ success: true });

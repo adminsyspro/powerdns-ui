@@ -94,7 +94,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         ...actorFromRequest(request, ctx),
         action: 'update', resourceType: 'zone',
         resourceId: id, resourceName: id,
-        details: `metadata ${kind} set (${metadata.length} value(s))`,
+        details: `${kind} = ${metadata.length > 10 ? `${metadata.slice(0, 10).join(', ')}, +${metadata.length - 10} more` : metadata.join(', ')}`,
       });
     }
     return forwardPdnsResponse(response);

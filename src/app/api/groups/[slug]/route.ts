@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       ...actorFromRequest(request, ctx),
       action: 'update', resourceType: 'group',
       resourceId: slug, resourceName: group.name,
-      details: null,
+      details: `updated: ${Object.keys(fields).join(', ') || 'group'}`,
     });
     return NextResponse.json(group);
   } catch (e) {

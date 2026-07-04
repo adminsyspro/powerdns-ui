@@ -4,6 +4,7 @@ import { isCertsEnabled } from '@/lib/certs/config';
 import { createAcmeAccount, listAcmeAccounts } from '@/lib/certs/store';
 import type { CaType, PropagationMode } from '@/lib/certs/types';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
+import { parseSingleCaRoot } from '@/lib/certs/acme-trust';
 
 const CA_TYPES: CaType[] = ['letsencrypt', 'step-ca', 'other'];
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
@@ -51,14 +52,25 @@ export async function POST(request: NextRequest) {
     if (body.propagationMode !== undefined && !PROP_MODES.includes(body.propagationMode))
       return NextResponse.json({ error: 'invalid propagationMode' }, { status: 400 });
     const propagationMode: PropagationMode = body.propagationMode ?? 'authoritative';
+    let rootPem = body.rootPem ? String(body.rootPem) : null;
+    let rootFingerprintSha256 = body.rootFingerprintSha256 ? String(body.rootFingerprintSha256) : null;
+    if (rootPem) {
+      try {
+        const parsed = parseSingleCaRoot(rootPem);
+        rootPem = parsed.pem;
+        rootFingerprintSha256 = parsed.fingerprint;
+      } catch (e) {
+        return NextResponse.json({ error: `invalid root PEM: ${e instanceof Error ? e.message : 'parse error'}` }, { status: 400 });
+      }
+    }
     try {
       const account = createAcmeAccount({
         name, caType, directoryUrl,
         contactEmail: body.contactEmail ? String(body.contactEmail) : '',
         eabKid: body.eabKid ? String(body.eabKid) : null,
         eabHmacKey: body.eabHmacKey ? String(body.eabHmacKey) : null,
-        rootPem: body.rootPem ? String(body.rootPem) : null,
-        rootFingerprintSha256: body.rootFingerprintSha256 ? String(body.rootFingerprintSha256) : null,
+        rootPem,
+        rootFingerprintSha256,
         propagationMode,
         propagationResolver: body.propagationResolver ? String(body.propagationResolver) : null,
         tosAgreed: body.tosAgreed === true,

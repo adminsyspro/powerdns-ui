@@ -69,15 +69,15 @@ export function buildOriginRootMap(
 let originToAgent = new Map<string, https.Agent>();
 let interceptorInstalled = false;
 
-/** Rebuild the per-origin HTTPS agents from the given pinned roots; destroy old ones. */
+/** Rebuild the per-origin HTTPS agents from the given pinned roots. */
 export function setTrustRoots(entries: { directoryUrl: string; rootPem: string }[]): void {
   const next = new Map<string, https.Agent>();
   for (const [origin, roots] of buildOriginRootMap(entries)) {
     next.set(origin, new https.Agent({ ca: [...tls.rootCertificates, ...roots], keepAlive: false }));
   }
-  const old = originToAgent;
+  // Agents use keepAlive:false, so old ones hold no idle sockets — let them be GC'd
+  // (destroying could abort an in-flight concurrent request).
   originToAgent = next;
-  for (const agent of old.values()) agent.destroy();
 }
 
 /** The agent for a URL's origin, or undefined to use axios' default (public roots only). */

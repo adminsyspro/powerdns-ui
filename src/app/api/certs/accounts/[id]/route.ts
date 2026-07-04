@@ -4,6 +4,7 @@ import { isCertsEnabled } from '@/lib/certs/config';
 import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccountIfUnused } from '@/lib/certs/store';
 import type { PropagationMode } from '@/lib/certs/types';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
+import { parseSingleCaRoot } from '@/lib/certs/acme-trust';
 
 type RouteContext = { params: Promise<{ id: string }> };
 const PROP_MODES: PropagationMode[] = ['authoritative', 'resolver', 'delay'];
@@ -50,6 +51,19 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'invalid propagationMode' }, { status: 400 });
     if (body.directoryUrl !== undefined && !validateHttpsUrl(String(body.directoryUrl)))
       return NextResponse.json({ error: 'directoryUrl must be a valid https URL' }, { status: 400 });
+    let rootPemPatch: string | null | undefined =
+      body.rootPem !== undefined ? (body.rootPem ? String(body.rootPem) : null) : undefined;
+    let rootFpPatch: string | null | undefined =
+      body.rootFingerprintSha256 !== undefined ? (body.rootFingerprintSha256 ? String(body.rootFingerprintSha256) : null) : undefined;
+    if (typeof rootPemPatch === 'string' && rootPemPatch.trim() !== '') {
+      try {
+        const parsed = parseSingleCaRoot(rootPemPatch);
+        rootPemPatch = parsed.pem;
+        rootFpPatch = parsed.fingerprint;
+      } catch (e) {
+        return NextResponse.json({ error: `invalid root PEM: ${e instanceof Error ? e.message : 'parse error'}` }, { status: 400 });
+      }
+    }
     try {
       const updated = updateAcmeAccount(id, {
         name: body.name !== undefined ? String(body.name).trim() : undefined,
@@ -57,8 +71,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         directoryUrl: body.directoryUrl !== undefined ? String(body.directoryUrl).trim() : undefined,
         eabKid: body.eabKid !== undefined ? (body.eabKid ? String(body.eabKid) : null) : undefined,
         eabHmacKey: body.eabHmacKey !== undefined ? (body.eabHmacKey ? String(body.eabHmacKey) : null) : undefined,
-        rootPem: body.rootPem !== undefined ? (body.rootPem ? String(body.rootPem) : null) : undefined,
-        rootFingerprintSha256: body.rootFingerprintSha256 !== undefined ? (body.rootFingerprintSha256 ? String(body.rootFingerprintSha256) : null) : undefined,
+        rootPem: rootPemPatch,
+        rootFingerprintSha256: rootFpPatch,
         propagationMode: body.propagationMode,
         propagationResolver: body.propagationResolver !== undefined ? (body.propagationResolver ? String(body.propagationResolver) : null) : undefined,
         tosAgreed: body.tosAgreed !== undefined ? body.tosAgreed === true : undefined,

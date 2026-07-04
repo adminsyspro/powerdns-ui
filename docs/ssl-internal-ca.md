@@ -34,8 +34,9 @@ Point step-ca's resolver at PowerDNS / an internal recursor, and set
 success does not prove step-ca can validate.
 
 ### Security notes
-- The app only ever reads step-ca's **public** certs (`step-ca-certs` volume, read-only).
-  The root key and password stay inside step-ca (`step-ca-data`, never mounted in the app).
+- The app only ever reads step-ca's **public** certs (the `step-ca-public` volume, read-only),
+  which a small root sidecar (`step-ca-pub`) copies out of step-ca's state. The root key and
+  password stay inside step-ca (`step-ca-data`, never mounted in the app).
 - Trust is pinned per CA origin: the internal root is trusted only for `step-ca:9000`,
   never for public CAs like Let's Encrypt.
 - Consumers of issued certs must trust the root (download it from the Internal CA panel).

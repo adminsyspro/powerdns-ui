@@ -1,0 +1,29 @@
+# E2E-only overlay — merged by scripts/e2e-internal-ca.sh:
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml --profile internal-ca ...
+#
+# Pins a fixed subnet so step-ca can use the test PowerDNS as its DNS resolver at a
+# stable IP (172.31.0.53) to self-validate the DNS-01 challenge. This is TEST-ONLY —
+# the base docker-compose.yml deliberately uses Docker's default networking so ordinary
+# `docker compose up` deployments are never forced onto a fixed subnet.
+services:
+  powerdns-ui:
+    networks:
+      - ssl-e2e
+  powerdns:
+    networks:
+      ssl-e2e:
+        ipv4_address: 172.31.0.53
+  step-ca:
+    dns:
+      - "172.31.0.53"
+    networks:
+      - ssl-e2e
+  step-ca-pub:
+    networks:
+      - ssl-e2e
+
+networks:
+  ssl-e2e:
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24

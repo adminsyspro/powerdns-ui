@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ENV_FILE=.env.e2e
-COMPOSE=(docker compose --env-file "$ENV_FILE" --profile internal-ca)
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.e2e.yml --profile internal-ca)
 BASE=http://localhost:3000
 PDNS=http://localhost:8081
 PDNS_KEY=changeme
@@ -94,7 +94,7 @@ curl -fsS -b "$COOKIE" -c "$COOKIE" -X POST "$BASE/api/certs/$CERT_ID/issue" >/d
 echo "== poll for status=valid =="
 st=""
 for i in $(seq 1 60); do
-  st=$(curl -fsS -b "$COOKIE" -c "$COOKIE" "$BASE/api/certs/$CERT_ID" | jq -r .status)
+  st=$(curl -fsS -b "$COOKIE" -c "$COOKIE" "$BASE/api/certs/$CERT_ID" | jq -r .status) || st="pending"
   echo "   status: $st ($i)"
   [[ "$st" == "valid" ]] && break
   if [[ "$st" == "error" ]]; then

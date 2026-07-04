@@ -37,8 +37,6 @@ services:
     image: powerdns/pdns-auth-48:latest
     container_name: powerdns
     ports:
-      - "53:53/tcp"
-      - "53:53/udp"
       - "8081:8081"
     environment:
       - PDNS_AUTH_API=yes

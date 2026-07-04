@@ -12,6 +12,16 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# NEXT_PUBLIC_* are inlined into the client bundle at BUILD time — runtime env alone
+# never reaches the browser, so client-side feature gating (e.g. the SSL Certificates
+# nav item, the Internal CA tab) needs these present during `next build`.
+ARG NEXT_PUBLIC_CERTS_ENABLED=false
+ARG NEXT_PUBLIC_INTERNAL_CA_ENABLED=false
+ARG NEXT_PUBLIC_APP_URL=
+ENV NEXT_PUBLIC_CERTS_ENABLED=$NEXT_PUBLIC_CERTS_ENABLED \
+    NEXT_PUBLIC_INTERNAL_CA_ENABLED=$NEXT_PUBLIC_INTERNAL_CA_ENABLED \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+
 # Build application
 RUN npm run build
 

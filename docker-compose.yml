@@ -2,7 +2,14 @@ version: '3.8'
 
 services:
   powerdns-ui:
-    build: .
+    build:
+      context: .
+      args:
+        # Inlined into the client bundle at build time (see Dockerfile) so the
+        # SSL nav item / Internal CA tab render. Must be rebuilt (--build) to change.
+        NEXT_PUBLIC_CERTS_ENABLED: ${NEXT_PUBLIC_CERTS_ENABLED:-false}
+        NEXT_PUBLIC_INTERNAL_CA_ENABLED: ${NEXT_PUBLIC_INTERNAL_CA_ENABLED:-false}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
     container_name: powerdns-ui
     ports:
       - "3000:3000"

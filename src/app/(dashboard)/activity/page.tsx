@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { formatDateTime } from '@/lib/utils';
 import * as api from '@/lib/api';
 import type { ActivityEntry } from '@/lib/activity/log';
@@ -43,6 +44,15 @@ function getActionBadge(action: string) {
   return <Badge variant="outline">{action}</Badge>;
 }
 
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[120px_1fr] gap-3 py-2 text-sm">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="break-words">{children}</dd>
+    </div>
+  );
+}
+
 export default function ActivityPage() {
   const [search, setSearch] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
@@ -52,6 +62,7 @@ export default function ActivityPage() {
   const [data, setData] = React.useState<api.PaginatedActivity | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [selected, setSelected] = React.useState<ActivityEntry | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => {
@@ -173,11 +184,11 @@ export default function ActivityPage() {
                 </TableHeader>
                 <TableBody>
                   {items.map((entry) => (
-                    <TableRow key={entry.id}>
+                    <TableRow key={entry.id} className="cursor-pointer" onClick={() => setSelected(entry)}>
                       <TableCell><div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">{getActionIcon(entry.action, entry.resourceType)}</div></TableCell>
                       <TableCell>{getActionBadge(entry.action)}</TableCell>
                       <TableCell className="font-medium">{entry.actorName}</TableCell>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell>
                         {entry.resourceType}
                         {entry.resourceName ? `: ${entry.resourceName}` : ''}
                       </TableCell>
@@ -207,6 +218,38 @@ export default function ActivityPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent>
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                    {getActionIcon(selected.action, selected.resourceType)}
+                  </div>
+                  Activity details
+                </DialogTitle>
+                <DialogDescription>{formatDateTime(selected.ts * 1000)}</DialogDescription>
+              </DialogHeader>
+              <dl className="divide-y">
+                <DetailRow label="Action">{getActionBadge(selected.action)}</DetailRow>
+                <DetailRow label="Resource">
+                  {selected.resourceType}{selected.resourceName ? `: ${selected.resourceName}` : ''}
+                </DetailRow>
+                {selected.resourceId && (
+                  <DetailRow label="Resource ID"><span className="font-mono text-xs break-all">{selected.resourceId}</span></DetailRow>
+                )}
+                <DetailRow label="User">{selected.actorName}</DetailRow>
+                {selected.actorIp && (
+                  <DetailRow label="IP address"><span className="font-mono text-xs">{selected.actorIp}</span></DetailRow>
+                )}
+                {selected.details && <DetailRow label="Details">{selected.details}</DetailRow>}
+              </dl>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

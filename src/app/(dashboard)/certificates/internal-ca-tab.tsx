@@ -44,6 +44,10 @@ export function InternalCaTab({ onChange }: { onChange: () => void }) {
     return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   }
 
+  if (error && !status) {
+    return <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>;
+  }
+
   if (!status?.enabled) {
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">

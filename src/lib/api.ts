@@ -16,7 +16,7 @@ import type { NsAuditResults, NsAuditScanState } from '@/lib/ns-audit';
 import type { IntegrationConfig, IntegrationRow, IntegrationZoneRow } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
-import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch, Certificate, CertEvent } from '@/lib/certs/types';
+import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch, Certificate, CertEvent, InternalCaStatus } from '@/lib/certs/types';
 import type { ActivityEntry } from '@/lib/activity/log';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
@@ -559,6 +559,15 @@ export async function updateAcmeAccountApi(id: string, patch: AcmeAccountPatch) 
 
 export async function deleteAcmeAccountApi(id: string) {
   return apiRequest<void>(`/api/certs/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// --- SSL certificates: internal CA (bundled step-ca) ---
+export function fetchInternalCaStatus() {
+  return apiRequest<InternalCaStatus>('/api/certs/internal-ca');
+}
+
+export function setupInternalCaApi() {
+  return apiRequest<AcmeAccount>('/api/certs/internal-ca/setup', { method: 'POST' });
 }
 
 // --- SSL certificates: certificates ---

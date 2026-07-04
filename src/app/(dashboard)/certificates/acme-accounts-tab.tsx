@@ -5,6 +5,7 @@ import { Loader2, Trash2, Pencil, CheckCircle2, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,14 +23,16 @@ const ACCOUNT_STATUS: Record<string, string> = {
 const LE_STAGING = 'https://acme-staging-v02.api.letsencrypt.org/directory';
 
 type FormState = {
-  name: string; directoryUrl: string; caType: 'letsencrypt' | 'other';
+  name: string; directoryUrl: string; caType: 'letsencrypt' | 'step-ca' | 'other';
   contactEmail: string; eabKid: string; eabHmacKey: string;
+  rootPem: string; rootFingerprintSha256: string;
   propagationMode: 'authoritative' | 'resolver' | 'delay'; propagationResolver: string; tosAgreed: boolean;
 };
 
 const EMPTY: FormState = {
   name: '', directoryUrl: LE_STAGING, caType: 'letsencrypt', contactEmail: '',
-  eabKid: '', eabHmacKey: '', propagationMode: 'authoritative', propagationResolver: '', tosAgreed: false,
+  eabKid: '', eabHmacKey: '', rootPem: '', rootFingerprintSha256: '',
+  propagationMode: 'authoritative', propagationResolver: '', tosAgreed: false,
 };
 
 export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
@@ -55,8 +58,9 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
   function openEdit(a: AcmeAccount) {
     setEditing(a);
     setForm({
-      name: a.name, directoryUrl: a.directoryUrl, caType: a.caType === 'step-ca' ? 'other' : a.caType,
+      name: a.name, directoryUrl: a.directoryUrl, caType: a.caType,
       contactEmail: a.contactEmail ?? '', eabKid: a.eabKid ?? '', eabHmacKey: '',
+      rootPem: '', rootFingerprintSha256: a.rootFingerprintSha256 ?? '',
       propagationMode: a.propagationMode, propagationResolver: a.propagationResolver ?? '', tosAgreed: a.tosAgreed,
     });
     setError(''); setDialogOpen(true);
@@ -74,6 +78,8 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
       contactEmail: form.contactEmail.trim() || undefined,
       eabKid: form.eabKid.trim() || undefined,
       eabHmacKey: form.eabHmacKey.trim() || undefined,
+      rootPem: form.caType !== 'letsencrypt' ? (form.rootPem.trim() || undefined) : undefined,
+      rootFingerprintSha256: form.caType !== 'letsencrypt' ? (form.rootFingerprintSha256.trim() || undefined) : undefined,
       propagationMode: form.propagationMode,
       propagationResolver: form.propagationMode === 'resolver' ? (form.propagationResolver.trim() || undefined) : undefined,
       tosAgreed: form.tosAgreed,
@@ -120,7 +126,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editing ? 'Edit account' : 'New ACME account'}</DialogTitle>
-              <DialogDescription>Let&apos;s Encrypt or any public ACME (EAB supported). step-ca is coming in Phase 5.</DialogDescription>
+              <DialogDescription>Let&apos;s Encrypt, a private step-ca, or any ACME CA (EAB supported). For a private CA, pin its root by PEM or SHA-256 fingerprint.</DialogDescription>
             </DialogHeader>
             {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
             <div className="space-y-4">
@@ -129,13 +135,43 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
               <div className="flex gap-4">
                 <div className="flex-1 space-y-2">
                   <Label>CA type</Label>
-                  <Select value={form.caType} onValueChange={(v) => setForm({ ...form, caType: v as 'letsencrypt' | 'other' })} disabled={!!editing}>
+                  <Select value={form.caType} onValueChange={(v) => setForm({ ...form, caType: v as FormState['caType'] })} disabled={!!editing}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="letsencrypt">Let&apos;s Encrypt</SelectItem><SelectItem value="other">Other (ACME)</SelectItem></SelectContent>
+                    <SelectContent>
+                      <SelectItem value="letsencrypt">Let&apos;s Encrypt</SelectItem>
+                      <SelectItem value="step-ca">step-ca (private)</SelectItem>
+                      <SelectItem value="other">Other (ACME)</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="flex-1 space-y-2"><Label>Contact email</Label><Input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} /></div>
               </div>
+              {form.caType !== 'letsencrypt' && (
+                <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Private CA trust — provide the root PEM (recommended) <em>or</em> its SHA-256 fingerprint. Leave blank for a CA that chains to a public root.
+                  </p>
+                  <div className="space-y-2">
+                    <Label>Root CA PEM {editing ? '(leave blank = unchanged)' : '(optional)'}</Label>
+                    <Textarea
+                      rows={4}
+                      className="font-mono text-xs"
+                      placeholder={'-----BEGIN CERTIFICATE-----\n...'}
+                      value={form.rootPem}
+                      onChange={(e) => setForm({ ...form, rootPem: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Root SHA-256 fingerprint (optional)</Label>
+                    <Input
+                      className="font-mono text-xs"
+                      placeholder="e.g. d73a0d…e66e2b"
+                      value={form.rootFingerprintSha256}
+                      onChange={(e) => setForm({ ...form, rootFingerprintSha256: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex gap-4">
                 <div className="flex-1 space-y-2"><Label>EAB KID (optional)</Label><Input value={form.eabKid} onChange={(e) => setForm({ ...form, eabKid: e.target.value })} /></div>
                 <div className="flex-1 space-y-2">

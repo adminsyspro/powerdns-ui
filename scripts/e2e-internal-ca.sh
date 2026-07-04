@@ -108,7 +108,7 @@ done
 
 echo "== assert + dump =="
 curl -fsS -b "$COOKIE" -c "$COOKIE" "$BASE/api/certs/$CERT_ID" | jq '{name,status,issuer,serial,notAfter}'
-"${COMPOSE[@]}" exec -T powerdns-ui sh -c 'cat /data/certs/live/'"$SAN"'/fullchain.pem' \
+"${COMPOSE[@]}" exec -T powerdns-ui sh -c 'cat "${CERTS_DIR:-/app/data/certs}/live/'"$SAN"'/fullchain.pem"' \
   | openssl x509 -noout -subject -issuer -dates -ext subjectAltName || echo "(fullchain dump skipped)"
 echo
 echo "E2E PASSED ✅  — stack left up. Open $BASE (admin/admin) → SSL Certificates to observe."

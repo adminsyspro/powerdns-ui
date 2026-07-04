@@ -6,7 +6,7 @@ import {
   selectCertFromBundleByFingerprint, originOf, buildOriginRootMap,
   setTrustRoots, pickAgentForUrl, applyTrust, installTrustInterceptor,
 } from '../../src/lib/certs/acme-trust';
-import { ROOT_A_PEM, ROOT_B_PEM, LEAF_PEM } from './fixtures/trust-certs';
+import { ROOT_A_PEM, ROOT_B_PEM, LEAF_PEM, EXPIRED_PEM } from './fixtures/trust-certs';
 
 const STEP_CA_DIR = 'https://step-ca:9000/acme/acme/directory';
 const LE_DIR = 'https://acme-v02.api.letsencrypt.org/directory';
@@ -26,6 +26,7 @@ assert.equal(parsed.fingerprint, fingerprintSha256(ROOT_A_PEM), 'parsed fingerpr
 assert.ok(parsed.notAfter > Math.floor(Date.now() / 1000), 'notAfter in the future');
 assert.throws(() => parseSingleCaRoot(bundle), /exactly 1 certificate/, 'rejects multi-cert bundle');
 assert.throws(() => parseSingleCaRoot(LEAF_PEM), /not a CA/, 'rejects non-CA cert');
+assert.throws(() => parseSingleCaRoot(EXPIRED_PEM), /expired/, 'rejects expired cert');
 
 // bundle-injection defense: pin on ROOT_A returns ONLY ROOT_A from [ROOT_A, ROOT_B]
 const picked = selectCertFromBundleByFingerprint(bundle, fingerprintSha256(ROOT_A_PEM));

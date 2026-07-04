@@ -24,6 +24,8 @@ services:
       - INTERNAL_CA_DIRECTORY_URL=${INTERNAL_CA_DIRECTORY_URL:-https://step-ca:9000/acme/acme/directory}
       - INTERNAL_CA_ROOT_FILE=${INTERNAL_CA_ROOT_FILE:-/etc/step-ca-public/root_ca.crt}
       - INTERNAL_CA_INTERMEDIATE_FILE=${INTERNAL_CA_INTERMEDIATE_FILE:-/etc/step-ca-public/intermediate_ca.crt}
+      # Materialize issued certs onto the persistent data volume (writable by the app uid).
+      - CERTS_DIR=${CERTS_DIR:-/app/data/certs}
       - INTERNAL_CA_PROPAGATION_RESOLVER=${INTERNAL_CA_PROPAGATION_RESOLVER:-}
     volumes:
       - powerdns-ui-data:/app/data

@@ -6,3 +6,9 @@ node_modules
 .env*
 .vscode
 .idea
+data
+secrets
+.superpowers
+.claude
+test
+dev-server.log

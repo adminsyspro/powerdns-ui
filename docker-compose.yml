@@ -28,6 +28,8 @@ services:
     volumes:
       - powerdns-ui-data:/app/data
       - step-ca-certs:/etc/step-ca-public:ro
+    networks:
+      - ssl-e2e
     restart: unless-stopped
 
   # Optional: PowerDNS server for testing
@@ -49,6 +51,9 @@ services:
       - PDNS_AUTH_GSQLITE3_DATABASE=/var/lib/powerdns/pdns.sqlite3
     volumes:
       - powerdns-data:/var/lib/powerdns
+    networks:
+      ssl-e2e:
+        ipv4_address: 172.31.0.53
     restart: unless-stopped
 
   # Optional bundled private ACME CA. Start with: docker compose --profile internal-ca up -d
@@ -72,6 +77,10 @@ services:
       - step-ca-data:/home/step
       # Public certs only (root_ca.crt + intermediate_ca.crt) — shared read-only with the app.
       - step-ca-certs:/home/step/certs
+    dns:
+      - "172.31.0.53"
+    networks:
+      - ssl-e2e
     # Not published to the host by default: the app reaches it on the internal
     # compose network as step-ca:9000. Uncomment to expose:
     # ports:
@@ -92,3 +101,9 @@ volumes:
 secrets:
   step_ca_password:
     file: ./secrets/step_ca_password.txt
+
+networks:
+  ssl-e2e:
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24

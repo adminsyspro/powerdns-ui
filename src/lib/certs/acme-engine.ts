@@ -7,6 +7,7 @@ import {
   setCertificatePrivateKey, getCertificatePrivateKey, setCertificateMaterialized,
 } from './cert-store';
 import { getAcmeAccount, getAccountSecrets } from './store';
+import { reloadAcmeTrust } from './acme-trust';
 import { appendCertEvent } from './event-store';
 import { resolveZonesForSans, resolveZoneForFqdn } from './zone-match';
 import { challengeFqdn, mergeTxtValues, removeTxtValues, buildTxtRrset, buildTxtDelete } from './dns-txt';
@@ -48,6 +49,8 @@ export async function runJob(jobId: string): Promise<void> {
 
     // accountUrl is required — without it, acme-client can't scope
     // createOrder()/getOrder()/finalizeOrder() etc. to this account.
+    // Ensure the shared axios trusts the account's pinned root before ordering.
+    reloadAcmeTrust();
     const client = new acme.Client({
       directoryUrl: account.directoryUrl,
       accountKey: secrets.accountKeyPem,

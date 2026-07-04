@@ -1,5 +1,6 @@
 import * as acme from 'acme-client';
 import { getAcmeAccount, getAccountSecrets, setAccountRegistration } from './store';
+import { reloadAcmeTrust } from './acme-trust';
 import type { AcmeAccount } from './types';
 
 /** Register (or re-register) an ACME account with its CA. Requires tosAgreed. */
@@ -22,6 +23,8 @@ export async function registerAccount(id: string): Promise<AcmeAccount> {
   // unsigned, invalid EAB object to the CA.
   const externalAccountBinding =
     account.eabKid && secrets?.eabHmacKey ? { kid: account.eabKid, hmacKey: secrets.eabHmacKey } : undefined;
+  // Ensure the shared axios trusts this account's pinned root (step-ca / private CA) before we talk to the CA.
+  reloadAcmeTrust();
   const client = new acme.Client({
     directoryUrl: account.directoryUrl,
     accountKey: accountKeyPem,

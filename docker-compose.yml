@@ -27,7 +27,7 @@ services:
       - INTERNAL_CA_PROPAGATION_RESOLVER=${INTERNAL_CA_PROPAGATION_RESOLVER:-}
     volumes:
       - powerdns-ui-data:/app/data
-      - step-ca-certs:/etc/step-ca-public:ro
+      - step-ca-public:/etc/step-ca-public:ro
     networks:
       - ssl-e2e
     restart: unless-stopped
@@ -55,23 +55,10 @@ services:
     restart: unless-stopped
 
   # Optional bundled private ACME CA. Start with: docker compose --profile internal-ca up -d
-  # One-shot: a fresh named volume mounts root-owned, so chown step-ca-certs to the
-  # step user (uid 1000) before step-ca inits — else "root_ca.crt: permission denied".
-  step-ca-init:
-    image: busybox:latest
-    profiles: ["internal-ca"]
-    command: ["sh", "-c", "chown -R 1000:1000 /certs"]
-    volumes:
-      - step-ca-certs:/certs
-    restart: "no"
-
   step-ca:
     image: smallstep/step-ca:latest
     container_name: step-ca
     profiles: ["internal-ca"]
-    depends_on:
-      step-ca-init:
-        condition: service_completed_successfully
     environment:
       - DOCKER_STEPCA_INIT_NAME=PowerDNS UI Internal CA
       # MUST include the compose service name so the CA's own TLS cert has it as a SAN
@@ -84,10 +71,10 @@ services:
     secrets:
       - step_ca_password
     volumes:
-      # Full CA state incl. secrets/ — NEVER mounted into the app.
+      # Single volume step-ca owns (step:step via image ownership) — full state incl.
+      # secrets/; NEVER mounted into the app. The public certs are published separately
+      # by the step-ca-pub sidecar below.
       - step-ca-data:/home/step
-      # Public certs only (root_ca.crt + intermediate_ca.crt) — shared read-only with the app.
-      - step-ca-certs:/home/step/certs
     dns:
       - "172.31.0.53"
     networks:
@@ -103,11 +90,27 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # Publishes ONLY the two public CA certs, world-readable (0644), to a separate
+  # volume the app mounts. step-ca writes them 0600 as uid 1000; this root sidecar
+  # copies them out so the app (a different uid) can read them WITHOUT ever mounting
+  # step-ca's secrets. Re-run `up` after an intermediate rollover to refresh.
+  step-ca-pub:
+    image: busybox:latest
+    profiles: ["internal-ca"]
+    depends_on:
+      step-ca:
+        condition: service_healthy
+    command: ["sh", "-c", "cp /src/certs/root_ca.crt /src/certs/intermediate_ca.crt /pub/ && chmod 644 /pub/root_ca.crt /pub/intermediate_ca.crt && echo published"]
+    volumes:
+      - step-ca-data:/src:ro
+      - step-ca-public:/pub
+    restart: "no"
+
 volumes:
   powerdns-data:
   powerdns-ui-data:
   step-ca-data:
-  step-ca-certs:
+  step-ca-public:
 
 secrets:
   step_ca_password:

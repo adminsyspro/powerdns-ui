@@ -16,7 +16,10 @@ import * as api from '@/lib/api';
 import type { Certificate, AcmeAccount } from '@/lib/certs/types';
 import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
+import { InternalCaTab } from './internal-ca-tab';
 import { CertsOverview } from './certs-overview';
+
+const INTERNAL_CA_UI = process.env.NEXT_PUBLIC_INTERNAL_CA_ENABLED === 'true';
 
 const STATUS_BADGE: Record<string, string> = {
   valid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -196,6 +199,7 @@ export default function CertificatesPage() {
         <TabsList>
           <TabsTrigger value="certificates"><ShieldCheck className="mr-2 h-4 w-4" />Certificates</TabsTrigger>
           <TabsTrigger value="accounts"><KeyRound className="mr-2 h-4 w-4" />ACME Accounts</TabsTrigger>
+          {INTERNAL_CA_UI && <TabsTrigger value="internal-ca"><ShieldCheck className="mr-2 h-4 w-4" />Internal CA</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -271,6 +275,12 @@ export default function CertificatesPage() {
         <TabsContent value="accounts">
           <AcmeAccountsTab onChange={load} />
         </TabsContent>
+
+        {INTERNAL_CA_UI && (
+          <TabsContent value="internal-ca">
+            <InternalCaTab onChange={load} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <ConfirmDialog />

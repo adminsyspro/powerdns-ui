@@ -55,10 +55,23 @@ services:
     restart: unless-stopped
 
   # Optional bundled private ACME CA. Start with: docker compose --profile internal-ca up -d
+  # One-shot: a fresh named volume mounts root-owned, so chown step-ca-certs to the
+  # step user (uid 1000) before step-ca inits — else "root_ca.crt: permission denied".
+  step-ca-init:
+    image: busybox:latest
+    profiles: ["internal-ca"]
+    command: ["sh", "-c", "chown -R 1000:1000 /certs"]
+    volumes:
+      - step-ca-certs:/certs
+    restart: "no"
+
   step-ca:
     image: smallstep/step-ca:latest
     container_name: step-ca
     profiles: ["internal-ca"]
+    depends_on:
+      step-ca-init:
+        condition: service_completed_successfully
     environment:
       - DOCKER_STEPCA_INIT_NAME=PowerDNS UI Internal CA
       # MUST include the compose service name so the CA's own TLS cert has it as a SAN

@@ -9,13 +9,20 @@ export async function register() {
     startReconcileWorker();
   }
 
-  const { isCertsEnabled, isCertRenewalEnabled } = await import('@/lib/certs/config');
+  const { isCertsEnabled, isCertRenewalEnabled, certSecretsMisconfigured } = await import('@/lib/certs/config');
   if (isCertsEnabled()) {
-    const { startCertWorker } = await import('@/lib/certs/cert-worker');
-    startCertWorker();
-    if (isCertRenewalEnabled()) {
-      const { startRenewalWorker } = await import('@/lib/certs/renewal-worker');
-      startRenewalWorker();
+    if (certSecretsMisconfigured()) {
+      console.error(
+        '[certs] REFUSING to start certificate workers: CERTS_ENABLED but neither APP_SECRET nor AUTH_SECRET is set — ' +
+        'cert secrets would be encrypted under the committed public default key. Set APP_SECRET and restart.',
+      );
+    } else {
+      const { startCertWorker } = await import('@/lib/certs/cert-worker');
+      startCertWorker();
+      if (isCertRenewalEnabled()) {
+        const { startRenewalWorker } = await import('@/lib/certs/renewal-worker');
+        startRenewalWorker();
+      }
     }
   }
 }

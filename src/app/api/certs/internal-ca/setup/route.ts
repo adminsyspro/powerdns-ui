@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse, type AuthContext } from '@/lib/auth/authz';
-import { isCertsEnabled, isInternalCaEnabled } from '@/lib/certs/config';
+import { isCertsEnabled, isInternalCaEnabled, certSecretsMisconfigured } from '@/lib/certs/config';
 import { runInternalCaSetup } from '@/lib/certs/internal-ca';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 export async function POST(request: NextRequest) {
   if (!isCertsEnabled() || !isInternalCaEnabled()) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  if (certSecretsMisconfigured()) {
+    return NextResponse.json({ error: 'Certificate operations are disabled: set APP_SECRET (or AUTH_SECRET) so secrets are not stored under the public default key.' }, { status: 503 });
   }
   let ctx: AuthContext;
   try {

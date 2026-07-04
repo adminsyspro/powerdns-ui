@@ -40,3 +40,13 @@ export function getInternalCaIntermediateFile(): string | null {
 export function getInternalCaPropagationResolver(): string | null {
   return process.env.INTERNAL_CA_PROPAGATION_RESOLVER || null;
 }
+
+/**
+ * True when the certs subsystem is enabled but no real encryption secret is set,
+ * so cert secrets (account keys, EAB, private keys) would be derived from the
+ * committed public default key in crypto.ts. The subsystem fails closed in this state.
+ * `||`-style emptiness check mirrors getKey() (an empty env var counts as unset).
+ */
+export function certSecretsMisconfigured(): boolean {
+  return isCertsEnabled() && !process.env.APP_SECRET && !process.env.AUTH_SECRET;
+}

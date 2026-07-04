@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
-import { isCertsEnabled } from '@/lib/certs/config';
+import { isCertsEnabled, certSecretsMisconfigured } from '@/lib/certs/config';
 import { getAcmeAccount, updateAcmeAccount, deleteAcmeAccountIfUnused } from '@/lib/certs/store';
 import type { PropagationMode } from '@/lib/certs/types';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
@@ -34,6 +34,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (certSecretsMisconfigured()) {
+      return NextResponse.json({ error: 'Certificate operations are disabled: set APP_SECRET (or AUTH_SECRET) so secrets are not stored under the public default key.' }, { status: 503 });
+    }
     const ctx = requireAdmin(request);
     const { id } = await params;
     let body: any;

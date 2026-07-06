@@ -12,6 +12,7 @@ assert.throws(() => sanitizeCertName('.hidden'), /invalid/i, 'rejects leading do
 assert.throws(() => sanitizeCertName(''), /invalid/i, 'rejects empty');
 assert.throws(() => sanitizeCertName('a'.repeat(200)), /invalid/i, 'rejects overlong');
 
+delete process.env.CERTS_GID; // ensure legacy branch even if the dev shell exports CERTS_GID
 // materialization into a temp CERTS_DIR
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'certs-mat-'));
 const live = materializeCert({
@@ -61,9 +62,9 @@ function statMode(p: string): number { return fs.statSync(p).mode & 0o7777; }
     const live = materializeCert({ name: 'web', leafPem: 'L\n', chainPem: 'C\n', privkeyPem: 'K\n', certsDir: d });
     assert.equal(statMode(path.join(live, 'privkey.pem')), 0o640, 'shared: privkey relaxed to 0640');
     assert.equal(statMode(path.join(live, 'fullchain.pem')), 0o644, 'shared: public 0644');
-    assert.equal(statMode(d) & 0o2750, 0o2750, 'shared: root dir is setgid 02750');
-    assert.equal(statMode(path.join(d, 'live')) & 0o2750, 0o2750, 'shared: live dir 02750');
-    assert.equal(statMode(live) & 0o2750, 0o2750, 'shared: name dir 02750');
+    assert.equal(statMode(d), 0o2750, 'shared: root dir is exactly 02750');
+    assert.equal(statMode(path.join(d, 'live')), 0o2750, 'shared: live dir exactly 02750');
+    assert.equal(statMode(live), 0o2750, 'shared: name dir exactly 02750');
     assert.equal(fs.statSync(path.join(live, 'privkey.pem')).gid, gid, 'shared: privkey group set');
     assert.equal(fs.statSync(live).gid, gid, 'shared: name dir group set');
     fs.rmSync(d, { recursive: true, force: true });
@@ -153,6 +154,19 @@ function statMode(p: string): number { return fs.statSync(p).mode & 0o7777; }
     delete process.env.CERTS_GID; console.warn = origWarn;
     (fs as any).chownSync = realChown;
   }
+}
+
+// (f) CERTS_UID applied: files/dirs owned by the configured uid (uid=own uid so chown succeeds)
+{
+  const gid = process.getgid!(); const uid = process.getuid!();
+  process.env.CERTS_GID = String(gid); process.env.CERTS_UID = String(uid);
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'certs-uid-'));
+    const live = materializeCert({ name: 'web', leafPem: 'L\n', chainPem: '', privkeyPem: 'K\n', certsDir: d });
+    assert.equal(fs.statSync(path.join(live, 'privkey.pem')).uid, uid, 'CERTS_UID applied to privkey');
+    assert.equal(fs.statSync(live).uid, uid, 'CERTS_UID applied to name dir');
+    fs.rmSync(d, { recursive: true, force: true });
+  } finally { delete process.env.CERTS_GID; delete process.env.CERTS_UID; }
 }
 
 console.log('certs/materialize: ALL PASSED');

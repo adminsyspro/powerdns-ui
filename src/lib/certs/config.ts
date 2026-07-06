@@ -59,7 +59,7 @@ function parseCertId(varName: 'CERTS_UID' | 'CERTS_GID'): number | null {
   const s = raw.trim();
   if (s === '') return null;
   // decimal, non-negative only: rejects "-1", "1.5", "abc", "0x10"
-  if (!/^\d+$/.test(s) || !Number.isSafeInteger(Number(s))) {
+  if (!/^\d+$/.test(s) || !Number.isSafeInteger(Number(s)) || Number(s) >= 2 ** 32) {
     if (!warnedIdVars.has(varName)) {
       warnedIdVars.add(varName);
       console.warn(`[certs] ${varName}="${raw}" is not a non-negative integer; ignoring (shared-export ownership not applied).`);

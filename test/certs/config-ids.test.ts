@@ -61,4 +61,15 @@ withEnv({ CERTS_UID: '-1' }, () => {
   assert.equal(warns.length, 1, 'invalid UID warns once');
 });
 
+// blank present → null, and blank never warns (returns before the warn branch)
+withEnv({ CERTS_GID: '' }, () => {
+  const warns = captureWarn(() => { assert.equal(getCertsGid(), null, 'blank GID → null'); });
+  assert.equal(warns.length, 0, 'blank GID never warns');
+});
+
+// more invalid shapes → null (value-only; the per-var warning already fired once above and is deduped)
+withEnv({ CERTS_GID: '1.5' }, () => { assert.equal(getCertsGid(), null, 'fractional GID rejected'); });
+withEnv({ CERTS_GID: '0x10' }, () => { assert.equal(getCertsGid(), null, 'hex GID rejected'); });
+withEnv({ CERTS_GID: '4294967296' }, () => { assert.equal(getCertsGid(), null, 'out-of-range GID (>= 2**32) rejected'); });
+
 console.log('certs/config-ids: ALL PASSED');

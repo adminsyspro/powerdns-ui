@@ -50,3 +50,27 @@ export function getInternalCaPropagationResolver(): string | null {
 export function certSecretsMisconfigured(): boolean {
   return isCertsEnabled() && !process.env.APP_SECRET && !process.env.AUTH_SECRET;
 }
+
+const warnedIdVars = new Set<string>();
+
+function parseCertId(varName: 'CERTS_UID' | 'CERTS_GID'): number | null {
+  const raw = process.env[varName];
+  if (raw == null) return null;
+  const s = raw.trim();
+  if (s === '') return null;
+  // decimal, non-negative only: rejects "-1", "1.5", "abc", "0x10"
+  if (!/^\d+$/.test(s) || !Number.isSafeInteger(Number(s))) {
+    if (!warnedIdVars.has(varName)) {
+      warnedIdVars.add(varName);
+      console.warn(`[certs] ${varName}="${raw}" is not a non-negative integer; ignoring (shared-export ownership not applied).`);
+    }
+    return null;
+  }
+  return Number(s);
+}
+
+/** Numeric uid to own materialized cert files (shared NFS export). null = leave unchanged. */
+export function getCertsUid(): number | null { return parseCertId('CERTS_UID'); }
+
+/** Numeric gid for materialized cert files; when set, enables group-shared materialization. */
+export function getCertsGid(): number | null { return parseCertId('CERTS_GID'); }

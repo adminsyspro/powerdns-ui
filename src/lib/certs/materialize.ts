@@ -15,8 +15,14 @@ export function sanitizeCertName(name: string): string {
 
 function writeFileAtomic(filePath: string, data: string, mode: number): void {
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmp, data, { mode });
-  fs.chmodSync(tmp, mode); // ensure mode even if umask affected create
+  // O_EXCL: create a fresh regular file — never follow a pre-existing symlink at tmp.
+  const fd = fs.openSync(tmp, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, mode);
+  try {
+    fs.writeFileSync(fd, data);
+    fs.fchmodSync(fd, mode); // enforce mode regardless of umask at create time
+  } finally {
+    fs.closeSync(fd);
+  }
   fs.renameSync(tmp, filePath);
 }
 

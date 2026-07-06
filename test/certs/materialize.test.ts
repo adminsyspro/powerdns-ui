@@ -30,4 +30,23 @@ materializeCert({ name: 'web', leafPem: 'LEAF2\n', chainPem: '', privkeyPem: 'KE
 assert.equal(fs.readFileSync(path.join(live, 'fullchain.pem'), 'utf8'), 'LEAF2\n', 'renewal overwrites; empty chain → fullchain=leaf');
 fs.rmSync(dir, { recursive: true, force: true });
 
+// --- Task 2: writeFileAtomic uses O_EXCL (no symlink follow on the temp file) ---
+{
+  const realOpen = fs.openSync;
+  const seenFlags: number[] = [];
+  (fs as any).openSync = (p: string, flags: number, mode?: number) => {
+    seenFlags.push(flags);
+    return (realOpen as any)(p, flags, mode);
+  };
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'certs-oexcl-'));
+    materializeCert({ name: 'web', leafPem: 'L\n', chainPem: 'C\n', privkeyPem: 'K\n', certsDir: d });
+    assert.ok(seenFlags.length >= 4, 'openSync used for each written file');
+    assert.ok(seenFlags.every((f) => (f & fs.constants.O_EXCL) !== 0), 'every temp open uses O_EXCL');
+    fs.rmSync(d, { recursive: true, force: true });
+  } finally {
+    (fs as any).openSync = realOpen;
+  }
+}
+
 console.log('certs/materialize: ALL PASSED');

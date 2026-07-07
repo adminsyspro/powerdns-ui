@@ -41,8 +41,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Create data directory for SQLite database
-RUN mkdir -p /app/data
+# Data directory for the SQLite DB + materialized certificates, on the app's
+# writable tree. Default CERTS_DIR here so `docker run` (without compose) writes
+# certs to the mounted /app/data volume instead of the code default /data/certs,
+# which is unwritable in the container (compose sets the same value).
+RUN mkdir -p /app/data/certs
+ENV CERTS_DIR=/app/data/certs
 
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app

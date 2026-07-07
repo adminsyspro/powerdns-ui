@@ -27,6 +27,22 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function LiveDot() {
+  return (
+    <span className="relative flex h-2 w-2" aria-hidden>
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+    </span>
+  );
+}
+
+// Console line color: errors red, successful steps green, everything else info.
+function logLineClass(ev: CertEvent): string {
+  if (ev.type === 'error') return 'text-red-400';
+  if (ev.status === 'ok') return 'text-emerald-400';
+  return 'text-sky-300';
+}
+
 export default function CertificateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -62,6 +78,15 @@ export default function CertificateDetailPage() {
     const t = setInterval(() => { refresh(); }, 2000);
     return () => clearInterval(t);
   }, [inProgress, refresh]);
+
+  // Generation log: oldest → newest (reads top-to-bottom like a console), and
+  // auto-scroll to the newest line as events stream in during issuance.
+  const orderedEvents = React.useMemo(() => [...events].sort((a, b) => a.ts - b.ts), [events]);
+  const logRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [orderedEvents]);
 
   async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
@@ -146,6 +171,25 @@ export default function CertificateDetailPage() {
               <Row label="Next attempt" value={ts(cert.nextAttemptAt)} />
               {cert.lastRenewalError && <Row label="Last error" value={<span className="text-destructive">{cert.errorClass}: {cert.lastRenewalError}</span>} />}
               <Row label="Materialized at" value={ts(cert.materializedAt)} />
+              <div className="mt-4 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  Generation log
+                  {inProgress && <LiveDot />}
+                </div>
+                <div ref={logRef} className="max-h-72 overflow-auto rounded-md bg-neutral-950 p-3 font-mono text-xs leading-relaxed text-neutral-200">
+                  {orderedEvents.length === 0 ? (
+                    <span className="text-neutral-500">No log entries yet.</span>
+                  ) : (
+                    orderedEvents.map((ev) => (
+                      <div key={ev.id} className="whitespace-pre-wrap break-words">
+                        <span className="text-neutral-500">{formatDate(ev.ts * 1000)}</span>{' '}
+                        <span className={logLineClass(ev)}>{ev.type}{ev.status ? `/${ev.status}` : ''}</span>
+                        {ev.message ? ` — ${ev.message}` : ''}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -191,10 +235,7 @@ export default function CertificateDetailPage() {
         <TabsContent value="history">
           {inProgress && (
             <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-              </span>
+              <LiveDot />
               Live — updating while the certificate is being issued
             </div>
           )}

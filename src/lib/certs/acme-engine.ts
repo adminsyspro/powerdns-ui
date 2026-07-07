@@ -91,7 +91,7 @@ export async function runJob(jobId: string): Promise<void> {
         throw new Error('cannot recover issued order: private key missing (invalid-identifier)');
       }
       keyPem = Buffer.from(existingKeyPem);
-      fullchain = await client.getCertificate(order);
+      fullchain = await downloadFullchain(client, order);
       added = job.challenges; // whatever a prior attempt recorded, for cleanup below
     } else {
       // 2. Authorizations → dns-01 values (skip already-valid)
@@ -145,8 +145,8 @@ export async function runJob(jobId: string): Promise<void> {
         [, csr] = await acme.crypto.createCsr({ altNames: cert.sans }, keyPem);
       }
       setCertificatePrivateKey(cert.id, keyPem.toString());
-      await client.finalizeOrder(order, csr);
-      fullchain = await client.getCertificate(order);
+      order = await client.finalizeOrder(order, csr);
+      fullchain = await downloadFullchain(client, order);
     }
 
     // 6. Persist + materialize
@@ -187,6 +187,18 @@ export async function runJob(jobId: string): Promise<void> {
 }
 
 // --- helpers (module-private) ---
+
+// acme-client's getCertificate() throws "Unable to download certificate, URL
+// not found" when the order it is handed already has status 'valid' but no
+// `certificate` URL — e.g. a resumed placeholder order, or a stale order object
+// after finalizeOrder. Re-fetch the order in that case so the URL is populated;
+// otherwise getCertificate() re-fetches internally while the order isn't valid.
+async function downloadFullchain(client: acme.Client, order: acme.Order): Promise<string> {
+  if (order.status === 'valid' && !order.certificate) {
+    order = await client.getOrder(order);
+  }
+  return client.getCertificate(order);
+}
 
 function zoneFor(serverUrl: string, fqdn: string): string {
   const z = resolveZoneForFqdn(serverUrl, fqdn);

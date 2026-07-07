@@ -130,173 +130,182 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>New certificate</DialogTitle>
           <DialogDescription>ACME DNS-01 issuance. SANs are canonicalized server-side.</DialogDescription>
         </DialogHeader>
         {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cert-name">Name (identifier / folder on disk)</Label>
-            <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
-          </div>
+        {/* Scrollable body: header + footer stay pinned, only this middle scrolls. */}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+            {/* Left column — identity & issuance options */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="cert-name">Name (identifier / folder on disk)</Label>
+                <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cert-category">Category</Label>
-            <Input id="cert-category" list="cert-category-list" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Production (optional)" />
-            <datalist id="cert-category-list">
-              {(categories ?? []).map((c) => <option key={c} value={c} />)}
-            </datalist>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="cert-category">Category</Label>
+                <Input id="cert-category" list="cert-category-list" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Production (optional)" />
+                <datalist id="cert-category-list">
+                  {(categories ?? []).map((c) => <option key={c} value={c} />)}
+                </datalist>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cert-comment">Comment</Label>
-            <Textarea id="cert-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional note about this certificate" />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="cert-comment">Comment</Label>
+                <Textarea id="cert-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional note about this certificate" />
+              </div>
 
-          <div className="space-y-2">
-            <Label>PowerDNS connection</Label>
-            <Select value={connectionId} onValueChange={onConnectionChange}>
-              <SelectTrigger><SelectValue placeholder="Choose a connection" /></SelectTrigger>
-              <SelectContent>
-                {connections.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className="flex items-center gap-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/powerdns-logo.png" alt="" className="h-4 w-4 shrink-0 object-cover object-left" />
-                      {c.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* SAN builder */}
-          <div className="space-y-2">
-            <Label>Domains / SAN</Label>
-            {!connectionId ? (
-              <p className="text-sm text-muted-foreground">Choose a PowerDNS connection first.</p>
-            ) : (
-              <div className="space-y-2 rounded-md border p-3">
-                {/* zone typeahead */}
-                <Input
-                  value={zoneQuery}
-                  onChange={(e) => setZoneQuery(e.target.value)}
-                  placeholder="Search a zone…"
-                />
-                {zoneResults.length > 0 && (
-                  <div className="max-h-40 overflow-auto rounded-md border">
-                    {zoneResults.map((z) => (
-                      <button
-                        key={z.id}
-                        type="button"
-                        onClick={() => selectZone(z)}
-                        className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
-                      >
-                        {stripDot(z.name)}
-                      </button>
+              <div className="space-y-2">
+                <Label>ACME account</Label>
+                <Select value={accountId} onValueChange={setAccountId}>
+                  <SelectTrigger><SelectValue placeholder="Choose an account" /></SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}{a.status !== 'registered' ? ` (${a.status})` : ''}
+                      </SelectItem>
                     ))}
-                  </div>
+                  </SelectContent>
+                </Select>
+                {accounts.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No ACME account. Create one in the &quot;ACME Accounts&quot; tab before creating a certificate.
+                  </p>
                 )}
+              </div>
 
-                {selectedZone && (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{apex}</span>
-                      <Button type="button" variant="outline" size="sm" onClick={() => addSan(apex)}>+ {apex}</Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => addSan(wildcard)}>+ {wildcard}</Button>
-                    </div>
-                    {recordsLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</div>
-                    ) : zoneRecordNames.length > 0 ? (
-                      <div className="max-h-40 space-y-1 overflow-auto">
-                        {zoneRecordNames.map((n) => (
-                          <label key={n} className="flex items-center gap-2 text-sm">
-                            <Checkbox checked={sans.some((x) => x.toLowerCase() === n.toLowerCase())} onCheckedChange={(v) => toggleSan(n, v === true)} />
-                            <span>{n}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No A/AAAA/CNAME records in this zone.</p>
-                    )}
-                  </div>
-                )}
-
-                {/* manual add */}
-                <div className="flex gap-2">
-                  <Input
-                    value={manual}
-                    onChange={(e) => setManual(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSan(manual); setManual(''); } }}
-                    placeholder="Add a SAN manually (e.g. *.other-zone.com)"
-                  />
-                  <Button type="button" variant="secondary" onClick={() => { addSan(manual); setManual(''); }}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-2">
+                  <Label>Key type</Label>
+                  <Select value={keyType} onValueChange={(v) => setKeyType(v as 'ecdsa' | 'rsa')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ecdsa">ECDSA</SelectItem>
+                      <SelectItem value="rsa">RSA</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="cert-renew-days">Renew before (days)</Label>
+                  <Input id="cert-renew-days" type="number" min={1} max={90} value={renewBeforeDays}
+                    onChange={(e) => setRenewBeforeDays(Number(e.target.value))} />
                 </div>
               </div>
-            )}
 
-            {/* selected SAN chips */}
-            {sans.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sans.map((s) => (
-                  <span key={s} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
-                    {s}
-                    <button type="button" onClick={() => removeSan(s)} aria-label={`remove ${s}`} className="text-muted-foreground hover:text-foreground">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
+              <div className="flex items-center gap-2">
+                <Switch id="cert-auto" checked={autoRenew} onCheckedChange={setAutoRenew} />
+                <Label htmlFor="cert-auto">Automatic renewal</Label>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No SAN selected.</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>ACME account</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger><SelectValue placeholder="Choose an account" /></SelectTrigger>
-              <SelectContent>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}{a.status !== 'registered' ? ` (${a.status})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {accounts.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No ACME account. Create one in the &quot;ACME Accounts&quot; tab before creating a certificate.
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-1 space-y-2">
-              <Label>Key type</Label>
-              <Select value={keyType} onValueChange={(v) => setKeyType(v as 'ecdsa' | 'rsa')}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ecdsa">ECDSA</SelectItem>
-                  <SelectItem value="rsa">RSA</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="cert-renew-days">Renew before (days)</Label>
-              <Input id="cert-renew-days" type="number" min={1} max={90} value={renewBeforeDays}
-                onChange={(e) => setRenewBeforeDays(Number(e.target.value))} />
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Switch id="cert-auto" checked={autoRenew} onCheckedChange={setAutoRenew} />
-            <Label htmlFor="cert-auto">Automatic renewal</Label>
+            {/* Right column — domains */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>PowerDNS connection</Label>
+                <Select value={connectionId} onValueChange={onConnectionChange}>
+                  <SelectTrigger><SelectValue placeholder="Choose a connection" /></SelectTrigger>
+                  <SelectContent>
+                    {connections.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        <span className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/powerdns-logo.png" alt="" className="h-4 w-4 shrink-0 object-cover object-left" />
+                          {c.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* SAN builder */}
+              <div className="space-y-2">
+                <Label>Domains / SAN</Label>
+                {!connectionId ? (
+                  <p className="text-sm text-muted-foreground">Choose a PowerDNS connection first.</p>
+                ) : (
+                  <div className="space-y-2 rounded-md border p-3">
+                    {/* zone typeahead */}
+                    <Input
+                      value={zoneQuery}
+                      onChange={(e) => setZoneQuery(e.target.value)}
+                      placeholder="Search a zone…"
+                    />
+                    {zoneResults.length > 0 && (
+                      <div className="max-h-40 overflow-auto rounded-md border">
+                        {zoneResults.map((z) => (
+                          <button
+                            key={z.id}
+                            type="button"
+                            onClick={() => selectZone(z)}
+                            className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
+                          >
+                            {stripDot(z.name)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedZone && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{apex}</span>
+                          <Button type="button" variant="outline" size="sm" onClick={() => addSan(apex)}>+ {apex}</Button>
+                          <Button type="button" variant="outline" size="sm" onClick={() => addSan(wildcard)}>+ {wildcard}</Button>
+                        </div>
+                        {recordsLoading ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</div>
+                        ) : zoneRecordNames.length > 0 ? (
+                          <div className="max-h-40 space-y-1 overflow-auto">
+                            {zoneRecordNames.map((n) => (
+                              <label key={n} className="flex items-center gap-2 text-sm">
+                                <Checkbox checked={sans.some((x) => x.toLowerCase() === n.toLowerCase())} onCheckedChange={(v) => toggleSan(n, v === true)} />
+                                <span>{n}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No A/AAAA/CNAME records in this zone.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* manual add */}
+                    <div className="flex gap-2">
+                      <Input
+                        value={manual}
+                        onChange={(e) => setManual(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSan(manual); setManual(''); } }}
+                        placeholder="Add a SAN manually (e.g. *.other-zone.com)"
+                      />
+                      <Button type="button" variant="secondary" onClick={() => { addSan(manual); setManual(''); }}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* selected SAN chips */}
+                {sans.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {sans.map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
+                        {s}
+                        <button type="button" onClick={() => removeSan(s)} aria-label={`remove ${s}`} className="text-muted-foreground hover:text-foreground">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No SAN selected.</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <DialogFooter>

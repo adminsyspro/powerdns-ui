@@ -311,10 +311,12 @@ async function waitForPropagationAllModes(
   }
   let resolvers: string[];
   if (account.propagationMode === 'resolver') {
-    if (!account.propagationResolver) {
+    // Comma-separated list supported (e.g. "10.10.10.251,10.10.10.252") for
+    // redundancy; setServers() queries them with failover.
+    resolvers = (account.propagationResolver ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (resolvers.length === 0) {
       throw new Error('propagationResolver required for resolver mode (account)');
     }
-    resolvers = [account.propagationResolver];
   } else {
     resolvers = PUBLIC_RESOLVERS; // 'authoritative' (default)
   }

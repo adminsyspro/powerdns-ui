@@ -127,6 +127,7 @@ recover via Settings → LDAP Authentication.
 | **Local Authentication** | Built-in user management with bcrypt passwords |
 | **Multi-Server** | Connect to multiple PowerDNS instances |
 | **DNSSEC Management** | Enable/disable signing on existing zones (e.g. zones received unsigned via AXFR), manage cryptokeys (CSK/KSK/ZSK), copy DS records for the registrar |
+| **SSL Certificates** | Issue and auto-renew SSL/TLS certificates over ACME DNS-01 using your PowerDNS zones, via a bundled private CA (step-ca) or an external ACME CA (Let's Encrypt, Vault, EJBCA, …) |
 | **NS Compliance Audit** | Scan the public delegation of every forward zone and flag anomalies against your nameserver pool (foreign, partial pool, extra NS) |
 | **Zone Transfer Permissions** | Per-zone AXFR rights: allowed transfer sources (`ALLOW-AXFR-FROM`) and extra servers to notify (`ALSO-NOTIFY`) |
 | **Cloudflare Integration** | Replicate Master zones to Cloudflare secondary DNS (Enterprise AXFR): auto-provision zones, force transfers, and toggle the orange-cloud proxy per record from the records table |
@@ -247,6 +248,51 @@ server {
     }
 }
 ```
+
+---
+
+## SSL Certificates
+
+Issue and automatically renew SSL/TLS certificates over **ACME DNS-01**, using the DNS zones PowerDNS-UI already manages. Certificates can be issued by a **bundled private CA** (smallstep step-ca) for internal services, or by an **external ACME CA** such as Let's Encrypt, or your own step-ca, Vault, EJBCA, Sectigo or DigiCert.
+
+DNS-01 challenges are written as `_acme-challenge` TXT records into the target zone, so no inbound HTTP exposure is needed, which is ideal for internal hosts. Issued certificates are materialized to `${CERTS_DIR:-/app/data/certs}` on the data volume and renewed automatically before expiry.
+
+Enable it in your `.env`, then bring up the optional CA and finish setup in the UI:
+
+```bash
+CERTS_ENABLED=true
+NEXT_PUBLIC_CERTS_ENABLED=true
+# Bundled private CA (optional, omit for external-CA-only use):
+INTERNAL_CA_ENABLED=true
+NEXT_PUBLIC_INTERNAL_CA_ENABLED=true
+INTERNAL_CA_PROPAGATION_RESOLVER=<resolver that resolves your internal _acme-challenge records>
+```
+
+```bash
+docker compose --profile internal-ca up -d
+```
+
+Then open **SSL Certificates** in the UI and either run **Internal CA → Set up internal CA** (pins the bundled root and registers the ACME account), or **ACME Accounts → Add account** to connect an external ACME CA. See [`docs/ssl-internal-ca.md`](docs/ssl-internal-ca.md) for the full internal-CA setup, security model, and third-party ACME options.
+
+### DNS-01 propagation
+
+Before asking the CA to validate, the app confirms the challenge TXT is live by querying the resolver in `INTERNAL_CA_PROPAGATION_RESOLVER`. Point it at a resolver that resolves your internal zones **and reflects fresh records**. A caching recursor with a long negative TTL can keep serving "no record" after the TXT was written, which makes issuance time out. Querying the **authoritative** PowerDNS directly, or lowering the zone SOA's negative TTL (the last SOA field, e.g. `60`), avoids this. step-ca itself must also resolve `_acme-challenge`, so set its `dns:` to the same kind of resolver.
+
+### Certificate duration
+
+Certificates from the bundled step-ca are valid for **24 hours by default** (step-ca's ACME provisioner default). To change it, add a `claims` block to the ACME provisioner in step-ca's `ca.json` and reload step-ca. Durations use Go units (`h`, `m`, `s`, with no `d`): 90 days is `2160h`, 30 days is `720h`, 7 days is `168h`.
+
+```bash
+# back up first
+docker exec step-ca cp -n /home/step/config/ca.json /home/step/config/ca.json.bak
+
+# set the duration on the ACME provisioner (example: 90 days)
+docker exec step-ca sh -c 'jq "(.authority.provisioners[]|select(.type==\"ACME\")).claims={minTLSCertDuration:\"5m\",defaultTLSCertDuration:\"2160h\",maxTLSCertDuration:\"2160h\"}" /home/step/config/ca.json > /tmp/ca.new && cat /tmp/ca.new > /home/step/config/ca.json && rm -f /tmp/ca.new'
+
+docker restart step-ca
+```
+
+Already-issued certificates keep their original duration, so re-issue to pick up the new one. Re-apply this after reinitializing step-ca on a fresh volume.
 
 ---
 

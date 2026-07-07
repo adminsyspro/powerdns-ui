@@ -161,7 +161,7 @@ export default function CertificatesPage() {
         </TableCell>
         <TableCell className="text-muted-foreground">{accountName(cert.acmeAccountId)}</TableCell>
         <TableCell>
-          {cert.status === 'pending' ? (
+          {cert.status === 'pending' && cert.renewalStatus !== 'failed' ? (
             <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />Issuing…
             </span>

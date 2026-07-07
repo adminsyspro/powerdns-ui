@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { createCertificate, listCertificates } from '@/lib/certs/cert-store';
+import { enqueueJob } from '@/lib/certs/job-store';
 import { connectionExists } from '@/lib/integrations/connections';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 import type { KeyType } from '@/lib/certs/types';
@@ -76,6 +77,10 @@ export async function POST(request: NextRequest) {
         category: body.category,
         comment: body.comment,
       });
+      // Kick off ACME issuance immediately — creating a certificate should start
+      // it (the worker drains the job). Best-effort: if enqueue fails the cert
+      // still exists and can be issued from the UI ("Issue now").
+      try { enqueueJob(cert.id, 'issue'); } catch { /* non-fatal: issue manually */ }
       logActivity({
         ...actorFromRequest(request, ctx),
         action: 'create',

@@ -192,7 +192,7 @@ export function AcmeAccountsTab({ onChange }: { onChange: () => void }) {
                   </Select>
                 </div>
                 {form.propagationMode === 'resolver' && (
-                  <div className="flex-1 space-y-2"><Label>Resolver (IP)</Label><Input value={form.propagationResolver} onChange={(e) => setForm({ ...form, propagationResolver: e.target.value })} placeholder="1.1.1.1" /></div>
+                  <div className="flex-1 space-y-2"><Label>Resolver (IP)</Label><Input value={form.propagationResolver} onChange={(e) => setForm({ ...form, propagationResolver: e.target.value })} placeholder="e.g. 192.0.2.53" /></div>
                 )}
               </div>
               <div className="flex items-center gap-2">

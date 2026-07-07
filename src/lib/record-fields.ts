@@ -136,7 +136,9 @@ const RECORD_FIELD_CONFIGS: Record<string, RecordFieldConfig> = {
       },
     ],
     parse: (content: string) => {
-      const match = content.trim().match(/^(\d+)\s+(\S+)\s+"?([^"]*)"?$/);
+      // (?=\S) pins the value to the first non-space char so \s+ and [^"]*
+      // never compete for the same spaces (avoids polynomial backtracking).
+      const match = content.trim().match(/^(\d+)\s+(\S+)\s+(?=\S)"?([^"]*)"?$/);
       if (match) {
         return { flags: match[1], tag: match[2], value: match[3] };
       }
@@ -427,7 +429,9 @@ const RECORD_FIELD_CONFIGS: Record<string, RecordFieldConfig> = {
       },
     ],
     parse: (content: string) => {
-      const match = content.trim().match(/^(\d+)\s+(\d+)\s+"?([^"]*)"?$/);
+      // (?=\S) pins the target to the first non-space char so \s+ and [^"]*
+      // never compete for the same spaces (avoids polynomial backtracking).
+      const match = content.trim().match(/^(\d+)\s+(\d+)\s+(?=\S)"?([^"]*)"?$/);
       if (match) {
         return { priority: match[1], weight: match[2], target: match[3] };
       }

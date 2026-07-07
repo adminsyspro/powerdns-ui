@@ -75,7 +75,7 @@ export default function CertificatesPage() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
   const categories = React.useMemo(
-    () => [...new Set(certs.map((c) => c.category).filter((x): x is string => !!x))].sort(),
+    () => [...new Set(certs.map((c) => c.category).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b)),
     [certs],
   );
 

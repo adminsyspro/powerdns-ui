@@ -35,7 +35,10 @@ const TTL_UNIT_SECONDS: Record<string, number> = {
 
 function parseTtl(token: string): number | null {
   if (/^\d+$/.test(token)) return Number(token);
-  const re = /(\d+)([smhdwSMHDW])/g;
+  // Sticky flag: each match must start where the previous one ended, so the
+  // engine never rescans the token from every offset (avoids polynomial
+  // backtracking). Full coverage is still enforced by the length check below.
+  const re = /(\d+)([smhdwSMHDW])/y;
   let total = 0;
   let matched = 0;
   let m: RegExpExecArray | null;

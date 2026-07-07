@@ -108,7 +108,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
     for (const rr of r.data.rrsets ?? []) {
       if (SAN_RECORD_TYPES.has(rr.type)) names.add(stripDot(rr.name));
     }
-    setZoneRecordNames([...names].sort());
+    setZoneRecordNames([...names].sort((a, b) => a.localeCompare(b)));
   }
 
   const apex = selectedZone ? stripDot(selectedZone.name) : '';

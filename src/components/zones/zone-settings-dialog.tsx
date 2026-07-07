@@ -302,7 +302,7 @@ export function ZoneSettingsDialog({
                 <Label>Master Servers</Label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="192.168.1.1"
+                    placeholder="192.0.2.1"
                     value={masterInput}
                     onChange={(e) => setMasterInput(e.target.value)}
                     onKeyDown={(e) => {

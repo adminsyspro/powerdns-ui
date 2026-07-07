@@ -136,8 +136,10 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
           <DialogDescription>ACME DNS-01 issuance. SANs are canonicalized server-side.</DialogDescription>
         </DialogHeader>
         {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-        {/* Scrollable body: header + footer stay pinned, only this middle scrolls. */}
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {/* Scrollable body: header + footer stay pinned, only this middle scrolls.
+            -mx-2/px-2 gives the focus ring room so overflow-y-auto (which also clips
+            the x-axis) doesn't shave the ring off edge-column fields. */}
+        <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2">
           <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
             {/* Left column — identity & issuance options */}
             <div className="space-y-4">

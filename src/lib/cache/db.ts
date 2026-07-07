@@ -256,7 +256,7 @@ function initSchema(db: Database.Database) {
       cert_pem TEXT DEFAULT NULL, chain_pem TEXT DEFAULT NULL, privkey_enc TEXT DEFAULT NULL,
       key_download_enabled INTEGER NOT NULL DEFAULT 1, auto_renew INTEGER NOT NULL DEFAULT 1,
       renew_before_days INTEGER NOT NULL DEFAULT 30, category TEXT DEFAULT NULL,
-      comment TEXT DEFAULT NULL, last_issued_at INTEGER DEFAULT NULL,
+      comment TEXT DEFAULT NULL, last_run_log TEXT DEFAULT NULL, last_issued_at INTEGER DEFAULT NULL,
       last_renewal_success_at INTEGER DEFAULT NULL, materialized_at INTEGER DEFAULT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -399,6 +399,12 @@ function initSchema(db: Database.Database) {
   // editable later). NULL = no comment; legacy rows are left NULL.
   if (!certCols.some((c) => c.name === 'comment')) {
     db.exec('ALTER TABLE certificates ADD COLUMN comment TEXT DEFAULT NULL');
+  }
+
+  // Migration: add last_run_log to certificates — the verbose generation log of
+  // the LATEST issuance run (cleared at the start of each run; last run only).
+  if (!certCols.some((c) => c.name === 'last_run_log')) {
+    db.exec('ALTER TABLE certificates ADD COLUMN last_run_log TEXT DEFAULT NULL');
   }
 
   // Migration (data cleanup): clear the spurious "Enterprise plan not set: …

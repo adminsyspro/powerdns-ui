@@ -15,7 +15,7 @@ const SAFE_COLS =
   `id, name, acme_account_id, connection_id, server_url, sans_json, key_type, status,
    renewal_status, last_renewal_error, error_class, next_attempt_at, not_before, not_after,
    serial, fingerprint_sha256, issuer, (cert_pem IS NOT NULL) AS has_cert,
-   key_download_enabled, auto_renew, renew_before_days, category, comment, last_issued_at,
+   key_download_enabled, auto_renew, renew_before_days, category, comment, last_run_log, last_issued_at,
    last_renewal_success_at, materialized_at, created_at, updated_at`;
 
 function rowToCertificate(r: any): Certificate {
@@ -31,10 +31,17 @@ function rowToCertificate(r: any): Certificate {
     issuer: r.issuer ?? null, hasCert: !!r.has_cert,
     keyDownloadEnabled: r.key_download_enabled === 1, autoRenew: r.auto_renew === 1,
     renewBeforeDays: r.renew_before_days, category: r.category ?? null, comment: r.comment ?? null,
+    lastRunLog: r.last_run_log ?? null,
     lastIssuedAt: r.last_issued_at ?? null, lastRenewalSuccessAt: r.last_renewal_success_at ?? null,
     materializedAt: r.materialized_at ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
+}
+
+/** Overwrite the verbose generation log (last run only). Written by the engine
+ * during issuance; deliberately does NOT bump updated_at (it fires per line). */
+export function setCertRunLog(id: string, log: string, db: Db = getDb()): void {
+  db.prepare('UPDATE certificates SET last_run_log = ? WHERE id = ?').run(log, id);
 }
 
 export function createCertificate(

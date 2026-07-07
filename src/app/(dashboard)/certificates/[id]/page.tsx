@@ -36,11 +36,13 @@ function LiveDot() {
   );
 }
 
-// Console line color: errors red, successful steps green, everything else info.
-function logLineClass(ev: CertEvent): string {
-  if (ev.type === 'error') return 'text-red-400';
-  if (ev.status === 'ok') return 'text-emerald-400';
-  return 'text-sky-300';
+// Console line color for the verbose run log: errors red, success/steps green,
+// acme-client's internal trace dimmed, everything else default.
+function runLineClass(line: string): string {
+  if (/✖|\berror\b|failed|invalid/i.test(line)) return 'text-red-400';
+  if (/✔|issued|materialized|complete|validated|confirmed/i.test(line)) return 'text-emerald-400';
+  if (/\]\s*acme:/.test(line)) return 'text-neutral-400';
+  return 'text-neutral-200';
 }
 
 export default function CertificateDetailPage() {
@@ -79,14 +81,13 @@ export default function CertificateDetailPage() {
     return () => clearInterval(t);
   }, [inProgress, refresh]);
 
-  // Generation log: oldest → newest (reads top-to-bottom like a console), and
-  // auto-scroll to the newest line as events stream in during issuance.
-  const orderedEvents = React.useMemo(() => [...events].sort((a, b) => a.ts - b.ts), [events]);
+  // Generation log (verbose, last run only) auto-scrolls to the newest line as
+  // it streams in during issuance (cert.lastRunLog is refreshed by the poll).
   const logRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [orderedEvents]);
+  }, [cert?.lastRunLog]);
 
   async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
@@ -177,15 +178,11 @@ export default function CertificateDetailPage() {
                   {inProgress && <LiveDot />}
                 </div>
                 <div ref={logRef} className="max-h-72 overflow-auto rounded-md bg-neutral-950 p-3 font-mono text-xs leading-relaxed text-neutral-200">
-                  {orderedEvents.length === 0 ? (
-                    <span className="text-neutral-500">No log entries yet.</span>
+                  {!cert.lastRunLog ? (
+                    <span className="text-neutral-500">No generation log yet — issue the certificate to see the run.</span>
                   ) : (
-                    orderedEvents.map((ev) => (
-                      <div key={ev.id} className="whitespace-pre-wrap break-words">
-                        <span className="text-neutral-500">{formatDate(ev.ts * 1000)}</span>{' '}
-                        <span className={logLineClass(ev)}>{ev.type}{ev.status ? `/${ev.status}` : ''}</span>
-                        {ev.message ? ` — ${ev.message}` : ''}
-                      </div>
+                    cert.lastRunLog.split('\n').map((line, i) => (
+                      <div key={i} className={`whitespace-pre-wrap break-words ${runLineClass(line)}`}>{line}</div>
                     ))
                   )}
                 </div>

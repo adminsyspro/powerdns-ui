@@ -4,7 +4,7 @@ import type { RRSet } from '@/types/powerdns';
 import { getJob, recordJobOrder, recordJobChallenges, markJobCleanupDone, finishJob } from './job-store';
 import {
   getCertificate as getCert, updateCertificateIssuance, setCertificateRenewalFailure,
-  setCertificatePrivateKey, getCertificatePrivateKey, setCertificateMaterialized,
+  setCertificatePrivateKey, getCertificatePrivateKey, setCertificateMaterialized, setCertRunLog,
 } from './cert-store';
 import { getAcmeAccount, getAccountSecrets } from './store';
 import { reloadAcmeTrust } from './acme-trust';
@@ -23,6 +23,32 @@ const PROP_TIMEOUT_MS = Math.max(30_000, Number(process.env.CERT_DNS_PROPAGATION
  * Challenge/DnsChallenge union by name, so we derive it structurally. */
 type ChallengeItem = acme.Authorization['challenges'][number];
 
+// --- verbose per-run generation log (last run only, streamed to the UI) ---
+// The worker runs jobs sequentially, so a single module-level sink attributes
+// every line (ours + acme-client's internal trace) to the current cert. The
+// buffer is reset at run start and written to certificates.last_run_log.
+const RUN_LOG_MAX = 64 * 1024;
+let runLogCertId: string | null = null;
+let runLogBuf = '';
+function resetRunLog(certId: string): void {
+  runLogCertId = certId;
+  runLogBuf = '';
+  try { setCertRunLog(certId, ''); } catch { /* best-effort */ }
+}
+function runLog(msg: string): void {
+  if (!runLogCertId) return;
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  runLogBuf = runLogBuf ? `${runLogBuf}\n${line}` : line;
+  if (runLogBuf.length > RUN_LOG_MAX) runLogBuf = runLogBuf.slice(-RUN_LOG_MAX);
+  try { setCertRunLog(runLogCertId, runLogBuf); } catch { /* best-effort */ }
+}
+function endRunLog(): void { runLogCertId = null; }
+
+// Capture acme-client's internal verbose trace (ACME account/order/authz/
+// challenge/status-polling messages — the certbot-like detail) into the run log.
+// Registered once; no-op between jobs (runLogCertId is null).
+acme.setLogger((msg: string) => runLog(`acme: ${msg}`));
+
 export async function runJob(jobId: string): Promise<void> {
   const job = getJob(jobId);
   if (!job) return;
@@ -39,6 +65,8 @@ export async function runJob(jobId: string): Promise<void> {
   }
 
   try {
+    resetRunLog(cert.id);
+    runLog(`▶ ${job.kind} — SANs: ${cert.sans.join(', ')}`);
     if (!account || account.status !== 'registered') throw new Error('account not registered');
     if (!account.accountUrl) throw new Error('account not registered (no account URL)');
     const secrets = getAccountSecrets(account.id);
@@ -73,9 +101,11 @@ export async function runJob(jobId: string): Promise<void> {
         finalize: '',
       });
       resumedValid = order.status === 'valid';
+      runLog(`resuming order ${job.orderUrl} (status ${order.status})`);
     } else {
       order = await client.createOrder({ identifiers });
       recordJobOrder(jobId, order.url);
+      runLog(`order created: ${order.url}`);
     }
 
     let keyPem: Buffer;
@@ -121,13 +151,17 @@ export async function runJob(jobId: string): Promise<void> {
         const existing = await readTxt(pdns, zone, fqdn);
         const merged = mergeTxtValues(existing, values);
         await patch(pdns, zone, buildTxtRrset(fqdn, merged));
+        runLog(`TXT ${fqdn} ← [${values.join(', ')}] (zone ${zone})`);
       }
 
       // 4. Wait for DNS propagation (mode-dependent), then complete + validate
+      runLog(`waiting for DNS propagation of ${byFqdn.size} challenge record(s)…`);
       await waitForPropagationAllModes(byFqdn, account);
+      runLog('DNS propagation confirmed; asking the CA to validate');
       for (const item of challengeItems) {
         await client.completeChallenge(item.challenge);
         await client.waitForValidStatus(item.challenge);
+        runLog(`challenge validated: ${item.fqdn}`);
       }
 
       // 5. Finalize: new keypair + CSR, persist the key, THEN finalize.
@@ -145,6 +179,7 @@ export async function runJob(jobId: string): Promise<void> {
         [, csr] = await acme.crypto.createCsr({ altNames: cert.sans }, keyPem);
       }
       setCertificatePrivateKey(cert.id, keyPem.toString());
+      runLog(`finalizing order (submitting ${cert.keyType.toUpperCase()} CSR)…`);
       order = await client.finalizeOrder(order, csr);
       fullchain = await downloadFullchain(client, order);
     }
@@ -152,13 +187,15 @@ export async function runJob(jobId: string): Promise<void> {
     // 6. Persist + materialize
     const { leaf, chain } = splitPemChain(fullchain);
     const info = parseCertInfo(leaf);
+    runLog(`certificate issued — serial ${info.serial}, issuer ${info.issuer}, expires ${new Date(info.notAfter * 1000).toISOString()}`);
     updateCertificateIssuance(cert.id, {
       certPem: leaf, chainPem: chain, privkeyPem: keyPem.toString(),
       notBefore: info.notBefore, notAfter: info.notAfter,
       serial: info.serial, fingerprint: info.fingerprintSha256, issuer: info.issuer,
     });
-    materializeCert({ name: cert.name, leafPem: leaf, chainPem: chain, privkeyPem: keyPem.toString() });
+    const liveDir = materializeCert({ name: cert.name, leafPem: leaf, chainPem: chain, privkeyPem: keyPem.toString() });
     setCertificateMaterialized(cert.id);
+    runLog(`materialized to ${liveDir}`);
     appendCertEvent({
       certificateId: cert.id,
       type: job.kind === 'renew' ? 'renew' : 'issue',
@@ -169,11 +206,14 @@ export async function runJob(jobId: string): Promise<void> {
     // 7. Cleanup TXT + finish. Only mark cleanup done when every per-fqdn
     // PATCH actually succeeded — otherwise leave cleanup_done=0 so a later
     // cycle (crash-recovery pass at the top of this function) retries it.
+    if (added.length) runLog('cleaning up challenge TXT records…');
     const cleanedUp = added.length ? await cleanup(pdns, cert.serverUrl, added).catch(() => false) : true;
     if (cleanedUp) markJobCleanupDone(jobId);
+    runLog('✔ issuance complete');
     finishJob(jobId, 'succeeded');
   } catch (err) {
     const { errorClass, message, retryDelayMs } = classifyError(err);
+    runLog(`✖ failed [${errorClass}]: ${message}`);
     const j = getJob(jobId);
     if (pdns && j && j.challenges.length) {
       const cleanedUp = await cleanup(pdns, cert.serverUrl, j.challenges).catch(() => false);
@@ -183,6 +223,8 @@ export async function runJob(jobId: string): Promise<void> {
     setCertificateRenewalFailure(job.certificateId, { errorClass, message, nextAttemptAt });
     appendCertEvent({ certificateId: job.certificateId, type: 'error', status: errorClass, message });
     finishJob(jobId, 'failed', { errorClass, message, nextAttemptAt });
+  } finally {
+    endRunLog();
   }
 }
 
@@ -194,6 +236,7 @@ export async function runJob(jobId: string): Promise<void> {
 // after finalizeOrder. Re-fetch the order in that case so the URL is populated;
 // otherwise getCertificate() re-fetches internally while the order isn't valid.
 async function downloadFullchain(client: acme.Client, order: acme.Order): Promise<string> {
+  runLog('downloading certificate…');
   if (order.status === 'valid' && !order.certificate) {
     order = await client.getOrder(order);
   }

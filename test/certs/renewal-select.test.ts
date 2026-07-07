@@ -14,7 +14,7 @@ function makeDb() {
     CREATE TABLE certificates (
       id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, acme_account_id TEXT NOT NULL,
       connection_id TEXT NOT NULL, server_url TEXT NOT NULL, sans_json TEXT NOT NULL DEFAULT '[]',
-      category TEXT DEFAULT NULL, comment TEXT DEFAULT NULL,
+      category TEXT DEFAULT NULL, comment TEXT DEFAULT NULL, last_run_log TEXT DEFAULT NULL,
       key_type TEXT NOT NULL DEFAULT 'ecdsa', status TEXT NOT NULL DEFAULT 'pending',
       renewal_status TEXT NOT NULL DEFAULT 'idle', last_renewal_error TEXT DEFAULT NULL,
       error_class TEXT DEFAULT NULL, next_attempt_at INTEGER DEFAULT NULL,

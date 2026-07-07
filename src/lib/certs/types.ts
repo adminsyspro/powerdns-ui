@@ -106,6 +106,8 @@ export interface Certificate {
   renewBeforeDays: number;
   category: string | null;
   comment: string | null;
+  /** Verbose generation log of the latest issuance run (last run only). */
+  lastRunLog: string | null;
   lastIssuedAt: number | null;
   lastRenewalSuccessAt: number | null;
   materializedAt: number | null;

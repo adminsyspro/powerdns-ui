@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
-import type { Certificate, CertEvent, AcmeAccount } from '@/lib/certs/types';
+import { isCertInProgress, type Certificate, type CertEvent, type AcmeAccount } from '@/lib/certs/types';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -48,6 +48,20 @@ export default function CertificateDetailPage() {
   }, [id]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  // Light refresh (cert + events, no accounts) for live polling during issuance.
+  const refresh = React.useCallback(async () => {
+    const [c, e] = await Promise.all([api.fetchCertificate(id), api.fetchCertEvents(id)]);
+    if (c.data) setCert(c.data);
+    if (e.data) setEvents(e.data);
+  }, [id]);
+
+  const inProgress = cert ? isCertInProgress(cert) : false;
+  React.useEffect(() => {
+    if (!inProgress) return;
+    const t = setInterval(() => { refresh(); }, 2000);
+    return () => clearInterval(t);
+  }, [inProgress, refresh]);
 
   async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
@@ -93,6 +107,11 @@ export default function CertificateDetailPage() {
       <div className="flex items-center justify-between">
         <Link href="/certificates" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"><ArrowLeft className="h-4 w-4" />Back</Link>
         <div className="flex items-center gap-2">
+          {inProgress && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400">
+              <Loader2 className="h-4 w-4 animate-spin" />Issuing…
+            </span>
+          )}
           <Button variant="outline" size="sm" onClick={onIssue}><RefreshCw className="mr-2 h-4 w-4" />Issue now</Button>
           {cert.hasCert ? (
             <a href={api.certFullchainDownloadUrl(id)} download={`${cert.name}-fullchain.pem`}>
@@ -170,6 +189,15 @@ export default function CertificateDetailPage() {
         </TabsContent>
 
         <TabsContent value="history">
+          {inProgress && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+              </span>
+              Live — updating while the certificate is being issued
+            </div>
+          )}
           {events.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground"><p className="text-sm">No events.</p></div>
           ) : (

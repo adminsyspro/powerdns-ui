@@ -73,6 +73,11 @@ export type KeyType = 'ecdsa' | 'rsa';
 export type CertStatus = 'pending' | 'valid' | 'expired' | 'error';
 export type RenewalStatus = 'idle' | 'queued' | 'running' | 'failed';
 
+/** True while an issuance or renewal is in flight — drives UI loaders + live polling. */
+export function isCertInProgress(c: { status: CertStatus; renewalStatus: RenewalStatus }): boolean {
+  return c.status === 'pending' || c.renewalStatus === 'queued' || c.renewalStatus === 'running';
+}
+
 export interface Certificate {
   id: string;
   name: string;

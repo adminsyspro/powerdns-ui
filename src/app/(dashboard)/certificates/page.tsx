@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
-import type { Certificate, AcmeAccount } from '@/lib/certs/types';
+import { isCertInProgress, type Certificate, type AcmeAccount } from '@/lib/certs/types';
 import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
 import { InternalCaTab } from './internal-ca-tab';
@@ -62,6 +62,15 @@ export default function CertificatesPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // While any cert is mid-issuance/renewal, refresh the list so its loader
+  // resolves to valid/error on its own. Stops once nothing is in progress.
+  const anyInProgress = certs.some(isCertInProgress);
+  React.useEffect(() => {
+    if (!anyInProgress) return;
+    const t = setInterval(() => { load(); }, 4000);
+    return () => clearInterval(t);
+  }, [anyInProgress, load]);
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
@@ -151,8 +160,24 @@ export default function CertificatesPage() {
           {cert.sans.join(', ')}
         </TableCell>
         <TableCell className="text-muted-foreground">{accountName(cert.acmeAccountId)}</TableCell>
-        <TableCell><Pill map={STATUS_BADGE} value={cert.status} /></TableCell>
-        <TableCell><Pill map={RENEWAL_BADGE} value={cert.renewalStatus} /></TableCell>
+        <TableCell>
+          {cert.status === 'pending' ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />Issuing…
+            </span>
+          ) : (
+            <Pill map={STATUS_BADGE} value={cert.status} />
+          )}
+        </TableCell>
+        <TableCell>
+          {cert.renewalStatus === 'running' || cert.renewalStatus === 'queued' ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-blue-700 dark:text-blue-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />{cert.renewalStatus === 'running' ? 'Renewing…' : 'Queued…'}
+            </span>
+          ) : (
+            <Pill map={RENEWAL_BADGE} value={cert.renewalStatus} />
+          )}
+        </TableCell>
         <TableCell className="text-muted-foreground">{cert.notAfter ? formatDate(cert.notAfter * 1000) : '—'}</TableCell>
         <TableCell>
           <Switch checked={cert.autoRenew} onCheckedChange={(v) => onToggleAutoRenew(cert, v)} aria-label="auto-renew" />

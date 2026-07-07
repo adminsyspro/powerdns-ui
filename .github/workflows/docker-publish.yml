@@ -82,6 +82,45 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      # ─────────────────────────────────────────────────────────────────
+      # Opt-in SSL variant: byte-identical image but with the CLIENT feature
+      # flags (NEXT_PUBLIC_*) baked ON so the "SSL Certificates" nav item and
+      # "Internal CA" tab are visible. Published under a `-ssl` tag suffix.
+      # The default tags above stay menu-OFF and unchanged. The feature still
+      # does nothing until CERTS_ENABLED=true (and INTERNAL_CA_ENABLED=true +
+      # a step-ca) are set at RUNTIME — this only controls menu visibility.
+      # ─────────────────────────────────────────────────────────────────
+      - name: Extract metadata (SSL variant)
+        id: meta-ssl
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=-ssl,onlatest=true
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push (SSL variant)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-ssl.outputs.tags }}
+          labels: ${{ steps.meta-ssl.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_CERTS_ENABLED=true
+            NEXT_PUBLIC_INTERNAL_CA_ENABLED=true
+          cache-from: type=gha,scope=ssl
+          cache-to: type=gha,mode=max,scope=ssl
+          platforms: linux/amd64
+
       - name: Make package public
         if: github.event_name != 'pull_request'
         continue-on-error: true

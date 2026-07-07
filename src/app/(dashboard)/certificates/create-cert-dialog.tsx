@@ -17,6 +17,20 @@ import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
 const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 const stripDot = (s: string) => s.replace(/\.$/, '');
 
+// Mirror of sanitizeCertName() on the server (materialize.ts): the name is a
+// folder on disk — lowercase [a-z0-9._-], must start and end with a letter or
+// digit, ≤128 chars. slugifyCertName keeps the field to the allowed charset as
+// the user types (spaces → '-'); certNameFormatError reports the residual rules.
+const CERT_NAME_RE = /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/;
+const slugifyCertName = (v: string) => v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9._-]/g, '');
+function certNameFormatError(raw: string): string | null {
+  const n = raw.trim().toLowerCase();
+  if (!n) return null; // presence is enforced on submit
+  if (n.length > 128) return 'Name must be 128 characters or fewer.';
+  if (!CERT_NAME_RE.test(n)) return 'Lowercase letters, digits, . _ - only — and it must start and end with a letter or digit.';
+  return null;
+}
+
 export function CreateCertDialog({ accounts, onCreated, trigger, categories }: { accounts: AcmeAccount[]; onCreated: (created?: Certificate) => void; trigger?: React.ReactNode; categories?: string[] }) {
   const [open, setOpen] = React.useState(false);
   const [connections, setConnections] = React.useState<ServerConnection[]>([]);
@@ -99,9 +113,11 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
 
   const apex = selectedZone ? stripDot(selectedZone.name) : '';
   const wildcard = apex ? `*.${apex}` : '';
+  const nameError = certNameFormatError(name);
 
   async function onSubmit() {
     setError('');
+    if (nameError) { setError(nameError); return; }
     if (!name.trim() || sans.length === 0 || !accountId || !connectionId) {
       setError('Name, at least one SAN, an account and a connection are required.');
       return;
@@ -145,7 +161,18 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="cert-name">Name (identifier / folder on disk)</Label>
-                <Input id="cert-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-prod" />
+                <Input
+                  id="cert-name"
+                  value={name}
+                  onChange={(e) => setName(slugifyCertName(e.target.value))}
+                  placeholder="web-prod"
+                  aria-invalid={!!nameError}
+                />
+                {nameError ? (
+                  <p className="text-xs text-destructive">{nameError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Lowercase letters, digits, dots and hyphens — used as the folder name on disk.</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -312,7 +339,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Cancel</Button>
-          <Button onClick={onSubmit} disabled={busy || accounts.length === 0}>
+          <Button onClick={onSubmit} disabled={busy || accounts.length === 0 || !!nameError}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create
           </Button>
         </DialogFooter>

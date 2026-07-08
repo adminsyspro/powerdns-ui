@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import Link from 'next/link';
+import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Lock, ShieldCheck, ShieldAlert, ShieldX, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,8 @@ import { makeRrsetKey } from '@/lib/record-fields';
 import { RrsetHistoryDialog } from './rrset-history-dialog';
 import { getRecordTypeColor, getRecordTypeRowColor, copyToClipboard, formatDateTime, formatTTL } from '@/lib/utils';
 import * as api from '@/lib/api';
+import { isValidSan } from '@/lib/certs/san';
+import type { CoverageEntry } from '@/lib/certs/coverage';
 
 interface RecordsTableProps {
   records: RRSet[];
@@ -60,6 +63,10 @@ interface RecordsTableProps {
     busyKey?: string | null;
     onToggle: (name: string, type: string, proxied: boolean) => void;
   };
+  sslCert?: {
+    coverageFor: (host: string) => CoverageEntry | null;
+    onIssue: (host: string) => void;
+  };
   // Per-RRSet recorded-change counts, keyed by makeRrsetKey(name, type).
   changeCounts?: Record<string, number>;
 }
@@ -83,7 +90,7 @@ function getRecordPendingAction(
   return ttlChanged ? change.action : undefined;
 }
 
-export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle, cloudProxy, changeCounts }: RecordsTableProps) {
+export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, onToggle, onUpdateComment, onAdd, onCopyAll, onExportText, onExportCsv, onExportPdf, mergedRecords, onUndoChange, zoneId, pagination, onPageChange, onPageSizeChange, serverTypeStats, onTypeFilterChange, onSearchChange, onSelectionChange, onBulkDelete, onBulkToggle, cloudProxy, sslCert, changeCounts }: RecordsTableProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [typeFilter, setTypeFilter] = React.useState<RecordType | 'all'>('all');
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
@@ -283,6 +290,8 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
     }
   };
 
+  const totalColumns = 9 + (cloudProxy ? 1 : 0) + (sslCert ? 1 : 0);
+
   return (
     <TooltipProvider>
       <div className="space-y-4">
@@ -426,6 +435,11 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                     </span>
                   </TableHead>
                 )}
+                {sslCert && (
+                  <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">
+                    Certificat SSL
+                  </TableHead>
+                )}
                 <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">
                   <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => handleSort('changes')}>
                     Changes
@@ -438,9 +452,9 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={cloudProxy ? 10 : 9} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={totalColumns} className="h-24 text-center">Loading records...</TableCell></TableRow>
               ) : filteredRecords.length === 0 ? (
-                <TableRow><TableCell colSpan={cloudProxy ? 10 : 9} className="h-24 text-center">No records found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={totalColumns} className="h-24 text-center">No records found</TableCell></TableRow>
               ) : (
                 filteredRecords.map(({ rrset, record, index, pendingAction, changeId }) => {
                   const pendingBorder = pendingAction === 'ADD' ? 'border-l-4 border-l-green-500'
@@ -509,6 +523,66 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                                   ? 'Proxied by Cloudflare (cache/WAF)' + (cloudProxy.canToggle ? ' — click to switch to DNS only' : '')
                                   : 'DNS only' + (cloudProxy.canToggle ? ' — click to proxy through Cloudflare' : '')}
                               </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
+                      </TableCell>
+                    )}
+                    {sslCert && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {(() => {
+                          if (!['A', 'AAAA', 'CNAME'].includes(rrset.type)) {
+                            return <span className="text-xs text-muted-foreground">—</span>;
+                          }
+                          const host = rrset.name.toLowerCase().replace(/\.$/, '');
+                          if (!isValidSan(host)) {
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex cursor-default items-center justify-center opacity-30">
+                                    <Lock className="h-4 w-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>Name not eligible for a certificate</TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          const cov = sslCert.coverageFor(host);
+                          if (!cov) {
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={() => sslCert.onIssue(host)}
+                                    aria-label={`Issue a certificate for ${host}`}
+                                    className="flex items-center justify-center text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Lock className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Generate an SSL certificate</TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          const icon =
+                            cov.status === 'valid' ? <ShieldCheck className="h-4 w-4 text-green-600" />
+                            : cov.status === 'expiring' ? <ShieldAlert className="h-4 w-4 text-amber-600" />
+                            : cov.status === 'pending' ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                            : <ShieldX className="h-4 w-4 text-red-600" />;
+                          const label =
+                            cov.status === 'valid' ? 'Valid certificate — view detail'
+                            : cov.status === 'expiring' ? 'Certificate expiring soon — view detail'
+                            : cov.status === 'pending' ? 'Issuance in progress — view detail'
+                            : 'Certificate error — view detail';
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link href={`/certificates/${cov.certId}`} className="flex items-center justify-center" aria-label={label}>
+                                  {icon}
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>{label}</TooltipContent>
                             </Tooltip>
                           );
                         })()}

@@ -13,23 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import * as api from '@/lib/api';
 import type { AcmeAccount, Certificate } from '@/lib/certs/types';
 import type { ServerConnection, ZoneListItem } from '@/types/powerdns';
+import { CERT_NAME_RE, slugifyCertName, certNameFormatError } from '@/lib/certs/cert-name';
 
 const SAN_RECORD_TYPES = new Set(['A', 'AAAA', 'CNAME']);
 const stripDot = (s: string) => s.replace(/\.$/, '');
-
-// Mirror of sanitizeCertName() on the server (materialize.ts): the name is a
-// folder on disk — lowercase [a-z0-9._-], must start and end with a letter or
-// digit, ≤128 chars. slugifyCertName keeps the field to the allowed charset as
-// the user types (spaces → '-'); certNameFormatError reports the residual rules.
-const CERT_NAME_RE = /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/;
-const slugifyCertName = (v: string) => v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9._-]/g, '');
-function certNameFormatError(raw: string): string | null {
-  const n = raw.trim().toLowerCase();
-  if (!n) return null; // presence is enforced on submit
-  if (n.length > 128) return 'Name must be 128 characters or fewer.';
-  if (!CERT_NAME_RE.test(n)) return 'Lowercase letters, digits, . _ - only — and it must start and end with a letter or digit.';
-  return null;
-}
 
 export function CreateCertDialog({ accounts, onCreated, trigger, categories }: { accounts: AcmeAccount[]; onCreated: (created?: Certificate) => void; trigger?: React.ReactNode; categories?: string[] }) {
   const [open, setOpen] = React.useState(false);

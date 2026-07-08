@@ -60,12 +60,13 @@ export function createCertificate(
   // independent — stored SANs are already canonicalized). Certs may legitimately
   // overlap partially (e.g. ECDSA + RSA share a name is blocked by UNIQUE name,
   // but two names covering the SAME exact domains is the duplicate we prevent).
-  const wantedKey = [...sans].sort().join('\n');
+  const byName = (a: string, b: string) => a.localeCompare(b);
+  const wantedKey = [...sans].sort(byName).join('\n');
   const isDuplicate = (db.prepare(`SELECT sans_json FROM certificates`).all() as Array<{ sans_json: string }>)
     .some((r) => {
       let arr: unknown;
       try { arr = JSON.parse(r.sans_json); } catch { return false; }
-      return Array.isArray(arr) && [...(arr as string[])].sort().join('\n') === wantedKey;
+      return Array.isArray(arr) && [...(arr as string[])].sort(byName).join('\n') === wantedKey;
     });
   if (isDuplicate) throw new Error('a certificate with the same domains already exists');
   const account = db.prepare(`SELECT 1 FROM acme_accounts WHERE id = ?`).get(input.acmeAccountId);

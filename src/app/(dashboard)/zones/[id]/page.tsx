@@ -814,7 +814,7 @@ export default function ZoneDetailPage() {
                 // Status shown = the worst among the present ones, so an errored/
                 // expiring side still surfaces; the details modal opens that cert.
                 const worst = present.length
-                  ? present.reduce((a, b) => (STATUS_RANK[b.status] >= STATUS_RANK[a.status] ? b : a))
+                  ? present.reduce((a, b) => (STATUS_RANK[b.status] >= STATUS_RANK[a.status] ? b : a), present[0])
                   : null;
                 const status: CoverageStatus | null = worst ? worst.status : null;
                 const icon =

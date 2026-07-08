@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { canonicalizeSans } from '../../src/lib/certs/san';
+import { canonicalizeSans, isValidSan } from '../../src/lib/certs/san';
 
 // lowercase + trim + strip trailing dot + dedupe, order preserved
 assert.deepEqual(
@@ -33,5 +33,13 @@ assert.throws(() => canonicalizeSans(['127.0.0.1']), /invalid/i, 'IPv4 literal r
 assert.deepEqual(canonicalizeSans(['*.example.com']), ['*.example.com'], 'wildcard still valid');
 assert.deepEqual(canonicalizeSans(['exämple.com']), ['xn--exmple-cua.com'], 'IDN still valid');
 assert.deepEqual(canonicalizeSans(['www.example.com']), ['www.example.com'], 'plain host still valid');
+
+// isValidSan — non-throwing wrapper used by the UI to gate the "issue" icon
+assert.equal(isValidSan('www.example.com'), true, 'plain host valid');
+assert.equal(isValidSan('*.example.com'), true, 'wildcard valid');
+assert.equal(isValidSan('example.com'), true, 'apex valid');
+assert.equal(isValidSan('_dmarc.example.com'), false, 'underscore label invalid');
+assert.equal(isValidSan('example'), false, 'single-label invalid');
+assert.equal(isValidSan('127.0.0.1'), false, 'IPv4 literal invalid');
 
 console.log('certs/san: ALL PASSED');

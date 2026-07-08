@@ -69,3 +69,18 @@ function normalizeOne(raw: string): string {
 
   return wildcard ? `*.${host}` : host;
 }
+
+/**
+ * Client-safe validity check for a single SAN: true when canonicalizeSans
+ * accepts it (identical rules to the issuance path), false otherwise. Used by
+ * the UI to disable "issue certificate" on non-certifiable record names
+ * (e.g. underscore labels).
+ */
+export function isValidSan(raw: string): boolean {
+  try {
+    canonicalizeSans([raw]);
+    return true;
+  } catch {
+    return false;
+  }
+}

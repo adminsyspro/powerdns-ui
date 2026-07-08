@@ -14,6 +14,7 @@ import { DnssecDialog } from '@/components/zones/dnssec-dialog';
 import { ZoneTrafficSparklines } from '@/components/zones/zone-traffic-sparklines';
 import { DnsAnalyticsDialog } from '@/components/zones/dns-analytics-dialog';
 import { IssueCertForHostDialog } from '@/components/certs/issue-cert-for-host-dialog';
+import { CertDetailsModal } from '@/components/certs/cert-details-modal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +37,7 @@ import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useAuthStore, usePendingChangesStore, useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
-import { findBestCoverage, STATUS_RANK, type CoverageStatus } from '@/lib/certs/coverage';
+import { findBestCoverage, STATUS_RANK, type CoverageStatus, type CoverageEntry } from '@/lib/certs/coverage';
 import { isCertInProgress, type Certificate } from '@/lib/certs/types';
 
 const CERTS_UI = process.env.NEXT_PUBLIC_CERTS_ENABLED === 'true';
@@ -279,6 +280,9 @@ export default function ZoneDetailPage() {
 
   const [certs, setCerts] = React.useState<Certificate[]>([]);
   const [issueSeed, setIssueSeed] = React.useState<{ seedSans: string[]; preselected?: string[] } | null>(null);
+  // Details modal: `missing` (set only from the zone-level icon) drives the
+  // "generate the still-missing half" CTA inside the modal.
+  const [viewCert, setViewCert] = React.useState<{ cert: Certificate; missing?: string[] } | null>(null);
 
   const loadCerts = React.useCallback(async () => {
     if (!certsEnabled || !activeConnection) return;
@@ -299,6 +303,13 @@ export default function ZoneDetailPage() {
 
   const coverageFor = React.useCallback(
     (host: string) => findBestCoverage(certs, host),
+    [certs],
+  );
+  const openCertDetails = React.useCallback(
+    (certId: string, missing?: string[]) => {
+      const c = certs.find((x) => x.id === certId);
+      if (c) setViewCert({ cert: c, missing });
+    },
     [certs],
   );
   // All-zone / orphan privilege (Settings dialog "No group" option, reassign to
@@ -795,37 +806,36 @@ export default function ZoneDetailPage() {
                 const wildcard = `*.${apex}`;
                 const apexCov = coverageFor(apex);
                 const wcCov = coverageFor(wildcard);
-                const both = apexCov && wcCov;
-                const worseIsApex = both ? STATUS_RANK[apexCov!.status] >= STATUS_RANK[wcCov!.status] : false;
-                const status: CoverageStatus | null = both
-                  ? (worseIsApex ? apexCov!.status : wcCov!.status)
-                  : null;
-                const linkId = both
-                  ? (worseIsApex ? apexCov!.certId : wcCov!.certId)
-                  : null;
+                const present = [apexCov, wcCov].filter((c): c is CoverageEntry => !!c);
                 const missing = ([[apex, apexCov], [wildcard, wcCov]] as const)
                   .filter(([, cov]) => !cov)
                   .map(([san]) => san);
+                // Active (icon reflects coverage) if root AND/OR wildcard has a cert.
+                // Status shown = the worst among the present ones, so an errored/
+                // expiring side still surfaces; the details modal opens that cert.
+                const worst = present.length
+                  ? present.reduce((a, b) => (STATUS_RANK[b.status] >= STATUS_RANK[a.status] ? b : a))
+                  : null;
+                const status: CoverageStatus | null = worst ? worst.status : null;
                 const icon =
                   status === 'valid' ? <ShieldCheck className="h-4 w-4 text-green-600" />
                   : status === 'expiring' ? <ShieldAlert className="h-4 w-4 text-amber-600" />
                   : status === 'pending' ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                   : status === 'error' ? <ShieldX className="h-4 w-4 text-red-600" />
                   : <Shield className="h-4 w-4 text-muted-foreground" />;
-                const tip = status
-                  ? 'Root + wildcard certificate — view detail'
-                  : missing.length === 2 ? 'Generate a root + wildcard certificate'
-                  : `Generate a certificate (${missing.join(', ')} missing)`;
+                const tip = worst
+                  ? (missing.length
+                      ? `Certificate present (${missing.join(', ')} missing) — view details`
+                      : 'Root + wildcard certificate — view details')
+                  : 'Generate a root + wildcard certificate';
                 return (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      {status && linkId ? (
-                        <Link href={`/certificates/${linkId}`} className="flex h-9 w-9 items-center justify-center" aria-label={tip}>{icon}</Link>
-                      ) : (
-                        <Button variant="outline" size="icon" className="h-9 w-9"
-                          onClick={() => setIssueSeed({ seedSans: [apex, wildcard], preselected: missing })}
-                          aria-label={tip}>{icon}</Button>
-                      )}
+                      <Button variant="outline" size="icon" className="h-9 w-9"
+                        onClick={() => worst
+                          ? openCertDetails(worst.certId, missing.length ? missing : undefined)
+                          : setIssueSeed({ seedSans: [apex, wildcard], preselected: missing })}
+                        aria-label={tip}>{icon}</Button>
                     </TooltipTrigger>
                     <TooltipContent>{tip}</TooltipContent>
                   </Tooltip>
@@ -1018,6 +1028,7 @@ export default function ZoneDetailPage() {
         sslCert={certsEnabled ? {
           coverageFor,
           onIssue: (host) => setIssueSeed({ seedSans: [host] }),
+          onView: (certId) => openCertDetails(certId),
         } : undefined}
       />
 
@@ -1061,6 +1072,19 @@ export default function ZoneDetailPage() {
           connectionId={activeConnection.id}
           onOpenChange={(o) => { if (!o) setIssueSeed(null); }}
           onCreated={() => { setIssueSeed(null); loadCerts(); }}
+        />
+      )}
+
+      {certsEnabled && viewCert && (
+        <CertDetailsModal
+          cert={viewCert.cert}
+          open={!!viewCert}
+          onOpenChange={(o) => { if (!o) setViewCert(null); }}
+          onDeleted={() => { setViewCert(null); loadCerts(); }}
+          extraAction={viewCert.missing?.length ? {
+            label: `Generate ${viewCert.missing.join(' + ')}`,
+            onClick: () => { const m = viewCert.missing!; setViewCert(null); setIssueSeed({ seedSans: m }); },
+          } : undefined}
         />
       )}
 

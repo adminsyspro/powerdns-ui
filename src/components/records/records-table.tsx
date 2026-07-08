@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { Edit, Trash2, Copy, Power, PowerOff, MessageSquare, Plus, FileText, FileSpreadsheet, Download, Undo2, History, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Lock, ShieldCheck, ShieldAlert, ShieldX, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -66,6 +65,7 @@ interface RecordsTableProps {
   sslCert?: {
     coverageFor: (host: string) => CoverageEntry | null;
     onIssue: (host: string) => void;
+    onView: (certId: string) => void;
   };
   // Per-RRSet recorded-change counts, keyed by makeRrsetKey(name, type).
   changeCounts?: Record<string, number>;
@@ -436,7 +436,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                   </TableHead>
                 )}
                 {sslCert && (
-                  <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">
+                  <TableHead className="w-[104px] text-center font-semibold text-slate-700 dark:text-slate-200">
                     SSL Certificate
                   </TableHead>
                 )}
@@ -529,7 +529,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                       </TableCell>
                     )}
                     {sslCert && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           if (!['A', 'AAAA', 'CNAME'].includes(rrset.type)) {
                             return <span className="text-xs text-muted-foreground">—</span>;
@@ -539,7 +539,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                             return (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="flex cursor-default items-center justify-center opacity-30">
+                                  <span className="inline-flex cursor-default items-center justify-center opacity-30">
                                     <Lock className="h-4 w-4" />
                                   </span>
                                 </TooltipTrigger>
@@ -556,7 +556,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                                     type="button"
                                     onClick={() => sslCert.onIssue(host)}
                                     aria-label={`Issue a certificate for ${host}`}
-                                    className="flex items-center justify-center text-muted-foreground hover:text-foreground"
+                                    className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
                                   >
                                     <Lock className="h-4 w-4" />
                                   </button>
@@ -571,16 +571,21 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                             : cov.status === 'pending' ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                             : <ShieldX className="h-4 w-4 text-red-600" />;
                           const label =
-                            cov.status === 'valid' ? 'Valid certificate — view detail'
-                            : cov.status === 'expiring' ? 'Certificate expiring soon — view detail'
-                            : cov.status === 'pending' ? 'Issuance in progress — view detail'
-                            : 'Certificate error — view detail';
+                            cov.status === 'valid' ? 'Valid certificate — view details'
+                            : cov.status === 'expiring' ? 'Certificate expiring soon — view details'
+                            : cov.status === 'pending' ? 'Issuance in progress — view details'
+                            : 'Certificate error — view details';
                           return (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Link href={`/certificates/${cov.certId}`} className="flex items-center justify-center" aria-label={label}>
+                                <button
+                                  type="button"
+                                  onClick={() => sslCert.onView(cov.certId)}
+                                  aria-label={label}
+                                  className="inline-flex items-center justify-center"
+                                >
                                   {icon}
-                                </Link>
+                                </button>
                               </TooltipTrigger>
                               <TooltipContent>{label}</TooltipContent>
                             </Tooltip>

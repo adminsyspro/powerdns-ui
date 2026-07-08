@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -113,8 +114,17 @@ export function IssueCertForHostDialog({
 
         {noAccounts ? (
           <p className="text-sm text-muted-foreground">
-            No registered ACME account. Create and register one on the{' '}
-            <a href="/certificates" className="underline">SSL Certificates</a> page first.
+            {loadFailed ? (
+              <>
+                Couldn&apos;t load ACME accounts — is the certificates feature enabled on the server?{' '}
+                <Link href="/certificates" className="underline">SSL Certificates</Link>
+              </>
+            ) : (
+              <>
+                No registered ACME account. Create and register one on the{' '}
+                <Link href="/certificates" className="underline">SSL Certificates</Link> page first.
+              </>
+            )}
           </p>
         ) : (
           <div className="space-y-4">

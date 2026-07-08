@@ -36,12 +36,11 @@ import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useAuthStore, usePendingChangesStore, useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
-import { findBestCoverage, type CoverageStatus } from '@/lib/certs/coverage';
+import { findBestCoverage, STATUS_RANK, type CoverageStatus } from '@/lib/certs/coverage';
 import { isCertInProgress, type Certificate } from '@/lib/certs/types';
 
 const CERTS_UI = process.env.NEXT_PUBLIC_CERTS_ENABLED === 'true';
 const stripDot = (s: string) => s.replace(/\.$/, '');
-const WORST: Record<CoverageStatus, number> = { valid: 0, expiring: 1, pending: 2, error: 3 };
 
 // ---- Zone Switcher ----
 
@@ -797,14 +796,16 @@ export default function ZoneDetailPage() {
                 const apexCov = coverageFor(apex);
                 const wcCov = coverageFor(wildcard);
                 const both = apexCov && wcCov;
-                const worseIsApex = both ? WORST[apexCov!.status] >= WORST[wcCov!.status] : false;
+                const worseIsApex = both ? STATUS_RANK[apexCov!.status] >= STATUS_RANK[wcCov!.status] : false;
                 const status: CoverageStatus | null = both
                   ? (worseIsApex ? apexCov!.status : wcCov!.status)
                   : null;
                 const linkId = both
                   ? (worseIsApex ? apexCov!.certId : wcCov!.certId)
                   : null;
-                const missing = [apex, wildcard].filter((s) => !coverageFor(s));
+                const missing = ([[apex, apexCov], [wildcard, wcCov]] as const)
+                  .filter(([, cov]) => !cov)
+                  .map(([san]) => san);
                 const icon =
                   status === 'valid' ? <ShieldCheck className="h-4 w-4 text-green-600" />
                   : status === 'expiring' ? <ShieldAlert className="h-4 w-4 text-amber-600" />

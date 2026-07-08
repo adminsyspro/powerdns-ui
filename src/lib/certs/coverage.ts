@@ -46,7 +46,7 @@ export function certCoverageStatus(cert: Certificate): CoverageStatus {
   return 'error';
 }
 
-const STATUS_RANK: Record<CoverageStatus, number> = { valid: 0, expiring: 1, pending: 2, error: 3 };
+export const STATUS_RANK: Record<CoverageStatus, number> = { valid: 0, expiring: 1, pending: 2, error: 3 };
 const recency = (c: Certificate): number => c.lastIssuedAt ?? c.updatedAt ?? c.createdAt ?? 0;
 
 /**

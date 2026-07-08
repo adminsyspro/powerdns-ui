@@ -437,7 +437,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                 )}
                 {sslCert && (
                   <TableHead className="w-[70px] font-semibold text-slate-700 dark:text-slate-200">
-                    Certificat SSL
+                    SSL Certificate
                   </TableHead>
                 )}
                 <TableHead className="w-[80px] font-semibold text-slate-700 dark:text-slate-200">

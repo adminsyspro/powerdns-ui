@@ -797,11 +797,12 @@ export default function ZoneDetailPage() {
                 const apexCov = coverageFor(apex);
                 const wcCov = coverageFor(wildcard);
                 const both = apexCov && wcCov;
+                const worseIsApex = both ? WORST[apexCov!.status] >= WORST[wcCov!.status] : false;
                 const status: CoverageStatus | null = both
-                  ? (WORST[apexCov!.status] >= WORST[wcCov!.status] ? apexCov!.status : wcCov!.status)
+                  ? (worseIsApex ? apexCov!.status : wcCov!.status)
                   : null;
                 const linkId = both
-                  ? (apexCov!.certId === wcCov!.certId ? apexCov!.certId : wcCov!.certId)
+                  ? (worseIsApex ? apexCov!.certId : wcCov!.certId)
                   : null;
                 const missing = [apex, wildcard].filter((s) => !coverageFor(s));
                 const icon =

@@ -6,12 +6,14 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
   Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings, Send, BarChart3,
+  ShieldCheck, ShieldAlert, ShieldX,
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
 import { DnssecDialog } from '@/components/zones/dnssec-dialog';
 import { ZoneTrafficSparklines } from '@/components/zones/zone-traffic-sparklines';
 import { DnsAnalyticsDialog } from '@/components/zones/dns-analytics-dialog';
+import { IssueCertForHostDialog } from '@/components/certs/issue-cert-for-host-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,8 +34,14 @@ import { normalizeRecordContent, makeRrsetKey } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
-import { useAuthStore, usePendingChangesStore } from '@/stores';
+import { useAuthStore, usePendingChangesStore, useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
+import { findBestCoverage, type CoverageStatus } from '@/lib/certs/coverage';
+import { isCertInProgress, type Certificate } from '@/lib/certs/types';
+
+const CERTS_UI = process.env.NEXT_PUBLIC_CERTS_ENABLED === 'true';
+const stripDot = (s: string) => s.replace(/\.$/, '');
+const WORST: Record<CoverageStatus, number> = { valid: 0, expiring: 1, pending: 2, error: 3 };
 
 // ---- Zone Switcher ----
 
@@ -267,6 +275,33 @@ export default function ZoneDetailPage() {
   const { user } = useAuthStore();
   const { addChange, getZoneChanges, removeChange } = usePendingChangesStore();
   const isAdmin = user?.role === 'Administrator';
+  const { activeConnection } = useServerConnectionStore();
+  const certsEnabled = CERTS_UI && isAdmin && !!activeConnection;
+
+  const [certs, setCerts] = React.useState<Certificate[]>([]);
+  const [issueSeed, setIssueSeed] = React.useState<{ seedSans: string[]; preselected?: string[] } | null>(null);
+
+  const loadCerts = React.useCallback(async () => {
+    if (!certsEnabled || !activeConnection) return;
+    const r = await api.fetchCertificates();
+    if (r.error || !r.data) { setCerts([]); return; } // 404 when server certs off → no coverage
+    setCerts(r.data.filter((c) => c.connectionId === activeConnection.id));
+  }, [certsEnabled, activeConnection]);
+
+  React.useEffect(() => { loadCerts(); }, [loadCerts]);
+
+  // Light poll while any covered cert is still being issued (mirrors the certs page).
+  React.useEffect(() => {
+    if (!certsEnabled) return;
+    if (!certs.some((c) => isCertInProgress(c))) return;
+    const t = setInterval(loadCerts, 5000);
+    return () => clearInterval(t);
+  }, [certsEnabled, certs, loadCerts]);
+
+  const coverageFor = React.useCallback(
+    (host: string) => findBestCoverage(certs, host),
+    [certs],
+  );
   // All-zone / orphan privilege (Settings dialog "No group" option, reassign to
   // any group): Administrators and Operators only; Managers are scoped, so the
   // Settings picker must require a group for them. Only Administrators may delete.
@@ -756,6 +791,44 @@ export default function ZoneDetailPage() {
                 <Link href="/zones"><ArrowLeft className="h-4 w-4" /></Link>
               </Button>
               <ZoneSwitcher currentZoneId={zoneId} currentZoneReplicated={!!cfProxy?.linked} />
+              {certsEnabled && zone && (() => {
+                const apex = stripDot(zone.name);
+                const wildcard = `*.${apex}`;
+                const apexCov = coverageFor(apex);
+                const wcCov = coverageFor(wildcard);
+                const both = apexCov && wcCov;
+                const status: CoverageStatus | null = both
+                  ? (WORST[apexCov!.status] >= WORST[wcCov!.status] ? apexCov!.status : wcCov!.status)
+                  : null;
+                const linkId = both
+                  ? (apexCov!.certId === wcCov!.certId ? apexCov!.certId : wcCov!.certId)
+                  : null;
+                const missing = [apex, wildcard].filter((s) => !coverageFor(s));
+                const icon =
+                  status === 'valid' ? <ShieldCheck className="h-4 w-4 text-green-600" />
+                  : status === 'expiring' ? <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  : status === 'pending' ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                  : status === 'error' ? <ShieldX className="h-4 w-4 text-red-600" />
+                  : <Shield className="h-4 w-4 text-muted-foreground" />;
+                const tip = status
+                  ? 'Root + wildcard certificate — view detail'
+                  : missing.length === 2 ? 'Generate a root + wildcard certificate'
+                  : `Generate a certificate (${missing.join(', ')} missing)`;
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {status && linkId ? (
+                        <Link href={`/certificates/${linkId}`} className="flex h-9 w-9 items-center justify-center" aria-label={tip}>{icon}</Link>
+                      ) : (
+                        <Button variant="outline" size="icon" className="h-9 w-9"
+                          onClick={() => setIssueSeed({ seedSans: [apex, wildcard], preselected: missing })}
+                          aria-label={tip}>{icon}</Button>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>{tip}</TooltipContent>
+                  </Tooltip>
+                );
+              })()}
               {lookup && lookup.ns.length > 0 && (
                 <>
                   <div className="w-px h-5 bg-border" />
@@ -940,6 +1013,10 @@ export default function ZoneDetailPage() {
           busyKey: cfBusyKey,
           onToggle: handleCloudToggle,
         } : undefined}
+        sslCert={certsEnabled ? {
+          coverageFor,
+          onIssue: (host) => setIssueSeed({ seedSans: [host] }),
+        } : undefined}
       />
 
       {/* Zone Settings Dialog */}
@@ -972,6 +1049,18 @@ export default function ZoneDetailPage() {
 
       {/* DNS Analytics Dialog */}
       <DnsAnalyticsDialog zone={zoneId} open={dnsAnalyticsOpen} onOpenChange={setDnsAnalyticsOpen} />
+
+      {certsEnabled && issueSeed && zone && activeConnection && (
+        <IssueCertForHostDialog
+          open={!!issueSeed}
+          seedSans={issueSeed.seedSans}
+          preselected={issueSeed.preselected}
+          zoneName={stripDot(zone.name)}
+          connectionId={activeConnection.id}
+          onOpenChange={(o) => { if (!o) setIssueSeed(null); }}
+          onCreated={() => { setIssueSeed(null); loadCerts(); }}
+        />
+      )}
 
       {/* Record Form Dialog */}
       <RecordFormDialog

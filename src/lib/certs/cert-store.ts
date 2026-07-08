@@ -56,6 +56,18 @@ export function createCertificate(
   // chars) — validate up front so a bad name never reaches the filesystem.
   const name = sanitizeCertName(input.name);
   const sans = canonicalizeSans(input.sans);
+  // Reject an exact-duplicate domain set (order / case / trailing-dot
+  // independent — stored SANs are already canonicalized). Certs may legitimately
+  // overlap partially (e.g. ECDSA + RSA share a name is blocked by UNIQUE name,
+  // but two names covering the SAME exact domains is the duplicate we prevent).
+  const wantedKey = [...sans].sort().join('\n');
+  const isDuplicate = (db.prepare(`SELECT sans_json FROM certificates`).all() as Array<{ sans_json: string }>)
+    .some((r) => {
+      let arr: unknown;
+      try { arr = JSON.parse(r.sans_json); } catch { return false; }
+      return Array.isArray(arr) && [...(arr as string[])].sort().join('\n') === wantedKey;
+    });
+  if (isDuplicate) throw new Error('a certificate with the same domains already exists');
   const account = db.prepare(`SELECT 1 FROM acme_accounts WHERE id = ?`).get(input.acmeAccountId);
   if (!account) throw new Error('unknown acme_account_id');
   // Resolve the server URL from the SAME (injected) db so the DI seam stays

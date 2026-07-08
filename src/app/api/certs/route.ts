@@ -95,6 +95,9 @@ export async function POST(request: NextRequest) {
       if (msg.includes('UNIQUE')) {
         return NextResponse.json({ error: 'A certificate with that name already exists' }, { status: 409 });
       }
+      if (msg.includes('same domains')) {
+        return NextResponse.json({ error: 'A certificate with the same domains already exists' }, { status: 409 });
+      }
       if (
         msg.startsWith('invalid SAN') ||
         msg.includes('at least one SAN') ||

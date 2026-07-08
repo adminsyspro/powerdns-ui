@@ -38,6 +38,18 @@ assert.deepEqual(cert.sans, ['example.com', '*.example.com'], 'SANs canonicalize
 assert.equal(cert.serverUrl, 'http://pdns', 'server_url derived + normalized from connection');
 assert.equal((cert as any).privkeyEnc, undefined, 'no privkey on public shape');
 
+// duplicate-domains guard: an exact SAN set (order / case / trailing-dot
+// independent) is rejected even under a different name.
+assert.throws(
+  () => createCertificate({ name: 'web-dup', acmeAccountId: 'a1', connectionId: 'c1', sans: ['*.EXAMPLE.com', 'example.com.'] }, db),
+  /same domains/i,
+  'exact-duplicate SAN set rejected regardless of order/case/trailing-dot',
+);
+// a DIFFERENT SAN set is allowed; delete it so later account-usage counts hold.
+const distinct = createCertificate({ name: 'web-distinct', acmeAccountId: 'a1', connectionId: 'c1', sans: ['api.example.com'] }, db);
+assert.deepEqual(distinct.sans, ['api.example.com'], 'distinct SAN set is created');
+assert.equal(deleteCertificate(distinct.id, db), true, 'cleanup extra cert');
+
 updateCertificateIssuance(cert.id, {
   certPem: '-CERT-', chainPem: '-CHAIN-', privkeyPem: '-KEY-',
   notBefore: 1000, notAfter: 2000, serial: 'AB', fingerprint: 'FF', issuer: 'CN=Test',

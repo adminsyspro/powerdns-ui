@@ -156,7 +156,7 @@ export async function runJob(jobId: string): Promise<void> {
 
       // 4. Wait for DNS propagation (mode-dependent), then complete + validate
       runLog(`waiting for DNS propagation of ${byFqdn.size} challenge record(s)…`);
-      await waitForPropagationAllModes(byFqdn, account);
+      await waitForPropagationAllModes(byFqdn, account, cert.serverUrl);
       runLog('DNS propagation confirmed; asking the CA to validate');
       for (const item of challengeItems) {
         await client.completeChallenge(item.challenge);
@@ -298,30 +298,73 @@ async function cleanup(
   return allOk;
 }
 
-const PUBLIC_RESOLVERS = ['1.1.1.1', '8.8.8.8'];
+/** DNS lookup functions used for authoritative-NS discovery (injectable for tests). */
+type NsLookup = Pick<typeof dns.promises, 'resolveNs' | 'resolve4' | 'resolve6'>;
 
-/** Dispatches DNS-01 propagation waiting to the account's configured mode. */
-async function waitForPropagationAllModes(
+/**
+ * Discover the authoritative nameserver IPs for the managed zone containing
+ * fqdn: look the zone up in our own zone cache, then resolve its NS hostnames
+ * to IPs via the system resolver. Returns [] when the zone is unknown, has no
+ * discoverable NS records, or any lookup fails; callers treat an empty list
+ * as "use the system-configured resolvers". Never throws. Exported for tests.
+ */
+export async function authoritativeResolvers(
+  serverUrl: string,
+  fqdn: string,
+  lookup: NsLookup = dns.promises,
+  zoneForFqdn: typeof resolveZoneForFqdn = resolveZoneForFqdn
+): Promise<string[]> {
+  try {
+    const zone = zoneForFqdn(serverUrl, fqdn);
+    if (!zone) return [];
+    const nsHosts = await lookup.resolveNs(zone.replace(/\.$/, ''));
+    const ips: string[] = [];
+    for (const host of nsHosts) {
+      const name = host.replace(/\.$/, '');
+      const [v4, v6] = await Promise.all([
+        lookup.resolve4(name).catch(() => [] as string[]),
+        lookup.resolve6(name).catch(() => [] as string[]),
+      ]);
+      ips.push(...v4, ...v6);
+    }
+    return ips;
+  } catch {
+    return []; // fall back to the system-configured resolvers
+  }
+}
+
+/** Dispatches DNS-01 propagation waiting to the account's configured mode. Exported for tests. */
+export async function waitForPropagationAllModes(
   byFqdn: Map<string, string[]>,
-  account: { propagationMode: string; propagationResolver: string | null }
+  account: { propagationMode: string; propagationResolver: string | null },
+  serverUrl: string,
+  wait: typeof waitForPropagation = waitForPropagation,
+  discover: typeof authoritativeResolvers = authoritativeResolvers
 ): Promise<void> {
   if (account.propagationMode === 'delay') {
     await sleep(Number(process.env.CERT_PROPAGATION_DELAY_MS) || 20_000);
     return;
   }
-  let resolvers: string[];
   if (account.propagationMode === 'resolver') {
     // Comma-separated list supported (e.g. "10.10.10.251,10.10.10.252") for
     // redundancy; setServers() queries them with failover.
-    resolvers = (account.propagationResolver ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const resolvers = (account.propagationResolver ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     if (resolvers.length === 0) {
       throw new Error('propagationResolver required for resolver mode (account)');
     }
-  } else {
-    resolvers = PUBLIC_RESOLVERS; // 'authoritative' (default)
+    for (const [fqdn, values] of byFqdn) {
+      await wait(fqdn, values, resolvers);
+    }
+    return;
   }
+  // 'authoritative' (default): discover the zone's authoritative nameservers
+  // via the system resolver and query them directly. When the zone has no
+  // discoverable NS (e.g. a private native zone without apex NS records),
+  // discovery returns [] and waitForPropagation falls back to the
+  // system-configured resolvers.
   for (const [fqdn, values] of byFqdn) {
-    await waitForPropagation(fqdn, values, resolvers);
+    const resolvers = await discover(serverUrl, fqdn);
+    await wait(fqdn, values, resolvers);
   }
 }
 
@@ -331,7 +374,9 @@ function sleep(ms: number): Promise<void> {
 
 async function waitForPropagation(fqdn: string, expectedUnquoted: string[], resolvers: string[]): Promise<void> {
   const resolver = new dns.promises.Resolver();
-  resolver.setServers(resolvers);
+  // An empty list means "no explicit resolvers": keep the Resolver on the
+  // system-configured servers (the container's /etc/resolv.conf).
+  if (resolvers.length > 0) resolver.setServers(resolvers);
   const deadline = Date.now() + PROP_TIMEOUT_MS;
   const want = new Set(expectedUnquoted);
   while (Date.now() < deadline) {

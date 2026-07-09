@@ -70,6 +70,21 @@ services:
       # => directory at /acme/acme/directory.
       - DOCKER_STEPCA_INIT_ACME=true
       - DOCKER_STEPCA_INIT_PASSWORD_FILE=/run/secrets/step_ca_password
+      # Certificate duration (applied on every start by the command wrapper below).
+      # Defaults match Let's Encrypt (90 days).
+      - STEP_CA_DEFAULT_TLS_DURATION=${STEP_CA_DEFAULT_TLS_DURATION:-2160h}
+      - STEP_CA_MAX_TLS_DURATION=${STEP_CA_MAX_TLS_DURATION:-2160h}
+    command:
+      - sh
+      - -c
+      - |
+        CONFIG=/home/step/config/ca.json
+        if [ -f "$$CONFIG" ]; then
+          sed -i "s/\"defaultTLSCertDuration\":\"[^\"]*\"/\"defaultTLSCertDuration\":\"$$STEP_CA_DEFAULT_TLS_DURATION\"/" "$$CONFIG"
+          sed -i "s/\"maxTLSCertDuration\":\"[^\"]*\"/\"maxTLSCertDuration\":\"$$STEP_CA_MAX_TLS_DURATION\"/" "$$CONFIG"
+          echo "step-ca: patched durations — default=$$STEP_CA_DEFAULT_TLS_DURATION max=$$STEP_CA_MAX_TLS_DURATION"
+        fi
+        exec step-ca --password-file /run/secrets/step_ca_password "$$CONFIG"
     secrets:
       - step_ca_password
     volumes:

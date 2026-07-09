@@ -642,6 +642,63 @@ export function downloadCertBundle(id: string) {
   return apiRequest<string>(`/api/certs/${id}/download`, { method: 'POST' });
 }
 
+// --- SSL certificates: Infisical sync ---
+
+export interface InfisicalConfigResponse {
+  enabled: boolean;
+  siteUrl: string;
+  clientId: string;
+  hasClientSecret: boolean;
+  projectId: string;
+  environment: string;
+  secretBasePath: string;
+}
+
+export function fetchInfisicalConfig() {
+  return apiRequest<InfisicalConfigResponse>('/api/certs/infisical');
+}
+
+export function saveInfisicalConfigApi(config: {
+  enabled: boolean;
+  siteUrl: string;
+  clientId: string;
+  clientSecret?: string;
+  projectId: string;
+  environment: string;
+  secretBasePath: string;
+}) {
+  return apiRequest<InfisicalConfigResponse>('/api/certs/infisical', {
+    method: 'PUT',
+    body: JSON.stringify({
+      enabled: config.enabled,
+      site_url: config.siteUrl,
+      client_id: config.clientId,
+      client_secret: config.clientSecret || undefined,
+      project_id: config.projectId,
+      environment: config.environment,
+      secret_base_path: config.secretBasePath,
+    }),
+  });
+}
+
+export function testInfisicalApi() {
+  return apiRequest<{ ok: boolean; error?: string }>('/api/certs/infisical/test', { method: 'POST' });
+}
+
+export function syncAllCertsApi() {
+  return apiRequest<{ synced: number; failed: number; errors: Array<{ certId: string; name: string; error: string }> }>(
+    '/api/certs/infisical/sync',
+    { method: 'POST' },
+  );
+}
+
+export function syncCertApi(id: string) {
+  return apiRequest<{ ok: boolean; error?: string }>(
+    `/api/certs/${encodeURIComponent(id)}/sync`,
+    { method: 'POST' },
+  );
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

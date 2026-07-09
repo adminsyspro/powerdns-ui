@@ -650,7 +650,7 @@ export function findZoneLink(serverUrl: string, zoneName: string) {
   for (const integration of listIntegrations()) {
     if (!integration.active) continue;
     const link = listIntegrationZones(integration.id, normalizedUrl).find(
-      (l) => l.zoneName === zoneName && l.remoteZoneId && l.status !== 'orphan'
+      (l) => l.zoneName === zoneName && l.remoteZoneId && l.status !== 'orphan' && l.status !== 'partial-pending'
     );
     if (link) return { integration, link };
   }
@@ -671,7 +671,7 @@ export function listReplicatedZoneNames(serverUrl: string): string[] {
   for (const integration of listIntegrations()) {
     if (!integration.active) continue;
     for (const link of listIntegrationZones(integration.id, normalizedUrl)) {
-      if (link.remoteZoneId && link.status !== 'orphan' && link.status !== 'error') {
+      if (link.remoteZoneId && link.status !== 'orphan' && link.status !== 'error' && link.status !== 'partial-pending') {
         names.add(link.zoneName);
       }
     }

@@ -66,7 +66,6 @@ async function ensureFolder(
   const key = `${auth.projectId}:${auth.environment}:${folderPath}`;
   if (ensuredFolders.has(key)) return;
 
-  // Ensure parent exists first (recursive)
   const lastSlash = folderPath.lastIndexOf('/');
   if (lastSlash > 0) {
     await ensureFolder(auth, folderPath.slice(0, lastSlash));
@@ -85,12 +84,16 @@ async function ensureFolder(
       path: parentPath,
     }),
   });
-  // 400 = folder already exists — that's fine
-  if (!res.ok && res.status !== 400 && res.status !== 409) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Infisical create folder ${folderPath} failed (${res.status}): ${body}`);
+  if (res.ok || res.status === 409) {
+    ensuredFolders.add(key);
+    return;
   }
-  ensuredFolders.add(key);
+  const body = await res.text().catch(() => '');
+  if (res.status === 400 && body.includes('already exist')) {
+    ensuredFolders.add(key);
+    return;
+  }
+  throw new Error(`Infisical create folder ${folderPath} failed (${res.status}): ${body}`);
 }
 
 async function upsertSecret(

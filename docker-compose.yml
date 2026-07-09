@@ -79,10 +79,16 @@ services:
       - -c
       - |
         CONFIG=/home/step/config/ca.json
+        DEFAULT="$$STEP_CA_DEFAULT_TLS_DURATION"
+        MAX="$$STEP_CA_MAX_TLS_DURATION"
         if [ -f "$$CONFIG" ]; then
-          sed -i "s/\"defaultTLSCertDuration\":\"[^\"]*\"/\"defaultTLSCertDuration\":\"$$STEP_CA_DEFAULT_TLS_DURATION\"/" "$$CONFIG"
-          sed -i "s/\"maxTLSCertDuration\":\"[^\"]*\"/\"maxTLSCertDuration\":\"$$STEP_CA_MAX_TLS_DURATION\"/" "$$CONFIG"
-          echo "step-ca: patched durations — default=$$STEP_CA_DEFAULT_TLS_DURATION max=$$STEP_CA_MAX_TLS_DURATION"
+          if grep -q '"defaultTLSCertDuration"' "$$CONFIG"; then
+            sed -i "s/\"defaultTLSCertDuration\":\"[^\"]*\"/\"defaultTLSCertDuration\":\"$$DEFAULT\"/" "$$CONFIG"
+            sed -i "s/\"maxTLSCertDuration\":\"[^\"]*\"/\"maxTLSCertDuration\":\"$$MAX\"/" "$$CONFIG"
+          else
+            sed -i 's/"type": *"ACME"/"type":"ACME","claims":{"defaultTLSCertDuration":"'"$$DEFAULT"'","maxTLSCertDuration":"'"$$MAX"'"}/' "$$CONFIG"
+          fi
+          echo "step-ca: durations — default=$$DEFAULT max=$$MAX"
         fi
         exec step-ca --password-file /run/secrets/step_ca_password "$$CONFIG"
     secrets:

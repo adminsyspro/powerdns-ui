@@ -16,7 +16,7 @@ const SAFE_COLS =
    renewal_status, last_renewal_error, error_class, next_attempt_at, not_before, not_after,
    serial, fingerprint_sha256, issuer, (cert_pem IS NOT NULL) AS has_cert,
    key_download_enabled, auto_renew, renew_before_days, category, comment, last_run_log, last_issued_at,
-   last_renewal_success_at, materialized_at, created_at, updated_at`;
+   last_renewal_success_at, materialized_at, infisical_synced_at, created_at, updated_at`;
 
 function rowToCertificate(r: any): Certificate {
   return {
@@ -34,6 +34,7 @@ function rowToCertificate(r: any): Certificate {
     lastRunLog: r.last_run_log ?? null,
     lastIssuedAt: r.last_issued_at ?? null, lastRenewalSuccessAt: r.last_renewal_success_at ?? null,
     materializedAt: r.materialized_at ?? null,
+    infisicalSyncedAt: r.infisical_synced_at ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
@@ -124,6 +125,13 @@ export function setCertificatePrivateKey(id: string, privkeyPem: string, db: Db 
 export function setCertificateMaterialized(id: string, db: Db = getDb()): void {
   db.prepare(
     `UPDATE certificates SET materialized_at = unixepoch(), updated_at = unixepoch() WHERE id = ?`
+  ).run(id);
+}
+
+/** Record that this cert's material was successfully synced to Infisical. */
+export function setCertificateInfisicalSynced(id: string, db: Db = getDb()): void {
+  db.prepare(
+    `UPDATE certificates SET infisical_synced_at = unixepoch(), updated_at = unixepoch() WHERE id = ?`
   ).run(id);
 }
 

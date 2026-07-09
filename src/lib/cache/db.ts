@@ -284,6 +284,18 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_certificate_events_cert ON certificate_events(certificate_id, ts);
 
+    -- SSL certificates: Infisical sync configuration (singleton row).
+    CREATE TABLE IF NOT EXISTS infisical_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled INTEGER NOT NULL DEFAULT 0,
+      site_url TEXT NOT NULL DEFAULT '',
+      client_id TEXT NOT NULL DEFAULT '',
+      client_secret_enc TEXT NOT NULL DEFAULT '',
+      project_id TEXT NOT NULL DEFAULT '',
+      environment TEXT NOT NULL DEFAULT 'production',
+      secret_base_path TEXT NOT NULL DEFAULT '/ssl'
+    );
+
     -- App-wide activity/audit log (append-only; best-effort writes never block the action).
     CREATE TABLE IF NOT EXISTS activity_log (
       id            TEXT PRIMARY KEY,
@@ -405,6 +417,12 @@ function initSchema(db: Database.Database) {
   // the LATEST issuance run (cleared at the start of each run; last run only).
   if (!certCols.some((c) => c.name === 'last_run_log')) {
     db.exec('ALTER TABLE certificates ADD COLUMN last_run_log TEXT DEFAULT NULL');
+  }
+
+  // Migration: add infisical_synced_at to certificates — timestamp of the last
+  // successful sync of this cert's material to Infisical. NULL = never synced.
+  if (!certCols.some((c) => c.name === 'infisical_synced_at')) {
+    db.exec('ALTER TABLE certificates ADD COLUMN infisical_synced_at INTEGER DEFAULT NULL');
   }
 
   // Migration (data cleanup): clear the spurious "Enterprise plan not set: …

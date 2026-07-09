@@ -111,6 +111,7 @@ export interface Certificate {
   lastIssuedAt: number | null;
   lastRenewalSuccessAt: number | null;
   materializedAt: number | null;
+  infisicalSyncedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -133,7 +134,7 @@ export interface CertJob {
   nextAttemptAt: number | null;
 }
 
-export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete' | 'download';
+export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete' | 'download' | 'infisical_synced' | 'infisical_sync_error';
 
 export interface CertEvent {
   id: string;
@@ -144,4 +145,20 @@ export interface CertEvent {
   actor: string | null;
   actorIp: string | null;
   message: string | null;
+}
+
+export interface InfisicalConfig {
+  enabled: boolean;
+  siteUrl: string;
+  clientId: string;
+  hasClientSecret: boolean;
+  projectId: string;
+  environment: string;
+  secretBasePath: string;
+}
+
+export interface SyncSummary {
+  synced: number;
+  failed: number;
+  errors: Array<{ certId: string; name: string; error: string }>;
 }

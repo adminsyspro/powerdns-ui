@@ -552,7 +552,7 @@ export default function IntegrationsPage() {
         cfZoneId: r.cfZoneId,
         inPdns: r.inPdns,
         account: r.account,
-        // recompute syncable
+        verificationKey: row.status === 'partial-pending' ? (row.message || null) : null,
         syncable: r.inPdns && row.status !== 'provisioning',
       };
     });
@@ -1041,7 +1041,9 @@ export default function IntegrationsPage() {
                           ) : null}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[360px]">
-                          {zone.verificationKey ? (() => {
+                          {rowError ? (
+                            <span className="text-destructive truncate" title={rowError}>{rowError}</span>
+                          ) : zone.verificationKey ? (() => {
                             const domain = zone.zoneName.replace(/\.$/, '');
                             const txtRecord = `cloudflare-verify.${domain} TXT "${zone.verificationKey}"`;
                             return (
@@ -1065,9 +1067,7 @@ export default function IntegrationsPage() {
                                 </TooltipContent>
                               </Tooltip>
                             );
-                          })() : rowError ? (
-                            <span className="text-destructive truncate" title={rowError}>{rowError}</span>
-                          ) : isTracked ? (
+                          })() : isTracked ? (
                             <span className="truncate" title={zone.message || ''}>{zone.message || '—'}</span>
                           ) : '—'}
                         </TableCell>

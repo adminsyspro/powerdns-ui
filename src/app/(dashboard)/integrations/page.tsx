@@ -1099,7 +1099,7 @@ export default function IntegrationsPage() {
                               </Tooltip>
                             ) : null}
                             {/* Force AXFR for tracked non-orphan zones */}
-                            {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && (
+                            {isTracked && zone.remoteZoneId && zone.status !== 'orphan' && zone.remoteType !== 'partial' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button

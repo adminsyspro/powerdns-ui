@@ -192,11 +192,12 @@ async function provisionZoneLocked(
     }
     currentRemoteId = zone.id;
     if (zone.type === 'partial') {
+      const isActive = zone.status === 'active';
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,
         remoteType: 'partial',
-        status: 'partial-pending',
-        message: zone.verification_key || null,
+        status: isActive ? 'ok' : 'partial-pending',
+        message: isActive ? null : (zone.verification_key || null),
       });
       return;
     }
@@ -683,7 +684,7 @@ export function listReplicatedZoneNames(serverUrl: string): string[] {
 export async function forceZoneAxfr(integrationId: string, serverUrl: string, zoneName: string): Promise<{ error?: string }> {
   const link = listIntegrationZones(integrationId, normalizeUrl(serverUrl)).find((l) => l.zoneName === zoneName);
   if (!link?.remoteZoneId) return { error: 'Zone is not linked to a remote zone yet' };
-  if (link.status === 'partial-pending') return { error: 'Partial zones do not support AXFR' };
+  if (link.status === 'partial-pending' || link.remoteType === 'partial') return { error: 'Partial zones do not support AXFR' };
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { error: 'Stored credentials are unreadable' };
   try {

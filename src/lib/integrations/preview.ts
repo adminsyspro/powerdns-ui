@@ -25,6 +25,7 @@ export interface ZonePreviewRow {
   remoteZoneId?: string | null;
   customNsSet?: number | null;
   updatedAt?: number;
+  verificationKey?: string | null;
 }
 
 /** Lower-case + strip a single trailing dot. DNS names are case-insensitive. */
@@ -62,6 +63,11 @@ export function computePreviewRows(
     const status = tr?.status;
     const syncable = inPdns && status !== 'provisioning';
 
+    const verificationKey =
+      tr?.status === 'partial-pending' ? (tr.message || null) :
+      !tr && cf?.type === 'partial' ? (cf.verification_key || null) :
+      null;
+
     rows.push({
       zoneName: pdns?.name ?? tr?.zoneName ?? cf?.name ?? key,
       previewState,
@@ -71,6 +77,7 @@ export function computePreviewRows(
       cfType: cf?.type ?? tr?.remoteType ?? null,
       cfZoneId: cf?.id ?? tr?.remoteZoneId ?? null,
       syncable,
+      verificationKey,
       ...(tr
         ? {
             status: tr.status,

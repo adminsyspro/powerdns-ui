@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, ArrowLeft, RefreshCw, Download, KeyRound, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, RefreshCw, Download, KeyRound, Trash2, CloudUpload } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -54,6 +54,8 @@ export default function CertificateDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
+  const [syncing, setSyncing] = React.useState(false);
+  const [infisicalEnabled, setInfisicalEnabled] = React.useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   const load = React.useCallback(async () => {
@@ -89,6 +91,10 @@ export default function CertificateDetailPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [cert?.lastRunLog]);
 
+  React.useEffect(() => {
+    api.fetchInfisicalConfig().then((r) => { if (r.data?.enabled) setInfisicalEnabled(true); });
+  }, []);
+
   async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
     if (res.error) setError(res.error); else setCert(res.data ?? cert);
@@ -115,6 +121,16 @@ export default function CertificateDetailPage() {
     const res = await api.deleteCertificateApi(id);
     if (res.error) setError(res.error); else router.push('/certificates');
   }
+  const handleInfisicalSync = async () => {
+    setSyncing(true);
+    const r = await api.syncCertApi(cert!.id);
+    if (r.data?.ok) {
+      refresh();
+    } else {
+      alert(`Sync failed: ${r.data?.error || r.error || 'Unknown error'}`);
+    }
+    setSyncing(false);
+  };
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   if (!cert) return (
@@ -147,6 +163,12 @@ export default function CertificateDetailPage() {
             <Button variant="outline" size="sm" disabled><Download className="mr-2 h-4 w-4" />Chain</Button>
           )}
           <Button variant="outline" size="sm" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={onDownloadBundle}><KeyRound className="mr-2 h-4 w-4" />Key + bundle</Button>
+          {infisicalEnabled && cert.hasCert && (
+            <Button variant="outline" size="sm" onClick={handleInfisicalSync} disabled={syncing}>
+              {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CloudUpload className="mr-2 h-4 w-4" />}
+              Sync to Infisical
+            </Button>
+          )}
           <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
         </div>
       </div>
@@ -172,6 +194,9 @@ export default function CertificateDetailPage() {
               <Row label="Next attempt" value={ts(cert.nextAttemptAt)} />
               {cert.lastRenewalError && <Row label="Last error" value={<span className="text-destructive">{cert.errorClass}: {cert.lastRenewalError}</span>} />}
               <Row label="Materialized at" value={ts(cert.materializedAt)} />
+              {infisicalEnabled && (
+                <Row label="Infisical synced" value={cert.infisicalSyncedAt ? formatDate(cert.infisicalSyncedAt * 1000) : 'not synced'} />
+              )}
               <div className="mt-4 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   Generation log

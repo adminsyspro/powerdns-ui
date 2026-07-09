@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight, CloudUpload } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
@@ -49,6 +50,7 @@ export default function CertificatesPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
+  const [infisicalEnabled, setInfisicalEnabled] = React.useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   const load = React.useCallback(async () => {
@@ -72,6 +74,10 @@ export default function CertificatesPage() {
     const t = setInterval(() => { load(); }, 4000);
     return () => clearInterval(t);
   }, [anyInProgress, load]);
+
+  React.useEffect(() => {
+    api.fetchInfisicalConfig().then((r) => { if (r.data?.enabled) setInfisicalEnabled(true); });
+  }, []);
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
@@ -183,6 +189,22 @@ export default function CertificatesPage() {
         <TableCell>
           <Switch checked={cert.autoRenew} onCheckedChange={(v) => onToggleAutoRenew(cert, v)} aria-label="auto-renew" />
         </TableCell>
+        {infisicalEnabled && (
+          <TableCell className="text-center">
+            {(() => {
+              const synced = cert.infisicalSyncedAt != null && cert.notBefore != null && cert.infisicalSyncedAt >= cert.notBefore;
+              const stale = cert.infisicalSyncedAt != null && cert.notBefore != null && cert.infisicalSyncedAt < cert.notBefore;
+              const label = synced ? 'Synced to Infisical' : stale ? 'Sync stale — cert renewed since last sync' : 'Not synced to Infisical';
+              const icon = <CloudUpload className={`h-4 w-4 mx-auto ${synced ? 'text-green-600' : stale ? 'text-amber-500' : 'text-muted-foreground'}`} />;
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild><span className="inline-flex">{icon}</span></TooltipTrigger>
+                  <TooltipContent>{label}</TooltipContent>
+                </Tooltip>
+              );
+            })()}
+          </TableCell>
+        )}
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <Button variant="ghost" size="icon" title="Issue now" onClick={() => onIssue(cert)}>
@@ -216,6 +238,7 @@ export default function CertificatesPage() {
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="space-y-6">
       <PageTitle title="SSL Certificates" />
       {success && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900 dark:text-green-200">{success}</div>}
@@ -263,6 +286,7 @@ export default function CertificatesPage() {
                       <TableHead>Renewal</TableHead>
                       <TableHead>Expiry</TableHead>
                       <TableHead>Auto</TableHead>
+                      {infisicalEnabled && <TableHead className="text-center w-[50px]">Sync</TableHead>}
                       <TableHead className="text-right">
                         <span className="inline-flex items-center justify-end gap-2">
                           Actions
@@ -277,7 +301,7 @@ export default function CertificatesPage() {
                       : groups!.map((g) => (
                           <React.Fragment key={g.key}>
                             <TableRow className="hover:bg-transparent">
-                              <TableCell colSpan={8} className="bg-muted/50 py-2">
+                              <TableCell colSpan={infisicalEnabled ? 9 : 8} className="bg-muted/50 py-2">
                                 <button
                                   type="button"
                                   onClick={() => toggleGroup(g.key)}
@@ -316,5 +340,6 @@ export default function CertificatesPage() {
 
       <ConfirmDialog />
     </div>
+    </TooltipProvider>
   );
 }

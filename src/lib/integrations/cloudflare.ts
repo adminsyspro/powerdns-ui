@@ -117,6 +117,7 @@ export interface CfZone {
   name: string;
   type: string;
   status: string;
+  verification_key?: string;
   plan?: { id: string; name?: string };
 }
 

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       //       100%. It still appears in the preview table, just not in the KPIs.
       //   - out of scope + auto        → orphan
       const counts: Record<IntegrationZoneStatus, number> = {
-        ok: 0, provisioning: 0, stale: 0, error: 0, orphan: 0,
+        ok: 0, provisioning: 0, stale: 0, error: 0, orphan: 0, 'partial-pending': 0,
       };
       let lastActivity: number | null = null;
       for (const link of links) {

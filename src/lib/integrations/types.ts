@@ -58,7 +58,7 @@ export interface IntegrationRow {
 
 // 'stale': the link was healthy but its provider-side prerequisites changed
 // (peer/TSIG settings edited) — the next sync reprovisions it.
-export type IntegrationZoneStatus = 'ok' | 'provisioning' | 'stale' | 'error' | 'orphan';
+export type IntegrationZoneStatus = 'ok' | 'provisioning' | 'stale' | 'error' | 'orphan' | 'partial-pending';
 
 export interface IntegrationZoneRow {
   integrationId: string;

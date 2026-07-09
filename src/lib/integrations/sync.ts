@@ -683,6 +683,7 @@ export function listReplicatedZoneNames(serverUrl: string): string[] {
 export async function forceZoneAxfr(integrationId: string, serverUrl: string, zoneName: string): Promise<{ error?: string }> {
   const link = listIntegrationZones(integrationId, normalizeUrl(serverUrl)).find((l) => l.zoneName === zoneName);
   if (!link?.remoteZoneId) return { error: 'Zone is not linked to a remote zone yet' };
+  if (link.status === 'partial-pending') return { error: 'Partial zones do not support AXFR' };
   const creds = getIntegrationCredentials(integrationId);
   if (!creds) return { error: 'Stored credentials are unreadable' };
   try {

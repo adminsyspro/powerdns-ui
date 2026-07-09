@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
+import { Cloud, Globe, CloudUpload, Plus, RefreshCw, Loader2, Trash2, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Copy } from 'lucide-react';
 import { PageTitle } from '@/components/layout/page-title';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useConfirm } from '@/hooks/use-confirm';
 import { useServerConnectionStore } from '@/stores';
 import * as api from '@/lib/api';
+import { copyToClipboard } from '@/lib/utils';
 import type { IntegrationRow, IntegrationZoneRow, IntegrationConfig } from '@/lib/integrations/types';
 import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
@@ -48,6 +49,7 @@ const ZONE_STATUS_BADGE: Record<string, string> = {
   stale: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   orphan: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+  'partial-pending': 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200',
 };
 
 const PREVIEW_STATE_BADGE: Record<string, { label: string; className: string }> = {
@@ -1038,10 +1040,36 @@ export default function IntegrationsPage() {
                             <Badge className={previewBadge.className}>{previewBadge.label}</Badge>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[360px] truncate" title={rowError || zone.message || ''}>
-                          {rowError ? (
-                            <span className="text-destructive">{rowError}</span>
-                          ) : isTracked ? (zone.message || '—') : '—'}
+                        <TableCell className="text-xs text-muted-foreground max-w-[360px]">
+                          {zone.verificationKey ? (() => {
+                            const domain = zone.zoneName.replace(/\.$/, '');
+                            const txtRecord = `cloudflare-verify.${domain} TXT "${zone.verificationKey}"`;
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center gap-1 truncate">
+                                    <code className="truncate text-violet-700 dark:text-violet-300">{txtRecord}</code>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 flex-shrink-0"
+                                      onClick={() => copyToClipboard(txtRecord)}
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-md">
+                                  <p className="font-mono text-xs break-all">{txtRecord}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">Cliquez pour copier</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })() : rowError ? (
+                            <span className="text-destructive truncate" title={rowError}>{rowError}</span>
+                          ) : isTracked ? (
+                            <span className="truncate" title={zone.message || ''}>{zone.message || '—'}</span>
+                          ) : '—'}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {isTracked && zone.updatedAt ? formatDate(zone.updatedAt) : '—'}

@@ -6,6 +6,8 @@ import { appendCertEvent } from '@/lib/certs/event-store';
 import { removeMaterializedCert } from '@/lib/certs/materialize';
 import { listActiveJobs } from '@/lib/certs/job-store';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
+import { deleteCertFromInfisical } from '@/lib/certs/infisical-sync';
+import { isInfisicalEnabled } from '@/lib/certs/infisical-config';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -95,6 +97,9 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     }
     appendCertEvent({ certificateId: id, type: 'delete', status: 'ok', message: `certificate "${cert.name}" deleted` });
     deleteCertificate(id);
+    if (isInfisicalEnabled()) {
+      try { await deleteCertFromInfisical(cert.name); } catch { /* best-effort */ }
+    }
     try {
       removeMaterializedCert(cert.name);
     } catch {

@@ -16,6 +16,8 @@ import { materializeCert } from './materialize';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { PowerDNSClient } from '@/lib/powerdns-client';
 import { classifyError, groupChallengesByFqdn } from './engine-util';
+import { isInfisicalEnabled } from './infisical-config';
+import { syncCertToInfisical } from './infisical-sync';
 
 const PROP_TIMEOUT_MS = Math.max(30_000, Number(process.env.CERT_DNS_PROPAGATION_TIMEOUT_MS) || 120_000);
 
@@ -202,6 +204,22 @@ export async function runJob(jobId: string): Promise<void> {
       status: 'ok',
       message: `issued (expires ${new Date(info.notAfter * 1000).toISOString()})`,
     });
+
+    // 6b. Infisical sync (best-effort — never blocks issuance)
+    try {
+      if (isInfisicalEnabled()) {
+        await syncCertToInfisical(cert.id);
+        runLog('synced to Infisical');
+      }
+    } catch (syncErr) {
+      appendCertEvent({
+        certificateId: cert.id,
+        type: 'infisical_sync_error',
+        status: 'error',
+        message: `Infisical sync failed: ${(syncErr as Error).message}`,
+      });
+      runLog(`⚠ Infisical sync failed: ${(syncErr as Error).message}`);
+    }
 
     // 7. Cleanup TXT + finish. Only mark cleanup done when every per-fqdn
     // PATCH actually succeeded — otherwise leave cleanup_done=0 so a later

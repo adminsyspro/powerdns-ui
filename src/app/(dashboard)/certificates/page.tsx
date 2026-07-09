@@ -18,6 +18,7 @@ import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
 import { InternalCaTab } from './internal-ca-tab';
 import { CertsOverview } from './certs-overview';
+import { InfisicalSettings } from './infisical-settings';
 
 const INTERNAL_CA_UI = process.env.NEXT_PUBLIC_INTERNAL_CA_ENABLED === 'true';
 
@@ -225,6 +226,7 @@ export default function CertificatesPage() {
           <TabsTrigger value="certificates"><ShieldCheck className="mr-2 h-4 w-4" />Certificates</TabsTrigger>
           <TabsTrigger value="accounts"><KeyRound className="mr-2 h-4 w-4" />ACME Accounts</TabsTrigger>
           {INTERNAL_CA_UI && <TabsTrigger value="internal-ca"><ShieldCheck className="mr-2 h-4 w-4" />Internal CA</TabsTrigger>}
+          <TabsTrigger value="infisical">Infisical</TabsTrigger>
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -306,6 +308,10 @@ export default function CertificatesPage() {
             <InternalCaTab onChange={load} />
           </TabsContent>
         )}
+
+        <TabsContent value="infisical">
+          <InfisicalSettings />
+        </TabsContent>
       </Tabs>
 
       <ConfirmDialog />

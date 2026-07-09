@@ -6,6 +6,11 @@ import type { SyncSummary } from './types';
 
 let cachedToken: { token: string; baseUrl: string; projectId: string; environment: string; basePath: string; expiresAt: number } | null = null;
 
+/** Invalidate the cached Infisical access token (e.g. after config changes). */
+export function clearTokenCache(): void {
+  cachedToken = null;
+}
+
 function getConfigRow(db = getDb()) {
   const row = db.prepare('SELECT * FROM infisical_config WHERE id = 1').get() as any;
   if (!row || !row.enabled) throw new Error('Infisical is not configured or disabled');

@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/cache/db';
 import { encrypt, decryptStrict } from '@/lib/crypto';
+import { clearTokenCache } from './infisical-sync';
 import type { InfisicalConfig } from './types';
 
 type Db = import('better-sqlite3').Database;
@@ -61,6 +62,10 @@ export function saveInfisicalConfig(input: SaveInput, db: Db = getDb()): Infisic
     input.environment,
     input.secretBasePath,
   );
+
+  // The saved token was minted under the old client/site config; drop it so the
+  // next sync re-authenticates against the (possibly changed) credentials.
+  clearTokenCache();
 
   return getInfisicalConfig(db)!;
 }

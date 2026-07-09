@@ -294,6 +294,10 @@ docker restart step-ca
 
 Already-issued certificates keep their original duration, so re-issue to pick up the new one. Re-apply this after reinitializing step-ca on a fresh volume.
 
+### Distributing certificates to Nginx servers
+
+Certificates stored in Infisical can be automatically pulled and deployed to Nginx servers using a lightweight cron-based sync script. Each server uses its own Machine Identity scoped to only its certificate paths (least privilege). See [`docs/ssl-infisical-nginx.md`](docs/ssl-infisical-nginx.md) for the full setup guide.
+
 ---
 
 ## Configuration

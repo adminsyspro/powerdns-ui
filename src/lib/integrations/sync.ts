@@ -191,6 +191,15 @@ async function provisionZoneLocked(
       zone = await cloudflare.createSecondaryZone(creds, config.accountId, bareName(zoneName));
     }
     currentRemoteId = zone.id;
+    if (zone.type === 'partial') {
+      upsertIntegrationZone(integration.id, serverUrl, zoneName, {
+        remoteZoneId: zone.id,
+        remoteType: 'partial',
+        status: 'partial-pending',
+        message: zone.verification_key || null,
+      });
+      return;
+    }
     if (zone.type !== 'secondary') {
       upsertIntegrationZone(integration.id, serverUrl, zoneName, {
         remoteZoneId: zone.id,

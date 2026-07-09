@@ -227,6 +227,8 @@ export default function CertificateDetailPage() {
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="d-category">Category</Label>
                 <Input id="d-category" defaultValue={cert.category ?? ''} className="w-40"
+                  disabled={cert.hasCert}
+                  title={cert.hasCert ? 'Category cannot be changed after issuance' : undefined}
                   onBlur={(e) => { const v = e.target.value.trim(); if (v !== (cert.category ?? '')) patch({ category: v || null }); }} />
               </div>
               <div className="space-y-1 pt-2">

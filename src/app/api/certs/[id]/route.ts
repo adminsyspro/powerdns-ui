@@ -53,6 +53,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (body.category !== undefined && body.category !== null && typeof body.category !== 'string') {
       return NextResponse.json({ error: 'category must be a string' }, { status: 400 });
     }
+    if (body.category !== undefined) {
+      const existing = getCertificate(id);
+      if (existing?.hasCert) {
+        return NextResponse.json({ error: 'Category cannot be changed after a certificate has been issued' }, { status: 409 });
+      }
+    }
     if (body.comment !== undefined && body.comment !== null && typeof body.comment !== 'string') {
       return NextResponse.json({ error: 'comment must be a string' }, { status: 400 });
     }
@@ -98,7 +104,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     appendCertEvent({ certificateId: id, type: 'delete', status: 'ok', message: `certificate "${cert.name}" deleted` });
     deleteCertificate(id);
     if (isInfisicalEnabled()) {
-      try { await deleteCertFromInfisical(cert.name); } catch { /* best-effort */ }
+      try { await deleteCertFromInfisical(cert.name, cert.category); } catch { /* best-effort */ }
     }
     try {
       removeMaterializedCert(cert.name);

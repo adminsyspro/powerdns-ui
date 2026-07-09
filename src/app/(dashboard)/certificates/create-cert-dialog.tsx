@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2, X, Plus } from 'lucide-react';
+import { Loader2, X, Plus, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -113,10 +113,14 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
       setError('The number of days must be between 1 and 90.');
       return;
     }
+    if (!category.trim()) {
+      setError('Category is required. It determines the Infisical folder and cannot be changed after issuance.');
+      return;
+    }
     setBusy(true);
     const res = await api.createCertificateApi({
       name: name.trim(), acmeAccountId: accountId, connectionId, sans, keyType, autoRenew, renewBeforeDays,
-      category: category.trim() || undefined,
+      category: category.trim(),
       comment: comment.trim() || undefined,
     });
     setBusy(false);
@@ -163,11 +167,22 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="cert-category">Category</Label>
-                <Input id="cert-category" list="cert-category-list" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Production (optional)" />
-                <datalist id="cert-category-list">
-                  {(categories ?? []).map((c) => <option key={c} value={c} />)}
-                </datalist>
+                <Label className="flex items-center gap-1">
+                  Category <span className="text-destructive">*</span>
+                  <span title="Determines the folder structure in Infisical and on disk. Cannot be changed after the certificate is issued.">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </Label>
+                {(categories ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No categories yet. Create one in the Organisation tab first.</p>
+                ) : (
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                    <SelectContent>
+                      {(categories ?? []).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -326,7 +341,7 @@ export function CreateCertDialog({ accounts, onCreated, trigger, categories }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={busy}>Cancel</Button>
-          <Button onClick={onSubmit} disabled={busy || accounts.length === 0 || !!nameError}>
+          <Button onClick={onSubmit} disabled={busy || accounts.length === 0 || !!nameError || !name.trim() || !accountId || !connectionId || sans.length === 0 || !category.trim()}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create
           </Button>
         </DialogFooter>

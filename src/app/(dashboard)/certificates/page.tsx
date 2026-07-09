@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight, CloudUpload } from 'lucide-react';
+import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight, CloudUpload, Infinity, FolderOpen } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -20,6 +20,7 @@ import { AcmeAccountsTab } from './acme-accounts-tab';
 import { InternalCaTab } from './internal-ca-tab';
 import { CertsOverview } from './certs-overview';
 import { InfisicalSettings } from './infisical-settings';
+import { CategoriesTab } from './categories-tab';
 
 const INTERNAL_CA_UI = process.env.NEXT_PUBLIC_INTERNAL_CA_ENABLED === 'true';
 
@@ -81,10 +82,14 @@ export default function CertificatesPage() {
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
-  const categories = React.useMemo(
-    () => [...new Set(certs.map((c) => c.category).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b)),
-    [certs],
-  );
+  const [categoryNames, setCategoryNames] = React.useState<string[]>([]);
+  const loadCategories = React.useCallback(() => {
+    api.fetchCertCategories().then((r) => {
+      if (r.data) setCategoryNames(r.data.map((c) => c.name).sort((a, b) => a.localeCompare(b)));
+    });
+  }, []);
+  React.useEffect(() => { loadCategories(); }, [loadCategories]);
+  const categories = categoryNames;
 
   async function onIssue(cert: Certificate) {
     setError(''); setSuccess('');
@@ -249,7 +254,8 @@ export default function CertificatesPage() {
           <TabsTrigger value="certificates"><ShieldCheck className="mr-2 h-4 w-4" />Certificates</TabsTrigger>
           <TabsTrigger value="accounts"><KeyRound className="mr-2 h-4 w-4" />ACME Accounts</TabsTrigger>
           {INTERNAL_CA_UI && <TabsTrigger value="internal-ca"><ShieldCheck className="mr-2 h-4 w-4" />Internal CA</TabsTrigger>}
-          <TabsTrigger value="infisical">Infisical</TabsTrigger>
+          <TabsTrigger value="organisation"><FolderOpen className="mr-2 h-4 w-4" />Organisation</TabsTrigger>
+          <TabsTrigger value="infisical"><Infinity className="mr-2 h-4 w-4" />Infisical</TabsTrigger>
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -258,7 +264,7 @@ export default function CertificatesPage() {
           {certs.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground space-y-3">
               <p className="text-sm">No certificates yet. Create one to start an ACME DNS-01 issuance.</p>
-              <CreateCertDialog accounts={accounts} onCreated={load} categories={[]} trigger={<Button>New certificate</Button>} />
+              <CreateCertDialog accounts={accounts} onCreated={load} categories={categories} trigger={<Button>New certificate</Button>} />
             </div>
           ) : (
             <div className="space-y-3">
@@ -286,7 +292,7 @@ export default function CertificatesPage() {
                       <TableHead>Renewal</TableHead>
                       <TableHead>Expiry</TableHead>
                       <TableHead>Auto</TableHead>
-                      {infisicalEnabled && <TableHead className="text-center w-[50px]">Sync</TableHead>}
+                      {infisicalEnabled && <TableHead className="text-center w-[50px]"><Infinity className="h-4 w-4 mx-auto" /></TableHead>}
                       <TableHead className="text-right">
                         <span className="inline-flex items-center justify-end gap-2">
                           Actions
@@ -332,6 +338,10 @@ export default function CertificatesPage() {
             <InternalCaTab onChange={load} />
           </TabsContent>
         )}
+
+        <TabsContent value="organisation">
+          <CategoriesTab onChange={() => { load(); loadCategories(); }} />
+        </TabsContent>
 
         <TabsContent value="infisical">
           <InfisicalSettings />

@@ -699,6 +699,42 @@ export function syncCertApi(id: string) {
   );
 }
 
+// ---- Certificate categories ----
+
+export interface CertificateCategoryResponse {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function fetchCertCategories() {
+  return apiRequest<CertificateCategoryResponse[]>('/api/certs/categories');
+}
+
+export function createCertCategory(input: { name: string; description?: string }) {
+  return apiRequest<CertificateCategoryResponse>('/api/certs/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCertCategory(id: string, patch: { name?: string; description?: string }) {
+  return apiRequest<CertificateCategoryResponse>(`/api/certs/categories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteCertCategory(id: string) {
+  return apiRequest<{ ok: boolean }>(`/api/certs/categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 // ---- NS compliance audit ----
 
 export async function fetchNsAudit() {

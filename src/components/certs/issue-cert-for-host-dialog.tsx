@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,8 @@ export function IssueCertForHostDialog({
   const [accountId, setAccountId] = React.useState('');
   const [name, setName] = React.useState('');
   const [checked, setChecked] = React.useState<Set<string>>(new Set());
+  const [category, setCategory] = React.useState('');
+  const [categories, setCategories] = React.useState<string[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -45,10 +47,14 @@ export function IssueCertForHostDialog({
     setError('');
     setName(deriveCertName(singleHost ? seedSans[0] : zoneName));
     setChecked(new Set(preselected ?? seedSans));
+    setCategory('');
     api.fetchAcmeAccounts().then((r) => {
       if (r.error || !r.data) { setLoadFailed(true); setAccounts([]); return; }
       setLoadFailed(false);
       setAccounts(r.data);
+    });
+    api.fetchCertCategories().then((r) => {
+      if (r.data) setCategories(r.data.map((c) => c.name).sort((a, b) => a.localeCompare(b)));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -92,10 +98,14 @@ export function IssueCertForHostDialog({
       setError('A name, an ACME account and at least one domain are required.');
       return;
     }
+    if (!category.trim()) {
+      setError('Category is required. It determines the Infisical folder and cannot be changed after issuance.');
+      return;
+    }
     setBusy(true);
     const res = await api.createCertificateApi({
       name: name.trim(), acmeAccountId: accountId, connectionId, sans: selectedSans,
-      keyType: 'ecdsa', autoRenew: true, renewBeforeDays: 30,
+      keyType: 'ecdsa', autoRenew: true, renewBeforeDays: 30, category: category.trim(),
     });
     setBusy(false);
     if (res.error) { setError(res.error); return; }
@@ -156,6 +166,25 @@ export function IssueCertForHostDialog({
             </div>
 
             <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                Category <span className="text-destructive">*</span>
+                <span title="Determines the folder structure in Infisical and on disk. Cannot be changed after the certificate is issued.">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                </span>
+              </Label>
+              {categories.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No categories yet. Create one on the <Link href="/certificates" className="underline">SSL Certificates</Link> page first.</p>
+              ) : (
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label>Domains</Label>
               {singleHost ? (
                 <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">{seedSans[0]}</span>
@@ -175,7 +204,7 @@ export function IssueCertForHostDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
-          <Button onClick={onSubmit} disabled={busy || noAccounts || !!nameError}>
+          <Button onClick={onSubmit} disabled={busy || noAccounts || !!nameError || !name.trim() || !accountId || selectedSans.length === 0 || !category.trim()}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create
           </Button>
         </DialogFooter>

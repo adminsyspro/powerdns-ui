@@ -284,6 +284,15 @@ function initSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_certificate_events_cert ON certificate_events(certificate_id, ts);
 
+    -- SSL certificates: categories for organisational grouping / Infisical folder mapping.
+    CREATE TABLE IF NOT EXISTS certificate_categories (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     -- SSL certificates: Infisical sync configuration (singleton row).
     CREATE TABLE IF NOT EXISTS infisical_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),

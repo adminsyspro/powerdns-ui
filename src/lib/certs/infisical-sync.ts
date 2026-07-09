@@ -47,13 +47,56 @@ async function getAccessToken(db = getDb()): Promise<typeof cachedToken & {}> {
   return cachedToken;
 }
 
+function buildSecretPath(basePath: string, category: string | null, certName: string): string {
+  const cat = category?.trim() || '_default';
+  const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+  return `${base}/${cat}/${certName}`;
+}
+
+const ensuredFolders = new Set<string>();
+
+async function ensureFolder(
+  auth: NonNullable<typeof cachedToken>,
+  folderPath: string,
+): Promise<void> {
+  const key = `${auth.projectId}:${auth.environment}:${folderPath}`;
+  if (ensuredFolders.has(key)) return;
+
+  // Ensure parent exists first (recursive)
+  const lastSlash = folderPath.lastIndexOf('/');
+  if (lastSlash > 0) {
+    await ensureFolder(auth, folderPath.slice(0, lastSlash));
+  }
+
+  const folderName = folderPath.slice(lastSlash + 1);
+  const parentPath = lastSlash > 0 ? folderPath.slice(0, lastSlash) : '/';
+
+  const res = await fetch(`${auth.baseUrl}/api/v1/folders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+    body: JSON.stringify({
+      workspaceId: auth.projectId,
+      environment: auth.environment,
+      name: folderName,
+      path: parentPath,
+    }),
+  });
+  // 400 = folder already exists — that's fine
+  if (!res.ok && res.status !== 400 && res.status !== 409) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Infisical create folder ${folderPath} failed (${res.status}): ${body}`);
+  }
+  ensuredFolders.add(key);
+}
+
 async function upsertSecret(
   auth: NonNullable<typeof cachedToken>,
+  category: string | null,
   certName: string,
   secretName: string,
   secretValue: string,
 ): Promise<void> {
-  const secretPath = `${auth.basePath}/${certName}`;
+  const secretPath = buildSecretPath(auth.basePath, category, certName);
   const payload = {
     workspaceId: auth.projectId,
     environment: auth.environment,
@@ -90,6 +133,7 @@ async function upsertSecret(
 
 async function deleteSecret(
   auth: NonNullable<typeof cachedToken>,
+  category: string | null,
   certName: string,
   secretName: string,
 ): Promise<void> {
@@ -99,7 +143,7 @@ async function deleteSecret(
     body: JSON.stringify({
       workspaceId: auth.projectId,
       environment: auth.environment,
-      secretPath: `${auth.basePath}/${certName}`,
+      secretPath: buildSecretPath(auth.basePath, category, certName),
       type: 'shared',
     }),
   });
@@ -134,8 +178,11 @@ export async function syncCertToInfisical(certId: string): Promise<void> {
     FULLCHAIN: fullchain,
   };
 
+  const secretPath = buildSecretPath(auth.basePath, cert.category, cert.name);
+  await ensureFolder(auth, secretPath);
+
   for (const [name, value] of Object.entries(secrets)) {
-    await upsertSecret(auth, cert.name, name, value);
+    await upsertSecret(auth, cert.category, cert.name, name, value);
   }
 
   setCertificateInfisicalSynced(certId, db);
@@ -159,12 +206,12 @@ export async function syncAllCertsToInfisical(): Promise<SyncSummary> {
   return summary;
 }
 
-export async function deleteCertFromInfisical(certName: string): Promise<void> {
+export async function deleteCertFromInfisical(certName: string, category: string | null): Promise<void> {
   const db = getDb();
   if (!isInfisicalEnabled(db)) return;
   const auth = await getAccessToken(db);
   for (const name of SECRET_NAMES) {
-    await deleteSecret(auth, certName, name);
+    await deleteSecret(auth, category, certName, name);
   }
 }
 
@@ -175,7 +222,7 @@ export async function testInfisicalConnection(): Promise<{ ok: boolean; error?: 
     const res = await fetch(`${auth.baseUrl}/api/v3/secrets/raw?workspaceId=${encodeURIComponent(auth.projectId)}&environment=${encodeURIComponent(auth.environment)}&secretPath=${encodeURIComponent(auth.basePath)}`, {
       headers: { Authorization: `Bearer ${auth.token}` },
     });
-    if (!res.ok) {
+    if (!res.ok && res.status !== 404) {
       const body = await res.text().catch(() => '');
       return { ok: false, error: `API returned ${res.status}: ${body}` };
     }

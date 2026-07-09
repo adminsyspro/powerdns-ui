@@ -17,13 +17,14 @@ type Db = Database.Database;
 export const BUNDLED_ACCOUNT_NAME = 'internal-step-ca';
 
 /** Read a public cert file; returns null (never throws) if unset/missing/invalid. */
-export function readCertMeta(path: string | null): { pem: string; fingerprint: string; notAfter: number } | null {
+export function readCertMeta(path: string | null): { pem: string; fingerprint: string; notAfter: number; subject: string } | null {
   if (!path) return null;
   try {
     const pem = readFileSync(path, 'utf8');
     const x = new X509Certificate(pem);
     const notAfter = Math.floor(Date.parse(x.validTo) / 1000);
-    return { pem, fingerprint: fingerprintSha256(pem), notAfter };
+    const cn = x.subject.split('\n').find(l => l.startsWith('CN='))?.slice(3) ?? x.subject;
+    return { pem, fingerprint: fingerprintSha256(pem), notAfter, subject: cn };
   } catch {
     return null;
   }
@@ -75,6 +76,7 @@ export function internalCaStatus(db: Db = getDb()): InternalCaStatus {
     ready: internalCaReady(),
     directoryUrl: getInternalCaDirectoryUrl(),
     rootPem: root?.pem ?? null,
+    rootSubject: root?.subject ?? null,
     rootFingerprintSha256: root?.fingerprint ?? null,
     rootNotAfter: root?.notAfter ?? null,
     intermediateNotAfter: inter?.notAfter ?? null,

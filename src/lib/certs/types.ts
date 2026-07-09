@@ -30,6 +30,7 @@ export interface InternalCaStatus {
   ready: boolean;                        // directory URL set + root file readable
   directoryUrl: string | null;
   rootPem: string | null;                // public root, for "Download root"
+  rootSubject: string | null;            // CN from the root cert
   rootFingerprintSha256: string | null;
   rootNotAfter: number | null;           // epoch seconds
   intermediateNotAfter: number | null;   // epoch seconds

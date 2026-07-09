@@ -62,7 +62,7 @@ services:
     container_name: step-ca
     profiles: ["internal-ca"]
     environment:
-      - DOCKER_STEPCA_INIT_NAME=PowerDNS UI Internal CA
+      - DOCKER_STEPCA_INIT_NAME=${INTERNAL_CA_NAME:-PowerDNS UI Internal CA}
       # MUST include the compose service name so the CA's own TLS cert has it as a SAN
       # (root trust does NOT bypass hostname/SNI verification).
       - DOCKER_STEPCA_INIT_DNS_NAMES=step-ca,localhost

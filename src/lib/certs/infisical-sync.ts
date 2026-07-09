@@ -47,10 +47,14 @@ async function getAccessToken(db = getDb()): Promise<typeof cachedToken & {}> {
   return cachedToken;
 }
 
+function sanitizeFolderName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
 function buildSecretPath(basePath: string, category: string | null, certName: string): string {
-  const cat = category?.trim() || '_default';
+  const cat = sanitizeFolderName(category?.trim() || '_default');
   const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-  return `${base}/${cat}/${certName}`;
+  return `${base}/${cat}/${sanitizeFolderName(certName)}`;
 }
 
 const ensuredFolders = new Set<string>();

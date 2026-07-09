@@ -64,7 +64,7 @@ export function InternalCaTab({ onChange }: { onChange: () => void }) {
       {success && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-800 dark:bg-green-900 dark:text-green-200">{success}</div>}
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center gap-2 font-medium"><ShieldCheck className="h-5 w-5 text-muted-foreground" />Bundled step-ca</div>
+        <div className="flex items-center gap-2 font-medium"><ShieldCheck className="h-5 w-5 text-muted-foreground" />{status.rootSubject || 'Bundled step-ca'}</div>
         <dl className="grid grid-cols-[180px_1fr] gap-y-2 text-sm">
           <dt className="text-muted-foreground">Ready</dt><dd>{status.ready ? 'Yes' : 'No (step-ca not up / root not written yet)'}</dd>
           <dt className="text-muted-foreground">Directory URL</dt><dd className="truncate font-mono text-xs" title={status.directoryUrl ?? ''}>{status.directoryUrl ?? '—'}</dd>

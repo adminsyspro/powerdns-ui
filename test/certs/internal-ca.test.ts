@@ -30,6 +30,7 @@ writeFileSync(rootPath, ROOT_A_PEM);
 const meta = readCertMeta(rootPath)!;
 assert.equal(meta.fingerprint, fingerprintSha256(ROOT_A_PEM), 'readCertMeta fingerprint matches');
 assert.ok(meta.notAfter > Math.floor(Date.now() / 1000), 'notAfter parsed');
+assert.ok(typeof meta.subject === 'string' && meta.subject.length > 0, 'readCertMeta extracts subject CN');
 assert.equal(readCertMeta(null), null, 'null path => null');
 assert.equal(readCertMeta('/no/such/file.pem'), null, 'missing file => null (no throw)');
 

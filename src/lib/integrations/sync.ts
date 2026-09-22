@@ -211,21 +211,6 @@ async function provisionZoneLocked(
       return;
     }
 
-    // Cloudflare Secondary DNS (incoming transfers) is Enterprise-only, so an
-    // existing zone we adopt is necessarily already Enterprise — never try to set
-    // its plan. Doing so on an adopted zone surfaces a spurious "10000:
-    // Authentication error" when the integration token lacks billing permission
-    // (e.g. an account-owned token whose zone listing omits `plan`, so the
-    // enterprise check below can't short-circuit). Only a zone we just created
-    // may need the upgrade, before the Enterprise-only linkZoneToPeer. Best-effort.
-    if (!zonePreExisted && zone.plan?.id !== 'enterprise') {
-      try {
-        await cloudflare.setZonePlan(creds, zone.id);
-      } catch (e) {
-        warnings.push(`Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
-      }
-    }
-
     try {
       await cloudflare.linkZoneToPeer(creds, zone.id, bareName(zoneName), peerId);
     } catch (e) {
@@ -248,6 +233,42 @@ async function provisionZoneLocked(
           message: `Zone is linked to a different peer (${linkedPeers.join(', ') || 'unknown'}) — unlink it at Cloudflare or align the integration transfer settings`,
         });
         return;
+      }
+    }
+
+    // Enterprise plan (best-effort). Cloudflare Secondary DNS is an ACCOUNT
+    // entitlement: a secondary zone links and transfers fine while still on the
+    // Free plan, so "linked ⇒ Enterprise" is false — and Cloudflare creates every
+    // new zone on Free. This deliberately runs AFTER the peer-ownership check
+    // above: a zone linked to a different peer is refused, and must never be
+    // billed/upgraded on the way to that refusal. needsPlanUpgrade tells a zone
+    // we just created (always ours to upgrade) from an adopted one (upgraded
+    // only from Free — paid/unknown plans are left alone, adopt-don't-touch).
+    // The plan warning is the FIRST entry pushed into `warnings`.
+    if (cloudflare.needsPlanUpgrade(zone, zonePreExisted)) {
+      const plan = cloudflare.zonePlan(zone) ?? 'unknown';
+      let upgraded = false;
+      try {
+        await cloudflare.setZonePlan(creds, zone.id);
+        upgraded = true;
+      } catch (e) {
+        const lacksBilling = e instanceof cloudflare.CloudflareError && e.codes.includes(10000);
+        warnings.push(lacksBilling
+          ? `Enterprise plan not set: Cloudflare 10000 (Authentication error) — the API token most likely lacks the account permission "Billing: Write"; zone stays on plan "${plan}". Grant it, then re-sync this zone`
+          : `Enterprise plan not set: ${e instanceof Error ? e.message : 'unknown error'}`);
+      }
+      // Read the plan back so an accepted-but-not-applied request stays visible
+      // (a rate-plan id Cloudflare ignores would otherwise look like success). A
+      // failed read-back is NOT a failed upgrade — say so instead of "not set".
+      if (upgraded) {
+        try {
+          const after = cloudflare.zonePlan(await cloudflare.getZone(creds, zone.id));
+          if (after !== 'enterprise') {
+            warnings.push(`Enterprise plan requested but the zone still reports plan "${after ?? 'unknown'}" right after — re-sync this zone to confirm`);
+          }
+        } catch (e) {
+          warnings.push(`Enterprise plan requested but not confirmed (plan read-back failed: ${e instanceof Error ? e.message : 'unknown error'})`);
+        }
       }
     }
 

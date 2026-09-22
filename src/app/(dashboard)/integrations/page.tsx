@@ -549,6 +549,7 @@ export default function IntegrationsPage() {
         // carry over CF/PDNS fields from the prior preview row
         cfPresent: r.cfPresent,
         cfType: r.cfType,
+        cfPlan: r.cfPlan,
         cfZoneId: r.cfZoneId,
         inPdns: r.inPdns,
         account: r.account,
@@ -1005,7 +1006,17 @@ export default function IntegrationsPage() {
                         </TableCell>
                         <TableCell>
                           {zone.cfType ? (
-                            <Badge variant="outline" className="capitalize">{zone.cfType}</Badge>
+                            <span className="flex items-center gap-1">
+                              <Badge variant="outline" className="capitalize">{zone.cfType}</Badge>
+                              {zone.cfType === 'secondary' && zone.cfPlan && zone.cfPlan !== 'enterprise' && (
+                                <Badge
+                                  className="capitalize bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                  title="Not on the Enterprise plan — re-sync to upgrade"
+                                >
+                                  {zone.cfPlan}
+                                </Badge>
+                              )}
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -1068,7 +1079,12 @@ export default function IntegrationsPage() {
                               </Tooltip>
                             );
                           })() : isTracked ? (
-                            <span className="truncate" title={zone.message || ''}>{zone.message || '—'}</span>
+                            <span
+                              className={`truncate${zone.status === 'ok' && zone.message ? ' text-amber-700 dark:text-amber-300' : ''}`}
+                              title={zone.message || ''}
+                            >
+                              {zone.message || '—'}
+                            </span>
                           ) : '—'}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1244,7 +1260,7 @@ export default function IntegrationsPage() {
               <p className="text-xs text-muted-foreground">
                 Scopes needed: Zone&nbsp;:&nbsp;Edit, DNS&nbsp;:&nbsp;Edit, Secondary&nbsp;DNS&nbsp;:&nbsp;Edit on the account
                 — plus Account&nbsp;Settings&nbsp;:&nbsp;Read and Zone&nbsp;Settings&nbsp;:&nbsp;Edit for custom nameservers,
-                Zone&nbsp;DNS&nbsp;Settings&nbsp;:&nbsp;Edit for Secondary&nbsp;DNS override, and Billing/Subscriptions write to set the Enterprise plan
+                Zone&nbsp;DNS&nbsp;Settings&nbsp;:&nbsp;Edit for Secondary&nbsp;DNS override, and Billing&nbsp;:&nbsp;Write (account) to set the Enterprise plan
               </p>
             </div>
             <div className="space-y-2">

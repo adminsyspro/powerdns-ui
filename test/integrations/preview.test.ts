@@ -14,10 +14,16 @@ assert.equal(rows.length, 1);
 assert.equal(rows[0].previewState, 'adopt');
 assert.equal(rows[0].syncable, true);
 assert.equal(rows[0].cfType, 'secondary');
+assert.equal(rows[0].cfPlan, null, 'plan omitted from the CF listing → null');
+
+// cfPlan comes from the cached CF zone's plan.legacy_id (lower-cased)
+rows = computePreviewRows([{ name: 'a.com.', account: 'x' }], [{ ...cf('a.com'), plan: { id: '0f', legacy_id: 'Free' } }], []);
+assert.equal(rows[0].cfPlan, 'free');
 
 // create: in PDNS, absent from CF
 rows = computePreviewRows([{ name: 'b.com.', account: 'x' }], [], []);
 assert.equal(rows[0].previewState, 'create');
+assert.equal(rows[0].cfPlan, null, 'no CF zone → no plan');
 assert.equal(rows[0].syncable, true);
 
 // cf-only: present in CF, not in PDNS

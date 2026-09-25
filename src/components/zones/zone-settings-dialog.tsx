@@ -88,7 +88,7 @@ export function ZoneSettingsDialog({
       kind: 'Native',
       masters: [],
       account: '',
-      soa_edit_api: 'DEFAULT',
+      soa_edit_api: '',
       api_rectify: false,
     },
   });
@@ -104,7 +104,7 @@ export function ZoneSettingsDialog({
         kind: zone.kind,
         masters: zone.masters || [],
         account: zone.account || '',
-        soa_edit_api: zone.soa_edit_api || 'DEFAULT',
+        soa_edit_api: zone.soa_edit_api ?? '',
         api_rectify: zone.api_rectify || false,
       });
       setSubmitError(null);
@@ -152,7 +152,7 @@ export function ZoneSettingsDialog({
       const payload: Partial<Zone> = {
         kind: data.kind,
         account: data.account || '',
-        soa_edit_api: data.soa_edit_api || 'DEFAULT',
+        soa_edit_api: data.soa_edit_api,
         api_rectify: data.api_rectify,
         // Only send masters for Slave zones so switching away never clears them.
         ...(data.kind === 'Slave' ? { masters: data.masters } : {}),
@@ -265,13 +265,16 @@ export function ZoneSettingsDialog({
             <div className="space-y-2">
               <Label htmlFor="soa_edit_api">SOA-EDIT-API</Label>
               <Select
-                value={watch('soa_edit_api') || 'DEFAULT'}
-                onValueChange={(value) => setValue('soa_edit_api', value)}
+                // Radix requires a non-empty item value; PowerDNS uses the
+                // empty string to disable automatic serial updates.
+                value={watch('soa_edit_api') || '__empty__'}
+                onValueChange={(value) => setValue('soa_edit_api', value === '__empty__' ? '' : value)}
               >
                 <SelectTrigger id="soa_edit_api">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__empty__">Disabled (empty)</SelectItem>
                   <SelectItem value="DEFAULT">DEFAULT</SelectItem>
                   <SelectItem value="INCEPTION-INCREMENT">INCEPTION-INCREMENT</SelectItem>
                   <SelectItem value="INCEPTION-EPOCH">INCEPTION-EPOCH</SelectItem>
@@ -279,6 +282,19 @@ export function ZoneSettingsDialog({
                   <SelectItem value="NONE">NONE</SelectItem>
                 </SelectContent>
               </Select>
+              {watch('soa_edit_api') === '' && (
+                <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
+                  Automatic SOA serial updates are disabled. Record changes, including
+                  enabling or disabling records, will not increase the serial automatically.
+                  Secondaries may keep serving old data until the serial is increased and
+                  the zone is transferred. Choose DEFAULT to enable automatic serial updates
+                  for future record changes.
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                AXFR omits disabled records: after a successful transfer, they disappear
+                from secondaries and remain available on the primary for reactivation.
+              </p>
             </div>
 
             {/* API Rectify */}

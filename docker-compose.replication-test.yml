@@ -1,0 +1,31 @@
+name: pdns-issue3-lab
+x-pdns: &pdns
+  image: powerdns/pdns-auth-45:4.5.3
+  environment:
+    PDNS_AUTH_API_KEY: issue3-lab-only
+  command:
+    - --local-address=0.0.0.0
+    - --master=yes
+    - --slave=yes
+    - --allow-axfr-ips=0.0.0.0/0
+    - --allow-notify-from=0.0.0.0/0
+    - --xfr-cycle-interval=1
+    - --cache-ttl=0
+    - --query-cache-ttl=0
+    - --negquery-cache-ttl=0
+  networks: [lab]
+services:
+  primary:
+    <<: *pdns
+    ports:
+      - '127.0.0.1:18081:8081'
+      - '127.0.0.1:15301:53/udp'
+      - '127.0.0.1:15301:53/tcp'
+  secondary:
+    <<: *pdns
+    ports:
+      - '127.0.0.1:18082:8081'
+      - '127.0.0.1:15302:53/udp'
+      - '127.0.0.1:15302:53/tcp'
+networks:
+  lab: {}

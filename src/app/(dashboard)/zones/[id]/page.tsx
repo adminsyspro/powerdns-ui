@@ -982,7 +982,7 @@ export default function ZoneDetailPage() {
               </>
             )}
             <div className="w-px h-4 bg-border" />
-            <span><span className="text-muted-foreground">SOA-EDIT-API:</span> <span className="font-mono">{zone.soa_edit_api || 'DEFAULT'}</span></span>
+            <span><span className="text-muted-foreground">SOA-EDIT-API:</span> <span className="font-mono">{zone.soa_edit_api === '' ? 'Disabled (empty)' : zone.soa_edit_api ?? 'Unknown'}</span></span>
             <div className="w-px h-4 bg-border" />
             <span><span className="text-muted-foreground">API Rectify:</span> <span className="font-mono">{zone.api_rectify ? 'Enabled' : 'Disabled'}</span></span>
           </div>

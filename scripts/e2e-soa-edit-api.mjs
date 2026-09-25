@@ -17,15 +17,16 @@ const dnsOnly = process.argv.includes('--dns-only');
 let browser, context, connectionId;
 const created = [];
 
-async function api(server, path, method = 'GET', data) {
+async function api(server, path, method, data) {
+  const httpMethod = method ?? 'GET';
   const response = await fetch(`${server}/api/v1/servers/localhost${path}`, {
-    method,
+    method: httpMethod,
     headers: { 'X-API-Key': key, 'Content-Type': 'application/json' },
     body: data === undefined ? undefined : JSON.stringify(data),
     signal: AbortSignal.timeout(10_000),
   });
   const text = await response.text();
-  assert.ok(response.ok, `${method} ${path}: ${response.status} ${text}`);
+  assert.ok(response.ok, `${httpMethod} ${path}: ${response.status} ${text}`);
   return text ? JSON.parse(text) : null;
 }
 
@@ -63,7 +64,8 @@ async function toggle(disabled) {
 
 try {
   const compose = ['compose', '-f', 'docker-compose.replication-test.yml'];
-  const containerIP = (service) => execFileSync('docker', [...compose,
+  // Use the system Docker binary rather than searching the caller's PATH.
+  const containerIP = (service) => execFileSync('/usr/bin/docker', [...compose,
     'exec', '-T', service, 'hostname', '-i'], { encoding: 'utf8' }).trim();
   const primaryIP = containerIP('primary');
   const secondaryIP = containerIP('secondary');
@@ -191,7 +193,7 @@ try {
       assert.ok(response.ok(), `Connection cleanup: ${response.status()}`);
     }] : []),
     () => browser?.close(),
-    ...created.reverse().map(server => () => api(server, zonePath, 'DELETE')),
+    ...created.toReversed().map(server => () => api(server, zonePath, 'DELETE')),
   ];
   for (const cleanup of cleanups) {
     try { await cleanup(); }

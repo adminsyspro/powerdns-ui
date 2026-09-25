@@ -6,7 +6,8 @@ SQLite databases. Only localhost ports are published; all data is disposable.
 
 ## Run
 
-Requirements: Docker Compose, Node 20+, application dependencies, and (for the UI
+Requirements: Linux with Docker at `/usr/bin/docker` and the Compose plugin,
+Node 20+, application dependencies, and (for the UI
 checks) Playwright with Chromium. Use a separate checkout with an empty `data/`
 directory and no existing server connections. The script uses the fresh lab app's
 default `admin` / `admin` login and the fixture's test-only API key.

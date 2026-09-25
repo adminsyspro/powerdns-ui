@@ -283,13 +283,13 @@ export function ZoneSettingsDialog({
                 </SelectContent>
               </Select>
               {watch('soa_edit_api') === '' && (
-                <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
+                <output className="block text-sm text-amber-700 dark:text-amber-400">
                   Automatic SOA serial updates are disabled. Record changes, including
                   enabling or disabling records, will not increase the serial automatically.
                   Secondaries may keep serving old data until the serial is increased and
                   the zone is transferred. Choose DEFAULT to enable automatic serial updates
                   for future record changes.
-                </p>
+                </output>
               )}
               <p className="text-xs text-muted-foreground">
                 AXFR omits disabled records: after a successful transfer, they disappear

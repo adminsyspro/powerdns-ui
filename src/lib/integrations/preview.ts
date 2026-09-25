@@ -1,5 +1,5 @@
 import type { CfZone } from './cloudflare';
-import { listZones } from './cloudflare';
+import { listZones, zonePlan } from './cloudflare';
 import type { IntegrationZoneRow, IntegrationZoneStatus } from './types';
 import { getIntegration, getIntegrationCredentials, listIntegrationZones } from './store';
 import { getConnectionById } from './connections';
@@ -17,6 +17,8 @@ export interface ZonePreviewRow {
   account: string | null;
   cfPresent: boolean;
   cfType: string | null;
+  /** Cloudflare plan name ("free", "enterprise", …) from the cached zone list; null when unknown. */
+  cfPlan: string | null;
   cfZoneId: string | null;
   syncable: boolean;
   status?: IntegrationZoneStatus;
@@ -75,6 +77,7 @@ export function computePreviewRows(
       account: pdns?.account ?? null,
       cfPresent,
       cfType: cf?.type ?? tr?.remoteType ?? null,
+      cfPlan: cf ? (zonePlan(cf) ?? null) : null,
       cfZoneId: cf?.id ?? tr?.remoteZoneId ?? null,
       syncable,
       verificationKey,

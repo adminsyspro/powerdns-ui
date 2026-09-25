@@ -118,7 +118,28 @@ export interface CfZone {
   type: string;
   status: string;
   verification_key?: string;
-  plan?: { id: string; name?: string };
+  // `id` is a 32-hex plan identifier; the plan NAME lives in `legacy_id`
+  // ("free" | "pro" | "business" | "enterprise"). Omitted on some listings.
+  plan?: { id: string; name?: string; legacy_id?: string };
+}
+
+/**
+ * The zone's plan name ("free", "pro", "business", "enterprise"), lower-cased,
+ * or undefined when Cloudflare omitted `plan` (or its `legacy_id`) from the
+ * response. Pure; the only place callers should read the plan from.
+ */
+export function zonePlan(zone: CfZone): string | undefined {
+  return zone.plan?.legacy_id?.toLowerCase();
+}
+
+/** Whether provisioning should (re)try the Enterprise upgrade. A zone we just
+ *  created is always ours to upgrade (Cloudflare creates zones on Free, and a
+ *  missing `plan` must not hide that). An adopted zone is upgraded only from
+ *  Free — a paid self-serve plan (pro/business) or an unknown plan is a
+ *  deliberate/unknown state we leave alone (adopt-don't-touch). */
+export function needsPlanUpgrade(zone: CfZone, preExisted: boolean): boolean {
+  const p = zonePlan(zone);
+  return preExisted ? p === 'free' : p !== 'enterprise';
 }
 
 export async function verifyToken(creds: IntegrationCredentials, accountId?: string): Promise<void> {
@@ -230,6 +251,11 @@ export async function getZoneByName(
     `/zones?account.id=${encodeURIComponent(accountId)}&name=${encodeURIComponent(zoneName)}`
   );
   return result[0];
+}
+
+/** Reads a single zone by its Cloudflare id (full zone object, incl. `plan`). */
+export async function getZone(creds: IntegrationCredentials, cfZoneId: string): Promise<CfZone> {
+  return cf<CfZone>(creds.apiToken, `/zones/${encodeURIComponent(cfZoneId)}`);
 }
 
 const CF_GRAPHQL = 'https://api.cloudflare.com/client/v4/graphql';
@@ -497,7 +523,12 @@ export async function listAccountCustomNs(
   return entries;
 }
 
-/** Puts the zone on the Enterprise plan (Cloudflare Secondary DNS is Enterprise-only). */
+/**
+ * Puts the zone on the Enterprise plan. `rate_plan.id: 'enterprise'` is the
+ * documented enum value. Requires the account-scoped "Billing: Write"
+ * permission on the API token — without it Cloudflare answers error 10000
+ * ("Authentication error") and the zone silently stays on its current plan.
+ */
 export async function setZonePlan(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
   await cf(creds.apiToken, `/zones/${cfZoneId}/subscription`, {
     method: 'POST',

@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 
 ENV_FILE=.env.e2e
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.e2e.yml --profile internal-ca)
+# Plain HTTP is intentional: every endpoint below is the throwaway local E2E stack
+# (loopback / compose network), never a remote host.
 BASE=http://localhost:3000
 PDNS=http://localhost:8081
 PDNS_KEY=changeme
@@ -57,10 +59,8 @@ curl -fsS -c "$COOKIE" -H 'content-type: application/json' \
   -d '{"username":"admin","password":"admin"}' "$BASE/api/auth/login" >/dev/null
 
 echo "== create PowerDNS connection =="
-CONN_ID=$(curl -fsS -b "$COOKIE" -c "$COOKIE" -H 'content-type: application/json' \
-  -d "{\"name\":\"e2e\",\"url\":\"$CONN_URL\",\"apiKey\":\"$PDNS_KEY\"}" \
-  "$BASE/api/connections" | jq -r .id)
-echo "   connection id: $CONN_ID"
+CONN_ID=$(curl -fsS -b "$COOKIE" -c "$COOKIE" -H 'content-type: application/json' -d "{\"name\":\"e2e\",\"url\":\"$CONN_URL\",\"apiKey\":\"$PDNS_KEY\"}" "$BASE/api/connections" | jq -r .id) # NOSONAR: plain HTTP to the local, disposable E2E docker stack
+echo "   connection id: $CONN_ID" # NOSONAR: plain HTTP to the local, disposable E2E docker stack
 
 echo "== create zone $ZONE in the test PowerDNS =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $PDNS_KEY" -H 'content-type: application/json' \
@@ -70,7 +70,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $PDNS_KEY" -H 'cont
 echo "   zone create HTTP $code (201=created, 409/422=already exists)"
 
 echo "== sync zones into the app cache =="
-curl -fsS -b "$COOKIE" -c "$COOKIE" -X POST -H "x-pdns-connection-id: $CONN_ID" "$BASE/api/zones/sync" >/dev/null
+curl -fsS -b "$COOKIE" -c "$COOKIE" -X POST -H "x-pdns-connection-id: $CONN_ID" "$BASE/api/zones/sync" >/dev/null # NOSONAR: plain HTTP to the local, disposable E2E docker stack
 
 echo "== internal-CA setup (auto-pin + register; retry until step-ca ready) =="
 for i in $(seq 1 30); do
@@ -83,10 +83,8 @@ ACCT_ID=$(jq -r .id /tmp/e2e-setup.json)
 echo "   internal-step-ca account: $ACCT_ID ($(jq -r .status /tmp/e2e-setup.json))"
 
 echo "== create certificate for $SAN =="
-CERT_ID=$(curl -fsS -b "$COOKIE" -c "$COOKIE" -H 'content-type: application/json' \
-  -d "{\"name\":\"$SAN\",\"acmeAccountId\":\"$ACCT_ID\",\"connectionId\":\"$CONN_ID\",\"sans\":[\"$SAN\"],\"keyType\":\"ecdsa\"}" \
-  "$BASE/api/certs" | jq -r .id)
-echo "   cert id: $CERT_ID"
+CERT_ID=$(curl -fsS -b "$COOKIE" -c "$COOKIE" -H 'content-type: application/json' -d "{\"name\":\"$SAN\",\"acmeAccountId\":\"$ACCT_ID\",\"connectionId\":\"$CONN_ID\",\"sans\":[\"$SAN\"],\"keyType\":\"ecdsa\"}" "$BASE/api/certs" | jq -r .id) # NOSONAR: plain HTTP to the local, disposable E2E docker stack
+echo "   cert id: $CERT_ID" # NOSONAR: plain HTTP to the local, disposable E2E docker stack
 
 echo "== issue =="
 curl -fsS -b "$COOKIE" -c "$COOKIE" -X POST "$BASE/api/certs/$CERT_ID/issue" >/dev/null

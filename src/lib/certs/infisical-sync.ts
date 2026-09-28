@@ -17,7 +17,7 @@ function getConfigRow(db = getDb()) {
   return row;
 }
 
-async function getAccessToken(db = getDb()): Promise<typeof cachedToken & {}> {
+async function getAccessToken(db = getDb()): Promise<NonNullable<typeof cachedToken>> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken;
 
   const row = getConfigRow(db);

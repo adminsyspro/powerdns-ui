@@ -6,8 +6,10 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies without running third-party lifecycle scripts, then
+# explicitly build only the native modules that need their install step
+# (better-sqlite3 binding, sharp image backend).
+RUN npm ci --ignore-scripts && npm rebuild better-sqlite3 sharp
 
 # Copy source code
 COPY . .

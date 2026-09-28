@@ -260,60 +260,60 @@ export async function getZone(creds: IntegrationCredentials, cfZoneId: string): 
 
 const CF_GRAPHQL = 'https://api.cloudflare.com/client/v4/graphql';
 
-export interface ZoneUniqueVisitors {
-  points: Array<{ date: string; uniques: number }>;
+export interface ZoneDnsQueries {
+  points: Array<{ date: string; count: number }>;
   total: number;
 }
 
-
 /**
- * Daily unique HTTP visitors for MANY zones (one integration's zones) over the
- * last `days` days, via a single aliased Cloudflare GraphQL query per chunk.
+ * Daily DNS query counts for MANY zones (one integration's zones) over the last
+ * `days` days, via a single aliased Cloudflare GraphQL query per chunk against
+ * the dnsAnalyticsAdaptiveGroups dataset (same source as getZoneDnsAnalytics).
  * Each zone is queried in its own aliased `zones(filter:{zoneTag})` block (z0,
  * z1, …) so results map back by alias — no dependency on `zoneTag` being a
  * selectable output field, and no reliance on result ordering. Returns a
  * Map<cfZoneId, {points,total}> (ids with no data are absent), or null on any
  * failure so the caller degrades the whole batch to "No data".
  */
-export async function getZonesUniqueVisitors(
+export async function getZonesDnsQueries(
   creds: IntegrationCredentials,
   cfZoneIds: string[],
   days = 30
-): Promise<Map<string, ZoneUniqueVisitors> | null> {
+): Promise<Map<string, ZoneDnsQueries> | null> {
   const ids = cfZoneIds.filter((id) => /^[a-f0-9]{32}$/i.test(id));
   if (ids.length === 0) return new Map();
   const until = new Date();
-  const since = new Date(until.getTime() - (days - 1) * 86_400_000);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const since = new Date(until.getTime() - days * 86_400_000);
   const CHUNK = 50;
-  const result = new Map<string, ZoneUniqueVisitors>();
+  const result = new Map<string, ZoneDnsQueries>();
 
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
+    // `limit` inlined (Cloudflare types it uint64); days + 1 covers the partial first day.
     const blocks = chunk.map((id, n) =>
-      `z${n}: zones(filter: { zoneTag: "${id}" }) { httpRequests1dGroups(limit: ${days + 1}, filter: { date_geq: $since, date_leq: $until }, orderBy: [date_ASC]) { dimensions { date } uniq { uniques } } }`
+      `z${n}: zones(filter: { zoneTag: "${id}" }) { dnsAnalyticsAdaptiveGroups(limit: ${days + 1}, filter: { datetime_geq: $s, datetime_leq: $u }, orderBy: [date_ASC]) { count dimensions { date } } }`
     ).join('\n');
-    const query = `query Uniques($since: Date!, $until: Date!) { viewer { ${blocks} } }`;
+    const query = `query DnsQueries($s: Time!, $u: Time!) { viewer { ${blocks} } }`;
     try {
       await acquireCfSlot();
       const response = await fetch(CF_GRAPHQL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${creds.apiToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables: { since: fmt(since), until: fmt(until) } }),
+        body: JSON.stringify({ query, variables: { s: since.toISOString(), u: until.toISOString() } }),
       });
       if (!response.ok) return null;
       const json = (await response.json()) as {
-        data?: { viewer?: Record<string, Array<{ httpRequests1dGroups?: Array<{ dimensions: { date: string }; uniq: { uniques: number } }> }>> };
+        data?: { viewer?: Record<string, Array<{ dnsAnalyticsAdaptiveGroups?: Array<{ count?: number; dimensions: { date: string } }> }>> };
         errors?: unknown[];
       };
       if (Array.isArray(json.errors) && json.errors.length > 0) return null;
       const viewer = json.data?.viewer;
       if (!viewer) return null;
       chunk.forEach((id, n) => {
-        const groups = viewer[`z${n}`]?.[0]?.httpRequests1dGroups;
+        const groups = viewer[`z${n}`]?.[0]?.dnsAnalyticsAdaptiveGroups;
         if (!Array.isArray(groups)) return;
-        const points = groups.map((g) => ({ date: g.dimensions.date, uniques: g.uniq?.uniques ?? 0 }));
-        const total = points.reduce((sum, p) => sum + p.uniques, 0);
+        const points = groups.map((g) => ({ date: g.dimensions.date, count: g.count ?? 0 }));
+        const total = points.reduce((sum, p) => sum + p.count, 0);
         result.set(id, { points, total });
       });
     } catch {

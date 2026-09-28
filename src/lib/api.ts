@@ -488,10 +488,10 @@ export async function fetchZoneTraffic(zone: string) {
 }
 
 export interface ZonesAnalytics {
-  analytics: Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }>;
+  analytics: Record<string, { available: boolean; points?: Array<{ date: string; count: number }>; total?: number }>;
 }
 
-// Batch Cloudflare unique-visitors for many zones (the replicated rows of a
+// Batch Cloudflare daily DNS query counts for many zones (the replicated rows of a
 // zones-table page). POST avoids URL-length limits on long zone lists.
 export async function fetchZonesAnalytics(zones: string[]) {
   return apiRequest<ZonesAnalytics>('/api/integrations/zones-analytics', {

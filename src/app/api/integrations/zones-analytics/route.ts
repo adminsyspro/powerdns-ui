@@ -3,14 +3,14 @@ import { getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { findZoneLink } from '@/lib/integrations/sync';
 import { getIntegrationCredentials } from '@/lib/integrations/store';
-import { getZonesUniqueVisitors } from '@/lib/integrations/cloudflare';
+import { getZonesDnsQueries } from '@/lib/integrations/cloudflare';
 import { canonZone, authorizeZone } from '@/lib/integrations/zone-auth';
 import { cacheKey, getCachedAnalytics, setCachedAnalytics, type ZoneAnalyticsPayload } from '@/lib/integrations/analytics-cache';
 
 const MAX_ZONES = 100;
 
 // POST /api/integrations/zones-analytics  body: { zones: string[] }
-// Batch unique-visitors for replicated zones. Response is keyed by the EXACT
+// Batch daily DNS query counts (30d) for replicated zones. Response is keyed by the EXACT
 // requested name (so the client looks up by the same string it sent).
 export async function POST(request: NextRequest) {
   try {
@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
     // One Cloudflare query per integration with misses.
     for (const [integrationId, misses] of missesByIntegration) {
       const creds = getIntegrationCredentials(integrationId);
-      let byId: Map<string, { points: Array<{ date: string; uniques: number }>; total: number }> | null = null;
+      let byId: Map<string, { points: Array<{ date: string; count: number }>; total: number }> | null = null;
       if (creds) {
         try {
-          byId = await getZonesUniqueVisitors(creds, misses.map((m) => m.remoteZoneId), 30);
+          byId = await getZonesDnsQueries(creds, misses.map((m) => m.remoteZoneId), 30);
         } catch {
           byId = null;
         }

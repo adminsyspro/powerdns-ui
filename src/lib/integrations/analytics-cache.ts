@@ -5,7 +5,7 @@
 
 export interface ZoneAnalyticsPayload {
   available: boolean;
-  points?: Array<{ date: string; uniques: number }>;
+  points?: Array<{ date: string; count: number }>;
   total?: number;
 }
 

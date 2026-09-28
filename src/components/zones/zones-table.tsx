@@ -91,9 +91,9 @@ interface ZonesTableProps {
   // Normalized (lowercase, no trailing dot) names of zones replicated to
   // Cloudflare as a secondary — flags them with the orange cloud + a column.
   replicatedZones?: Set<string>;
-  // Per-zone Cloudflare unique-visitors analytics, keyed by the EXACT zone.name
+  // Per-zone Cloudflare DNS query analytics (30d), keyed by the EXACT zone.name
   // (the value the page sent to the batch endpoint). undefined = still loading.
-  analyticsByZone?: Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }>;
+  analyticsByZone?: Record<string, { available: boolean; points?: Array<{ date: string; count: number }>; total?: number }>;
   // True when Cloudflare coverage exists for the current user/connection. Gates
   // the Cloudflare columns + the analytics column + the filter slot.
   cloudflareEnabled?: boolean;
@@ -375,7 +375,7 @@ export function ZonesTable({
               <TableHead><SortHeader column="dnssec">DNSSEC</SortHeader></TableHead>
               <TableHead><SortHeader column="account">Account</SortHeader></TableHead>
               {cloudflareEnabled && <TableHead>Cloudflare Secondary</TableHead>}
-              {cloudflareEnabled && <TableHead>Unique visitors (30d)</TableHead>}
+              {cloudflareEnabled && <TableHead>DNS queries (30d)</TableHead>}
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -460,7 +460,7 @@ export function ZonesTable({
                     ) : analyticsByZone === undefined ? (
                       <div className="h-8 w-[110px] animate-pulse rounded bg-muted" />
                     ) : analyticsByZone[zone.name]?.available && analyticsByZone[zone.name]?.points?.length ? (
-                      <Sparkline points={analyticsByZone[zone.name]!.points!} total={analyticsByZone[zone.name]!.total ?? 0} />
+                      <Sparkline points={analyticsByZone[zone.name]!.points!} total={analyticsByZone[zone.name]!.total ?? 0} dataKey="count" />
                     ) : (
                       <span className="text-xs text-muted-foreground">No data</span>
                     )}

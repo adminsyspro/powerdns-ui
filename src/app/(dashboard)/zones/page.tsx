@@ -135,10 +135,10 @@ export default function ZonesPage() {
     return items.filter((z) => z.account === groupFilter);
   }, [data?.items, groupFilter]);
 
-  // Batch Cloudflare unique-visitors for the replicated zones among the rendered
+  // Batch Cloudflare DNS query counts (30d) for the replicated zones among the rendered
   // rows. undefined = loading (table shows skeletons). Keyed by exact zone.name.
   const [analyticsByZone, setAnalyticsByZone] = React.useState<
-    Record<string, { available: boolean; points?: Array<{ date: string; uniques: number }>; total?: number }> | undefined
+    Record<string, { available: boolean; points?: Array<{ date: string; count: number }>; total?: number }> | undefined
   >(undefined);
 
   // Exact names (trailing-dot canonical, as stored) of replicated rendered rows.

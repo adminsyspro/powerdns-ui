@@ -296,6 +296,28 @@ export default function ZonesPage() {
             </span>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isSyncing || isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />Import
+          </Button>
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />Export All
+          </Button>
+          <CreateZoneDialog
+            open={createDialogOpen}
+            onOpenChange={setCreateDialogOpen}
+            onSubmit={handleCreateZone}
+            groups={groups}
+            isAdmin={canCreateAnywhere}
+            trigger={
+              <Button size="sm"><Plus className="mr-2 h-4 w-4" />New Zone</Button>
+            }
+          />
+        </div>
       </div>
 
       {globalSearchError && (
@@ -428,30 +450,6 @@ export default function ZonesPage() {
             <span>Cloudflare only</span>
           </label>
         ) : undefined}
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isSyncing || isLoading}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing...' : 'Sync'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="mr-2 h-4 w-4" />Import
-            </Button>
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />Export All
-            </Button>
-            <CreateZoneDialog
-              open={createDialogOpen}
-              onOpenChange={setCreateDialogOpen}
-              onSubmit={handleCreateZone}
-              groups={groups}
-              isAdmin={canCreateAnywhere}
-              trigger={
-                <Button size="sm"><Plus className="mr-2 h-4 w-4" />New Zone</Button>
-              }
-            />
-          </>
-        }
       />
       <ImportZoneDialog
         open={importDialogOpen}

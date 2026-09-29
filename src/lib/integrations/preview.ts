@@ -118,57 +118,107 @@ export interface CachedCfZones {
   fetchedAt: number | null;
   stale: boolean;
   error: string | null;
+  /** A Cloudflare listing is still running in the background; poll again later. */
+  pending: boolean;
 }
 
 const CF_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
+ * Starts (or joins) the account's background listing. The promise settles the
+ * cache entry itself, so callers that stop waiting (see `waitMs`) never leave
+ * an unhandled rejection behind and the result still lands in the cache.
+ */
+function startFetch(key: string, fetcher: () => Promise<CfZone[]>): Promise<CfZone[]> {
+  const entry = cfCache.get(key);
+  if (entry?.pending) return entry.pending;
+  const pending = fetcher().then(
+    (zones) => {
+      cfCache.set(key, { fetchedAt: Date.now(), zones, pending: null });
+      return zones;
+    },
+    (e) => {
+      const prev = cfCache.get(key);
+      cfCache.set(key, { fetchedAt: prev?.fetchedAt ?? 0, zones: prev?.zones ?? [], pending: null });
+      throw e;
+    },
+  );
+  const base: CfCacheEntry = entry ?? { fetchedAt: 0, zones: [], pending: null };
+  cfCache.set(key, { ...base, pending });
+  return pending;
+}
+
+const TIMED_OUT = Symbol('timed-out');
+
+/**
  * Returns the account's CF zones, cached per `key` with TTL, in-flight coalescing,
  * and stale-on-failure. `fetcher` is injected so callers (and tests) control the
  * actual Cloudflare call.
+ *
+ * A large account (thousands of zones → dozens of rate-limited pages) can take
+ * longer than an HTTP request may stay open behind a reverse proxy, so:
+ * - an expired entry is served immediately as stale while it revalidates in
+ *   the background (unless `refresh` is set);
+ * - `waitMs` bounds how long a caller waits for a listing; past it the last
+ *   known data (or null) is returned with `pending: true` and the listing
+ *   keeps going in the background.
  */
 export async function getCachedCfZones(
   key: string,
   fetcher: () => Promise<CfZone[]>,
-  opts: { refresh?: boolean; ttlMs?: number } = {},
+  opts: { refresh?: boolean; ttlMs?: number; waitMs?: number } = {},
 ): Promise<CachedCfZones> {
   const ttl = opts.ttlMs ?? CF_CACHE_TTL_MS;
   const now = Date.now();
   const entry = cfCache.get(key);
+  const hasData = Boolean(entry && entry.fetchedAt);
 
-  if (!opts.refresh && entry && entry.fetchedAt && now - entry.fetchedAt < ttl) {
-    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: false, error: null };
-  }
-  if (entry?.pending) {
-    try {
-      const zones = await entry.pending;
-      return { zones, fetchedAt: cfCache.get(key)?.fetchedAt ?? now, stale: false, error: null };
-    } catch (e) {
-      return staleOrNull(cfCache.get(key), e);
-    }
+  if (!opts.refresh && entry && hasData && now - entry.fetchedAt < ttl) {
+    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: false, error: null, pending: Boolean(entry.pending) };
   }
 
-  const pending = fetcher();
-  const base: CfCacheEntry = entry ?? { fetchedAt: 0, zones: [], pending: null };
-  cfCache.set(key, { ...base, pending });
+  const pending = startFetch(key, fetcher);
+  pending.catch(() => { /* settled into the cache by startFetch */ });
+
+  // Stale-while-revalidate: only a cold cache or an explicit refresh waits.
+  if (!opts.refresh && entry && hasData && opts.waitMs !== undefined) {
+    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: true, error: null, pending: true };
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const zones = await pending;
-    const fetchedAt = Date.now();
-    cfCache.set(key, { fetchedAt, zones, pending: null });
-    return { zones, fetchedAt, stale: false, error: null };
+    const raced = opts.waitMs === undefined
+      ? await pending
+      : await Promise.race([
+          pending,
+          new Promise<typeof TIMED_OUT>((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), opts.waitMs); }),
+        ]);
+    if (raced === TIMED_OUT) {
+      const cur = cfCache.get(key);
+      const curHasData = Boolean(cur && cur.fetchedAt);
+      return {
+        zones: curHasData ? cur!.zones : null,
+        fetchedAt: curHasData ? cur!.fetchedAt : null,
+        stale: curHasData,
+        error: null,
+        pending: true,
+      };
+    }
+    return { zones: raced, fetchedAt: cfCache.get(key)?.fetchedAt ?? Date.now(), stale: false, error: null, pending: false };
   } catch (e) {
-    const prev = cfCache.get(key);
-    cfCache.set(key, { fetchedAt: prev?.fetchedAt ?? 0, zones: prev?.zones ?? [], pending: null });
-    return staleOrNull(prev && prev.fetchedAt ? prev : undefined, e);
+    const cur = cfCache.get(key);
+    return staleOrNull(cur && cur.fetchedAt ? cur : undefined, e);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
 function staleOrNull(entry: CfCacheEntry | undefined, e: unknown): CachedCfZones {
   const error = e instanceof Error ? e.message : 'Cloudflare listing failed';
   if (entry && entry.zones && entry.fetchedAt) {
-    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: true, error };
+    return { zones: entry.zones, fetchedAt: entry.fetchedAt, stale: true, error, pending: false };
   }
-  return { zones: null, fetchedAt: null, stale: false, error };
+  return { zones: null, fetchedAt: null, stale: false, error, pending: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -178,11 +228,15 @@ function staleOrNull(entry: CfCacheEntry | undefined, e: unknown): CachedCfZones
 export interface ZonePreview {
   rows: ZonePreviewRow[];
   sync: IntegrationSyncState;
-  cf: { fetchedAt: number | null; stale: boolean; error: string | null };
+  cf: { fetchedAt: number | null; stale: boolean; error: string | null; pending: boolean };
   pdns: { fetchedAt: number | null; stale: boolean; error: string | null };
   counts: { adopt: number; create: number; cfOnly: number; tracked: number; unknown: number };
   connectionMissing: boolean;
 }
+
+// Keep the preview request well under common reverse-proxy timeouts (nginx
+// defaults to 60 s); a longer CF listing finishes in the background.
+const CF_PREVIEW_WAIT_MS = 15_000;
 
 export async function buildZonePreview(
   integrationId: string,
@@ -196,7 +250,7 @@ export async function buildZonePreview(
   if (!conn) {
     return {
       rows: [], sync: getSyncState(integrationId, ''),
-      cf: { fetchedAt: null, stale: false, error: 'No PowerDNS connection bound' },
+      cf: { fetchedAt: null, stale: false, error: 'No PowerDNS connection bound', pending: false },
       pdns: { fetchedAt: null, stale: false, error: null },
       counts: emptyCounts, connectionMissing: true,
     };
@@ -213,15 +267,15 @@ export async function buildZonePreview(
   const pdns = listMasterZones(serverUrl);
 
   const creds = getIntegrationCredentials(integrationId);
-  let cf: CachedCfZones = { zones: null, fetchedAt: null, stale: false, error: null };
+  let cf: CachedCfZones = { zones: null, fetchedAt: null, stale: false, error: null, pending: false };
   if (creds) {
     cf = await getCachedCfZones(
       `${integrationId}:${integration.config.accountId}`,
       () => listZones(creds, integration.config.accountId),
-      { refresh: opts.refresh },
+      { refresh: opts.refresh, waitMs: CF_PREVIEW_WAIT_MS },
     );
   } else {
-    cf = { zones: null, fetchedAt: null, stale: false, error: 'Stored credentials are unreadable' };
+    cf = { zones: null, fetchedAt: null, stale: false, error: 'Stored credentials are unreadable', pending: false };
   }
 
   const rows = computePreviewRows(pdns, cf.zones, tracked);
@@ -235,7 +289,7 @@ export async function buildZonePreview(
   }
   return {
     rows, sync,
-    cf: { fetchedAt: cf.fetchedAt, stale: cf.stale, error: cf.error },
+    cf: { fetchedAt: cf.fetchedAt, stale: cf.stale, error: cf.error, pending: cf.pending },
     pdns: { fetchedAt: Date.now(), stale: Boolean(pdnsError), error: pdnsError },
     counts, connectionMissing: false,
   };

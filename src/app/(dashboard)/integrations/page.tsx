@@ -308,6 +308,19 @@ export default function IntegrationsPage() {
     else { setDetail(null); setPreview(null); setPreviewError(null); }
   }, [selectedId, loadDetail]);
 
+  // A large Cloudflare account is listed in the background (the preview
+  // request returns early with cf.pending) — poll until the listing lands.
+  const cfPending = Boolean(preview?.cf.pending);
+  React.useEffect(() => {
+    if (!selectedId || !cfPending) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const result = await api.fetchIntegrationPreview(selectedId);
+      if (!cancelled && result.data) setPreview(result.data);
+    }, 5000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [selectedId, cfPending, preview]);
+
   // Reset to the first page when switching integrations.
   React.useEffect(() => { setZonesPage(1); }, [selectedId]);
 
@@ -811,6 +824,12 @@ export default function IntegrationsPage() {
               {/* Rafraîchir l'aperçu */}
               {selectedId && (
                 <div className="flex items-center gap-2">
+                  {preview?.cf.pending && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      chargement des zones Cloudflare…
+                    </span>
+                  )}
                   {preview?.cf.fetchedAt && (
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       données CF du {new Date(preview.cf.fetchedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

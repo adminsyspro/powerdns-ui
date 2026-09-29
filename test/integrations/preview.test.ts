@@ -108,5 +108,48 @@ console.log('preview.computePreviewRows: ALL PASSED');
   assert.equal(f2.zones, null);
   assert.ok(f2.error);
 
+  // waitMs on a cold cache: returns early with pending, listing lands in the background
+  __resetCfCache();
+  let slowCalls = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => { release = r; });
+  const slow = async () => { slowCalls++; await gate; return [cf('big.com')]; };
+  const w1 = await getCachedCfZones('big', slow, { ttlMs: 60000, waitMs: 5 });
+  assert.equal(w1.pending, true, 'cold + slow → pending');
+  assert.equal(w1.zones, null);
+  assert.equal(w1.error, null);
+  const w2 = await getCachedCfZones('big', slow, { ttlMs: 60000, waitMs: 5 });
+  assert.equal(w2.pending, true);
+  assert.equal(slowCalls, 1, 'background listing is joined, not restarted');
+  release();
+  await new Promise((r) => setTimeout(r, 5));
+  const w3 = await getCachedCfZones('big', slow, { ttlMs: 60000, waitMs: 5 });
+  assert.equal(w3.pending, false);
+  assert.equal(w3.stale, false);
+  assert.equal(w3.zones?.length, 1, 'background result cached');
+
+  // stale-while-revalidate: expired entry is served immediately, refetch in background
+  let swrCalls = 0;
+  const never = async () => { swrCalls++; return new Promise<ReturnType<typeof cf>[]>(() => {}); };
+  const s1 = await getCachedCfZones('big', never, { ttlMs: 0, waitMs: 60000 });
+  assert.equal(s1.stale, true);
+  assert.equal(s1.pending, true);
+  assert.equal(s1.zones?.length, 1, 'served last-good zones without waiting');
+  assert.equal(swrCalls, 1);
+
+  // background failure after timeout: no unhandled rejection, error surfaces next call
+  __resetCfCache();
+  let failRelease: () => void = () => {};
+  const failGate = new Promise<void>((r) => { failRelease = r; });
+  const lateBoom = async () => { await failGate; throw new Error('cf down late'); };
+  const b1 = await getCachedCfZones('late', lateBoom, { ttlMs: 60000, waitMs: 5 });
+  assert.equal(b1.pending, true);
+  failRelease();
+  await new Promise((r) => setTimeout(r, 5));
+  const b2 = await getCachedCfZones('late', boom, { ttlMs: 60000, waitMs: 50 });
+  assert.equal(b2.zones, null);
+  assert.ok(b2.error);
+  assert.equal(b2.pending, false);
+
   console.log('preview.getCachedCfZones: ALL PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

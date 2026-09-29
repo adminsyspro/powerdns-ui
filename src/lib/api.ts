@@ -75,7 +75,18 @@ async function apiRequest<T>(
       return { data: text as unknown as T, status: response.status };
     }
 
-    const data = await response.json();
+    // A reverse proxy (timeout, 502) or a crashed route may answer HTML/empty:
+    // surface the HTTP status instead of a cryptic JSON.parse error.
+    const raw = await response.text();
+    let data: any;
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      return {
+        error: `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''} — unexpected non-JSON response from the server`,
+        status: response.status,
+      };
+    }
 
     if (!response.ok) {
       return {

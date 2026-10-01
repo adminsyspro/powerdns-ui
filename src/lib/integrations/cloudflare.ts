@@ -485,9 +485,21 @@ export async function forceAxfr(creds: IntegrationCredentials, cfZoneId: string)
   await cf(creds.apiToken, `/zones/${cfZoneId}/secondary_dns/force_axfr`, { method: 'POST' });
 }
 
+// Cloudflare refuses to delete a zone on the Enterprise plan: "An Enterprise zone
+// needs to be downgraded to the Free plan before you can delete it".
+const CF_ENTERPRISE_DELETE_REFUSED = 1316;
+
 export async function deleteZone(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
   try {
-    await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
+    try {
+      await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
+    } catch (e) {
+      if (!(e instanceof CloudflareError && e.codes.includes(CF_ENTERPRISE_DELETE_REFUSED))) throw e;
+      // Downgrade, then delete once more. If that second delete fails, the zone
+      // stays on Free: still an orphan, so the next attempt deletes it directly.
+      await setZoneFreePlan(creds, cfZoneId);
+      await cf(creds.apiToken, `/zones/${cfZoneId}`, { method: 'DELETE' });
+    }
   } catch (e) {
     // Both mean the zone is already gone, which is the desired end state:
     // HTTP 404, or Cloudflare code 1001 "Invalid zone identifier" (returned as
@@ -533,6 +545,18 @@ export async function setZonePlan(creds: IntegrationCredentials, cfZoneId: strin
   await cf(creds.apiToken, `/zones/${cfZoneId}/subscription`, {
     method: 'POST',
     body: { rate_plan: { id: 'enterprise' } },
+  });
+}
+
+/**
+ * Puts the zone back on the Free plan — the prerequisite Cloudflare sets for
+ * deleting an Enterprise zone (error 1316). Same "Billing: Write" requirement
+ * as setZonePlan.
+ */
+export async function setZoneFreePlan(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/subscription`, {
+    method: 'PUT',
+    body: { rate_plan: { id: 'free' } },
   });
 }
 

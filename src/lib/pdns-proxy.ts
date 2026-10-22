@@ -119,6 +119,33 @@ export async function zoneExistsOnPdns(
 }
 
 /**
+ * Changes a zone's kind (Native/Master/Slave) directly on PowerDNS — for
+ * background jobs with no incoming request to proxy. Throws on failure.
+ */
+export async function setZoneKindOnPdns(
+  url: string,
+  apiKey: string,
+  serverId: string,
+  zoneName: string,
+  kind: 'Native' | 'Master' | 'Slave'
+): Promise<void> {
+  const base = url.replace(/\/$/, '');
+  const timeoutMs = Number(process.env.PDNS_FETCH_TIMEOUT_MS) || 30_000;
+  const response = await fetch(
+    `${base}/api/v1/servers/${serverId}/zones/${encodeURIComponent(zoneName)}`,
+    {
+      method: 'PUT',
+      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind }),
+      signal: AbortSignal.timeout(timeoutMs),
+    }
+  );
+  if (response.ok) return;
+  const text = await response.text();
+  throw new Error(`PowerDNS zone kind update returned ${response.status}: ${text}`);
+}
+
+/**
  * Helper to forward a PowerDNS response as a NextResponse.
  */
 export async function forwardPdnsResponse(response: Response): Promise<NextResponse> {

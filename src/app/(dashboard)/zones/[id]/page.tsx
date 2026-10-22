@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Shield, RefreshCw, Download, Trash2, AlertCircle, Loader2,
   Copy, FileText, FileSpreadsheet, ChevronsUpDown, Check, Search, CalendarClock, Globe2, History, Server, Upload, Settings, Send, BarChart3,
-  ShieldCheck, ShieldAlert, ShieldX,
+  ShieldCheck, ShieldAlert, ShieldX, Eraser,
 } from 'lucide-react';
 import { ImportZoneDialog } from '@/components/zones/import-zone-dialog';
 import { ZoneSettingsDialog } from '@/components/zones/zone-settings-dialog';
@@ -699,6 +699,30 @@ export default function ZoneDetailPage() {
     notifyTimerRef.current = setTimeout(() => setNotifySent(false), 2000);
   };
 
+  const [cachePurged, setCachePurged] = React.useState(false);
+  const [cachePurging, setCachePurging] = React.useState(false);
+  const purgeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => { if (purgeTimerRef.current) clearTimeout(purgeTimerRef.current); }, []);
+  const handlePurgeCache = async () => {
+    const ok = await confirm({
+      title: 'Purge Cloudflare cache',
+      description: `Purge everything from the Cloudflare cache of "${zoneId}"? Cached content will be fetched again from the origin servers.`,
+      confirmLabel: 'Purge cache',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setCachePurging(true);
+    const result = await api.purgeZoneCloudflareCache(zoneId);
+    setCachePurging(false);
+    if (result.error) {
+      alert(`Error purging Cloudflare cache: ${result.error}`);
+      return;
+    }
+    if (purgeTimerRef.current) clearTimeout(purgeTimerRef.current);
+    setCachePurged(true);
+    purgeTimerRef.current = setTimeout(() => setCachePurged(false), 2000);
+  };
+
   const handleSaveSettings = async (payload: Partial<Zone>) => {
     const result = await api.updateZoneProperties(zoneId, payload);
     if (result.error) {
@@ -898,6 +922,16 @@ export default function ZoneDetailPage() {
                 </TooltipTrigger>
                 <TooltipContent>Refresh</TooltipContent>
               </Tooltip>
+              {cfProxy?.linked && canManageZone && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={handlePurgeCache} disabled={cachePurging} aria-label={cachePurged ? 'Cloudflare cache purged' : 'Purge Cloudflare cache'}>
+                      {cachePurging ? <Loader2 className="h-4 w-4 animate-spin" /> : cachePurged ? <Check className="h-4 w-4" /> : <Eraser className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{cachePurged ? 'Cloudflare cache purged' : 'Purge Cloudflare cache'}</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setSettingsOpen(true)} aria-label="Settings">

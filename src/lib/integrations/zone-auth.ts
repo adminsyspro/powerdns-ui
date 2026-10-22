@@ -12,7 +12,7 @@ export function canonZone(zone: string): string {
 
 /**
  * Authorize the caller for a zone (group-scoped). Throws AuthzError on failure.
- * Shared by the integrations zone-proxy, zone-traffic and zone-dns-analytics routes.
+ * Shared by the integrations zone-proxy, zone-traffic, zone-dns-analytics and zone-cache-purge routes.
  */
 export function authorizeZone(request: NextRequest, zoneName: string, action: 'read' | 'write-zone') {
   const ctx = requireAuth(getAuthContextFromHeaders(request));

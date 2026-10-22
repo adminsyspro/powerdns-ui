@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/cache/db';
-import { normalizeUrl } from '@/lib/cache/zones';
-import { zoneExistsOnPdns } from '@/lib/pdns-proxy';
+import { normalizeUrl, setZoneKindInCache } from '@/lib/cache/zones';
+import { zoneExistsOnPdns, setZoneKindOnPdns } from '@/lib/pdns-proxy';
+import { logActivity } from '@/lib/activity/log';
 import * as cloudflare from './cloudflare';
 import { getConnectionById } from './connections';
 import {
@@ -68,7 +69,9 @@ function bareName(zoneName: string): string {
   return zoneName.replace(/\.$/, '');
 }
 
-function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name: string; account: string }> {
+interface ScopedZone { name: string; account: string; kind: string }
+
+function scopedZones(serverUrl: string, config: IntegrationConfig): ScopedZone[] {
   const db = getDb();
   // Explicit zone selection: the admin picked them, so the kind filter does
   // not apply (Cloudflare polls via auto_refresh even without NOTIFY).
@@ -79,12 +82,12 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
     // verbatim, so compare case-insensitively (DNS names are anyway).
     return db
       .prepare(
-        `SELECT name, account FROM zones
+        `SELECT name, account, kind FROM zones
           WHERE server_url = ? AND LOWER(name) IN (${placeholders}) ORDER BY name`
       )
-      .all(normalizeUrl(serverUrl), ...config.zones) as Array<{ name: string; account: string }>;
+      .all(normalizeUrl(serverUrl), ...config.zones) as ScopedZone[];
   }
-  const base = `SELECT name, account FROM zones
+  const base = `SELECT name, account, kind FROM zones
                  WHERE server_url = ? AND kind = 'Master'
                    AND NOT (name = 'in-addr.arpa.' OR name LIKE '%.in-addr.arpa.' OR name = 'ip6.arpa.' OR name LIKE '%.ip6.arpa.')`;
   if (config.scope === 'groups') {
@@ -92,22 +95,22 @@ function scopedZones(serverUrl: string, config: IntegrationConfig): Array<{ name
     const placeholders = config.groups.map(() => '?').join(',');
     return db
       .prepare(`${base} AND account IN (${placeholders}) ORDER BY name`)
-      .all(normalizeUrl(serverUrl), ...config.groups) as Array<{ name: string; account: string }>;
+      .all(normalizeUrl(serverUrl), ...config.groups) as ScopedZone[];
   }
   return listMasterZones(serverUrl);
 }
 
 /** All Master zones of a connection (scope-independent) — preview + manual-sync inventory. */
-export function listMasterZones(serverUrl: string): Array<{ name: string; account: string }> {
+export function listMasterZones(serverUrl: string): ScopedZone[] {
   return getDb()
     .prepare(
-      `SELECT name, account FROM zones
+      `SELECT name, account, kind FROM zones
         WHERE server_url = ? AND kind = 'Master'
           AND NOT (name = 'in-addr.arpa.' OR name LIKE '%.in-addr.arpa.'
                    OR name = 'ip6.arpa.'   OR name LIKE '%.ip6.arpa.')
         ORDER BY name`
     )
-    .all(normalizeUrl(serverUrl)) as Array<{ name: string; account: string }>;
+    .all(normalizeUrl(serverUrl)) as ScopedZone[];
 }
 
 /** Names of the PowerDNS zones currently matching the integration scope. */
@@ -463,10 +466,85 @@ export function shouldReReflagOrphan(
   );
 }
 
+const isReverseZone = (name: string) => /(^|\.)(in-addr|ip6)\.arpa\.?$/i.test(name);
+
+/**
+ * Should this PowerDNS zone be switched from Native to Master? Only when the
+ * integration opted in (convertNativeToMaster), the zone is a forward Native
+ * zone, it is not listed in convertExceptions, and it matches the scope with
+ * the kind filter ignored (groups / explicit zones; all-master takes every one).
+ * Master zones send NOTIFY, and the Master-only scopes then pick them up.
+ */
+export function shouldConvertToMaster(
+  config: IntegrationConfig,
+  zone: { name: string; kind: string; account: string },
+): boolean {
+  if (!config.convertNativeToMaster || zone.kind !== 'Native' || isReverseZone(zone.name)) return false;
+  const lower = zone.name.toLowerCase();
+  const canonical = lower.endsWith('.') ? lower : `${lower}.`;
+  if ((config.convertExceptions ?? []).includes(canonical)) return false;
+  if (config.scope === 'zones') return config.zones.includes(canonical);
+  if (config.scope === 'groups') return config.groups.includes(zone.account);
+  return true;
+}
+
+/** Native zones of a connection the integration wants switched to Master. */
+function nativeZonesToConvert(serverUrl: string, config: IntegrationConfig): ScopedZone[] {
+  if (!config.convertNativeToMaster) return [];
+  const natives = getDb()
+    .prepare(`SELECT name, account, kind FROM zones WHERE server_url = ? AND kind = 'Native' ORDER BY name`)
+    .all(normalizeUrl(serverUrl)) as ScopedZone[];
+  return natives.filter((zone) => shouldConvertToMaster(config, zone));
+}
+
+// Best-effort Native → Master switch on PowerDNS. A failure is logged and
+// retried at the next reconcile (the zone simply stays Native meanwhile).
+async function convertZoneToMaster(
+  integration: IntegrationRow,
+  conn: { url: string; apiKey: string },
+  serverUrl: string,
+  zoneName: string
+): Promise<boolean> {
+  try {
+    await setZoneKindOnPdns(conn.url, conn.apiKey, 'localhost', zoneName, 'Master');
+    setZoneKindInCache(serverUrl, zoneName, 'Master');
+    logActivity({
+      actorId: null, actorName: 'system (reconcile)',
+      action: 'update', resourceType: 'zone',
+      resourceId: zoneName, resourceName: zoneName,
+      details: `kind Native → Master (integration "${integration.name}")`,
+    });
+    return true;
+  } catch (e) {
+    console.warn(`[reconcile] could not switch ${zoneName} to Master: ${e instanceof Error ? e.message : e}`);
+    return false;
+  }
+}
+
 // The reconcile body. Resolves when the pass is complete.
 async function runReconcile(ctx: ReconcileContext): Promise<void> {
-  const { integrationId, serverUrl: normalizedUrl, creds, state, zones, known } = ctx;
+  const { integrationId, serverUrl: normalizedUrl, creds, state, known } = ctx;
+  let zones = ctx.zones;
   try {
+    // Native → Master first (opt-in), so the converted zones are provisioned in
+    // this same pass. Only through the integration's bound connection, and only
+    // when it is the server being reconciled.
+    const integration = getIntegration(integrationId);
+    const toConvert = integration ? nativeZonesToConvert(normalizedUrl, integration.config) : [];
+    if (integration && toConvert.length > 0) {
+      const boundConn = integration.connectionId ? getConnectionById(integration.connectionId) : undefined;
+      if (boundConn && normalizeUrl(boundConn.url) === normalizedUrl) {
+        let converted = 0;
+        for (const zone of toConvert) {
+          if (await convertZoneToMaster(integration, boundConn, normalizedUrl, zone.name)) converted++;
+        }
+        if (converted > 0) {
+          zones = scopedZones(normalizedUrl, integration.config);
+          state.total = zones.length;
+        }
+      }
+    }
+
     const scopedNames = new Set(zones.map((z) => z.name));
 
     // Zones we tracked that left the scope: flag orphan (never remote-delete here).
@@ -616,9 +694,22 @@ export function autoProvisionZone(serverUrl: string, zoneName: string, kind: str
     if (!integration.connectionId) continue;
     const conn = getConnectionById(integration.connectionId);
     if (!conn || normalizeUrl(conn.url) !== normalizedUrl) continue;
-    if (!zoneInScope(integration.config, kind, account, zoneName)) continue;
     const creds = getIntegrationCredentials(integration.id);
     if (!creds) continue;
+    // Opt-in Native → Master switch first, so a Master-only scope takes the new
+    // zone right away. Provisioned only if it ends up in scope (a failed switch
+    // leaves it Native; the next reconcile retries).
+    const zoneKind = kind.toLowerCase() === 'native' ? 'Native' : kind;
+    if (shouldConvertToMaster(integration.config, { name: zoneName, kind: zoneKind, account })) {
+      void (async () => {
+        const converted = await convertZoneToMaster(integration, conn, normalizedUrl, zoneName);
+        if (zoneInScope(integration.config, converted ? 'Master' : zoneKind, account, zoneName)) {
+          await provisionZone(integration, creds, normalizedUrl, zoneName);
+        }
+      })();
+      continue;
+    }
+    if (!zoneInScope(integration.config, kind, account, zoneName)) continue;
     void provisionZone(integration, creds, normalizedUrl, zoneName);
   }
 }

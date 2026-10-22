@@ -285,6 +285,14 @@ export function setZoneAccountInCache(serverUrl: string, zoneId: string, account
     .run(account, normalizeUrl(serverUrl), zoneId);
 }
 
+/** Update the cached `kind` of a zone (by name) after a background kind change,
+ *  so the list and scope queries see it before the next sync. No-op if not cached. */
+export function setZoneKindInCache(serverUrl: string, zoneName: string, kind: string): void {
+  getDb()
+    .prepare('UPDATE zones SET kind = ? WHERE server_url = ? AND name = ?')
+    .run(kind, normalizeUrl(serverUrl), zoneName);
+}
+
 // ---- Sync Meta ----
 
 export function getSyncMeta(serverUrl: string): SyncResult | null {

@@ -21,6 +21,8 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   customNsMode: 'ignore',
   customNsSet: 1,
   autoProvision: true,
+  convertNativeToMaster: false,
+  convertExceptions: [],
   deleteMode: 'never',
   orphanRetentionHours: 72,
 };
@@ -57,6 +59,10 @@ export function sanitizeConfig(input: Partial<IntegrationConfig> | undefined): I
       ? (config.customNsSet as number)
       : 1,
     autoProvision: config.autoProvision !== false,
+    convertNativeToMaster: config.convertNativeToMaster === true,
+    convertExceptions: Array.isArray(config.convertExceptions)
+      ? Array.from(new Set(config.convertExceptions.map((z) => canonZoneName(String(z))).filter(Boolean)))
+      : [],
     deleteMode:
       config.deleteMode === 'auto' ? 'auto'
       : config.deleteMode === 'manual' || (config.deleteMode as string) === 'delete' ? 'manual'

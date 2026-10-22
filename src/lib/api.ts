@@ -457,6 +457,13 @@ export async function setZoneRecordProxied(zone: string, recordName: string, typ
   );
 }
 
+export async function purgeZoneCloudflareCache(zone: string) {
+  return apiRequest<{ ok: boolean }>(
+    '/api/integrations/zone-cache-purge',
+    { method: 'POST', body: JSON.stringify({ zone }) }
+  );
+}
+
 // Canonical names of zones replicated to a provider (Cloudflare secondary) on
 // the current connection — used to flag those zones in lists and the switcher.
 export async function fetchReplicatedZoneNames() {

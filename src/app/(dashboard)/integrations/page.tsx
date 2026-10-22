@@ -75,6 +75,8 @@ interface FormState {
   customNsMode: 'ignore' | 'enable' | 'disable';
   customNsSet: string;
   autoProvision: boolean;
+  convertNativeToMaster: boolean;
+  convertExceptions: string[];
   deleteMode: 'never' | 'manual' | 'auto';
   orphanRetentionHours: string;
   connectionId: string;
@@ -86,7 +88,8 @@ const EMPTY_FORM: FormState = {
   tsigName: '', tsigAlgo: 'hmac-sha256.', tsigSecret: '',
   scope: 'all-master', groups: [], zones: [],
   customNsMode: 'ignore', customNsSet: '1',
-  autoProvision: true, deleteMode: 'never', orphanRetentionHours: '72',
+  autoProvision: true, convertNativeToMaster: false, convertExceptions: [],
+  deleteMode: 'never', orphanRetentionHours: '72',
   connectionId: '',
 };
 
@@ -357,6 +360,8 @@ export default function IntegrationsPage() {
       customNsMode: integration.config.customNsMode,
       customNsSet: String(integration.config.customNsSet || 1),
       autoProvision: integration.config.autoProvision,
+      convertNativeToMaster: integration.config.convertNativeToMaster ?? false,
+      convertExceptions: integration.config.convertExceptions ?? [],
       deleteMode: integration.config.deleteMode,
       orphanRetentionHours: String(integration.config.orphanRetentionHours || 72),
       connectionId: integration.connectionId ?? '',
@@ -378,6 +383,8 @@ export default function IntegrationsPage() {
     customNsMode: form.customNsMode,
     customNsSet: parseInt(form.customNsSet, 10) || 1,
     autoProvision: form.autoProvision,
+    convertNativeToMaster: form.convertNativeToMaster,
+    convertExceptions: form.convertExceptions,
     deleteMode: form.deleteMode,
     orphanRetentionHours: parseInt(form.orphanRetentionHours, 10) || 72,
   });
@@ -770,6 +777,7 @@ export default function IntegrationsPage() {
                       : `${integration.config.zones.length} selected zone(s)`
                     }
                     {integration.config.customNsMode === 'enable' && ` · custom NS set ${integration.config.customNsSet}`}
+                    {integration.config.convertNativeToMaster && ' · Native → Master'}
                   </p>
                 </div>
                 <div className="ml-auto flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1433,6 +1441,33 @@ export default function IntegrationsPage() {
               </div>
               <Switch id="int-auto" checked={form.autoProvision}
                 onCheckedChange={(checked) => setForm({ ...form, autoProvision: checked })} />
+            </div>
+
+            {/* Native → Master conversion on PowerDNS */}
+            <div className="sm:col-span-2 p-4 border rounded-lg space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="int-convert-master">Convert Native zones to Master</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Switch the Native zones matching the zone scope to Master on PowerDNS (at each sync and when a
+                    zone is created), so they are replicated to Cloudflare and send NOTIFY on change. Reverse zones
+                    and Slave zones are never touched.
+                  </p>
+                </div>
+                <Switch id="int-convert-master" checked={form.convertNativeToMaster}
+                  onCheckedChange={(checked) => setForm({ ...form, convertNativeToMaster: checked })} />
+              </div>
+              {form.convertNativeToMaster && (
+                <div className="space-y-2">
+                  <Label>Exceptions <span className="text-muted-foreground font-normal">(stay Native)</span></Label>
+                  <ZonePicker selected={form.convertExceptions} onChange={(convertExceptions) => setForm({ ...form, convertExceptions })} />
+                  {form.scope !== 'zones' && (
+                    <p className="text-xs text-muted-foreground">
+                      With this scope, a zone left Native is not replicated to Cloudflare.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

@@ -39,6 +39,11 @@ export interface IntegrationConfig {
   customNsSet: number;
   // Create the remote zone automatically when a matching zone is created.
   autoProvision: boolean;
+  // Switch in-scope Native zones to Master on PowerDNS (reconcile + zone
+  // creation) so the Master-only scopes pick them up and NOTIFY reaches the
+  // provider. Zones in convertExceptions (canonical names) stay Native.
+  convertNativeToMaster: boolean;
+  convertExceptions: string[];
   // What to do remotely when the PowerDNS zone disappears.
   deleteMode: 'never' | 'manual' | 'auto';
   // Hours an orphan link is kept before auto-deletion (deleteMode: 'auto').

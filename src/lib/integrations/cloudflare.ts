@@ -485,6 +485,15 @@ export async function forceAxfr(creds: IntegrationCredentials, cfZoneId: string)
   await cf(creds.apiToken, `/zones/${cfZoneId}/secondary_dns/force_axfr`, { method: 'POST' });
 }
 
+/** Purges the whole Cloudflare edge cache of a zone. Requires the zone
+ *  permission "Cache Purge: Purge" on the API token. */
+export async function purgeZoneCache(creds: IntegrationCredentials, cfZoneId: string): Promise<void> {
+  await cf(creds.apiToken, `/zones/${cfZoneId}/purge_cache`, {
+    method: 'POST',
+    body: { purge_everything: true },
+  });
+}
+
 // Cloudflare refuses to delete a zone on the Enterprise plan: "An Enterprise zone
 // needs to be downgraded to the Free plan before you can delete it".
 const CF_ENTERPRISE_DELETE_REFUSED = 1316;

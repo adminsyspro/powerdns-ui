@@ -75,3 +75,39 @@ export function mergeRecordsWithPending(
 
   return result;
 }
+
+/**
+ * Pending change for adding one value to an RRSet (the record form in "add"
+ * mode). The new value is merged into the RRSet's current state — pending
+ * change first, server state otherwise — replacing any identical value.
+ */
+export function buildAddRecordChange(
+  pendingChange: PendingChange | undefined,
+  originalRRSet: RRSet | undefined,
+  newRRSet: RRSet,
+  comment?: string
+): { action: ChangeAction; before: RRSet | null; after: RRSet } {
+  // A queued whole-RRSet DELETE (after = null): the old values are gone, so the
+  // RRSet restarts from the new value alone. Falling back to the server state
+  // here would resurrect the deleted values. EDIT (not ADD) so that deleting
+  // the new value again still deletes the original RRSet.
+  if (pendingChange && !pendingChange.after) {
+    return { action: 'EDIT', before: pendingChange.before, after: newRRSet };
+  }
+  const baseRRSet = pendingChange?.after || originalRRSet;
+  if (!baseRRSet) return { action: 'ADD', before: null, after: newRRSet };
+
+  const newRecord = newRRSet.records[0];
+  const comments = comment
+    ? [...(baseRRSet.comments || []), ...(newRRSet.comments || [])]
+    : baseRRSet.comments;
+  return {
+    action: pendingChange?.action === 'ADD' ? 'ADD' : 'EDIT',
+    before: pendingChange?.before || originalRRSet || null,
+    after: {
+      ...baseRRSet,
+      records: [...baseRRSet.records.filter((r) => r.content !== newRecord.content), newRecord],
+      comments,
+    },
+  };
+}

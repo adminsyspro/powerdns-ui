@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
-import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
+import { mergeRecordsWithPending, buildAddRecordChange } from '@/lib/pending-changes-utils';
 import { normalizeRecordContent, makeRrsetKey, compareRrsets } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
@@ -622,36 +622,9 @@ export default function ZoneDetailPage() {
       ];
       addChange(zoneId, 'EDIT', editingRecord, rrset);
     } else {
-      const pendingChange = pendingMap.get(rrsetKey);
       const originalRRSet = zone?.rrsets?.find((r) => r.name === recordName && r.type === data.type);
-      const baseRRSet = pendingChange?.after || originalRRSet;
-
-      if (baseRRSet) {
-        const existingRecords = baseRRSet.records.filter((r) => r.content !== data.content);
-        const comments = data.comment
-          ? [
-              ...(baseRRSet.comments || []),
-              { content: data.comment, account: 'admin', modified_at: Math.floor(Date.now() / 1000) },
-            ]
-          : baseRRSet.comments;
-        const after: RRSet = {
-          ...baseRRSet,
-          records: [
-            ...existingRecords,
-            { content: data.content, disabled: data.disabled || false },
-          ],
-          comments,
-        };
-
-        addChange(
-          zoneId,
-          pendingChange?.action === 'ADD' ? 'ADD' : 'EDIT',
-          pendingChange?.before || originalRRSet || null,
-          after
-        );
-      } else {
-        addChange(zoneId, 'ADD', null, rrset);
-      }
+      const change = buildAddRecordChange(pendingMap.get(rrsetKey), originalRRSet, rrset, data.comment);
+      addChange(zoneId, change.action, change.before, change.after);
     }
 
     setRecordDialogOpen(false);

@@ -16,6 +16,42 @@ export interface RecordFieldConfig {
   build: (fields: Record<string, string>) => string;
 }
 
+/** Display order of record types (records table default sort, exports);
+ *  unknown types go last. */
+export const RECORD_TYPE_ORDER: Record<string, number> = {
+  A: 0, AAAA: 1, CNAME: 2, MX: 3, TXT: 4, SRV: 5, CAA: 6, PTR: 7, NS: 8, SOA: 9, DS: 10, DNSKEY: 11,
+};
+
+/** Default RRSet ordering: by type (RECORD_TYPE_ORDER), then by name. */
+export function compareRrsets(a: { name: string; type: string }, b: { name: string; type: string }): number {
+  const typeA = RECORD_TYPE_ORDER[a.type] ?? 99;
+  const typeB = RECORD_TYPE_ORDER[b.type] ?? 99;
+  if (typeA !== typeB) return typeA - typeB;
+  return a.name.localeCompare(b.name);
+}
+
+/**
+ * Reorders a PowerDNS zone export (one `name<TAB>ttl<TAB>IN<TAB>type<TAB>content`
+ * line per record) like the records table: SOA first, as zone files expect, then
+ * compareRrsets order. Records of one rrset keep their relative order (stable
+ * sort); lines that don't parse as a record stay at the top, unchanged.
+ */
+export function sortZoneExport(text: string): string {
+  const header: string[] = [];
+  const records: Array<{ line: string; name: string; type: string }> = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const fields = line.split('\t');
+    if (fields.length >= 5 && fields[2] === 'IN') records.push({ line, name: fields[0], type: fields[3] });
+    else header.push(line);
+  }
+  records.sort((a, b) => {
+    if ((a.type === 'SOA') !== (b.type === 'SOA')) return a.type === 'SOA' ? -1 : 1;
+    return compareRrsets(a, b);
+  });
+  return [...header, ...records.map((r) => r.line)].join('\n') + '\n';
+}
+
 /** Canonical RRSet key used by change history. Raw `${name}::${type}` — must
  *  match the format stored by the pending-changes store; do NOT normalize. */
 export function makeRrsetKey(name: string, type: string): string {

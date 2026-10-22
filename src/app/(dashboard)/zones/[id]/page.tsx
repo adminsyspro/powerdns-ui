@@ -31,7 +31,7 @@ import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
 import { mergeRecordsWithPending } from '@/lib/pending-changes-utils';
-import { normalizeRecordContent, makeRrsetKey } from '@/lib/record-fields';
+import { normalizeRecordContent, makeRrsetKey, compareRrsets } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
 import { useConfirm } from '@/hooks/use-confirm';
@@ -206,9 +206,15 @@ function ZoneSwitcher({ currentZoneId, currentZoneReplicated }: { currentZoneId:
 
 // ---- Record Export Helpers ----
 
+// PowerDNS returns rrsets in no meaningful order; exports follow the records
+// table's default order (A, AAAA, CNAME, MX, TXT, … then by name).
+function sortedRrsets(records: RRSet[]): RRSet[] {
+  return [...records].sort(compareRrsets);
+}
+
 function recordsToText(records: RRSet[], zoneName: string): string {
   const lines: string[] = [];
-  for (const rrset of records) {
+  for (const rrset of sortedRrsets(records)) {
     for (const rec of rrset.records) {
       lines.push(`${rrset.name}\t${rrset.ttl}\tIN\t${rrset.type}\t${rec.content}`);
     }
@@ -218,7 +224,7 @@ function recordsToText(records: RRSet[], zoneName: string): string {
 
 function recordsToCsv(records: RRSet[]): string {
   const lines = ['Name,Type,TTL,Content,Disabled'];
-  for (const rrset of records) {
+  for (const rrset of sortedRrsets(records)) {
     for (const rec of rrset.records) {
       lines.push(`"${rrset.name}","${rrset.type}",${rrset.ttl},"${rec.content}",${rec.disabled}`);
     }
@@ -238,7 +244,7 @@ function downloadFile(content: string, filename: string, mime: string) {
 
 function downloadPdf(records: RRSet[], zoneName: string) {
   // Generate a printable HTML table and open print dialog
-  const rows = records.flatMap((rrset) =>
+  const rows = sortedRrsets(records).flatMap((rrset) =>
     rrset.records.map((rec) =>
       `<tr><td>${rrset.name}</td><td>${rrset.type}</td><td>${rrset.ttl}</td><td>${rec.content}</td></tr>`
     )

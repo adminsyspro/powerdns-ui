@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pdnsProxy, forwardPdnsResponse, getConnectionFromRequest } from '@/lib/pdns-proxy';
 import { getAuthContextFromHeaders, requireAuth, requireZoneAccess, canSeeAllZones, AuthzError, authzErrorResponse } from '@/lib/auth/authz';
 import { getZoneAccountByIdAndServer } from '@/lib/cache/zones';
+import { sortZoneExport } from '@/lib/record-fields';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -18,7 +19,13 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     requireZoneAccess(ctx, { account: account ?? '' }, 'read');
 
     const response = await pdnsProxy(request, `/servers/${conn.serverId}/zones/${id}/export`);
-    return forwardPdnsResponse(response);
+    if (!response.ok) return forwardPdnsResponse(response);
+    // PowerDNS emits records in storage order; sort them for a readable file.
+    const text = await response.text();
+    return new NextResponse(sortZoneExport(text), {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain' },
+    });
   } catch (e) {
     if (e instanceof AuthzError) return authzErrorResponse(e);
     const message = e instanceof Error ? e.message : 'Unknown error';

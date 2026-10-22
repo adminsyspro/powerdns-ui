@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { RRSet, RecordType, Comment, ChangeAction, PendingChange, RRSetHistoryEntry } from '@/types/powerdns';
 import type { MergedRecord } from '@/lib/pending-changes-utils';
 import { ChangeDiffCard } from '@/components/records/change-diff-card';
-import { makeRrsetKey } from '@/lib/record-fields';
+import { makeRrsetKey, compareRrsets } from '@/lib/record-fields';
 import { RrsetHistoryDialog } from './rrset-history-dialog';
 import { getRecordTypeColor, getRecordTypeRowColor, copyToClipboard, formatDateTime, formatTTL } from '@/lib/utils';
 import * as api from '@/lib/api';
@@ -187,10 +187,6 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
     setHistoryLoading(false);
   };
 
-  const TYPE_ORDER: Record<string, number> = {
-    A: 0, AAAA: 1, CNAME: 2, MX: 3, TXT: 4, SRV: 5, CAA: 6, PTR: 7, NS: 8, SOA: 9, DS: 10, DNSKEY: 11,
-  };
-
   const flatRecords = React.useMemo(() => {
     const source = mergedRecords || records.map((rrset) => ({ rrset } as MergedRecord));
     const result: Array<{ rrset: RRSet; record: { content: string; disabled: boolean }; index: number; pendingAction?: ChangeAction; changeId?: string }> = [];
@@ -241,10 +237,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
         }
       }
       // Default sort: by type order then name
-      const typeA = TYPE_ORDER[a.rrset.type] ?? 99;
-      const typeB = TYPE_ORDER[b.rrset.type] ?? 99;
-      if (typeA !== typeB) return typeA - typeB;
-      return a.rrset.name.localeCompare(b.rrset.name);
+      return compareRrsets(a.rrset, b.rrset);
     });
 
     return sorted;

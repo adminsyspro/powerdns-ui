@@ -64,6 +64,7 @@ export function RecordFormDialog({
   onSubmit,
 }: RecordFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const isEditing = !!record;
 
   const form = useForm<RecordFormData>({
@@ -113,12 +114,13 @@ export function RecordFormDialog({
 
   const onFormSubmit = async (data: RecordFormData) => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onSubmit(data);
       reset();
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to save record:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to save record.');
     } finally {
       setIsSubmitting(false);
     }
@@ -303,7 +305,8 @@ export function RecordFormDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          {submitError && <p role="alert" className="text-sm text-destructive">{submitError}</p>}
+        <DialogFooter>
             <Button
               type="button"
               variant="outline"

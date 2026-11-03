@@ -111,3 +111,29 @@ export function buildAddRecordChange(
     },
   };
 }
+
+/** Apply a row edit to a complete RRset. */
+export function buildEditRecordChange(base: RRSet, originalContent: string, edited: RRSet): RRSet {
+  if (!base.records.some((r) => r.content === originalContent)) throw new Error('The record no longer exists. Refresh the zone and try again.');
+  return { ...edited, records: [
+    ...base.records.filter((r) => r.content !== originalContent && r.content !== edited.records[0].content),
+    edited.records[0],
+  ] };
+}
+
+/** Refuse to overwrite RRsets that changed since they were staged. */
+export function findStaleChanges(changes: PendingChange[], current: RRSet[]): PendingChange[] {
+  const equal = (a: RRSet | null, b: RRSet | null): boolean => {
+    if (!a || !b) return a === b;
+    if (a.name !== b.name || a.type !== b.type || a.ttl !== b.ttl || a.records.length !== b.records.length) return false;
+    const values = (r: RRSet) => r.records.map((v) => JSON.stringify([v.content, v.disabled])).sort();
+    return JSON.stringify(values(a)) === JSON.stringify(values(b)) &&
+      JSON.stringify(a.comments || []) === JSON.stringify(b.comments || []);
+  };
+  return changes.filter((change) => {
+    const target = change.before || change.after;
+    if (!target || (change.before && change.after && (change.before.name !== change.after.name || change.before.type !== change.after.type))) return true;
+    const server = current.find((r) => r.name === target.name && r.type === target.type) || null;
+    return !equal(change.before, server);
+  });
+}

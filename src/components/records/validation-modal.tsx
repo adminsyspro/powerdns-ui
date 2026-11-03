@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ChangeDiffCard } from './change-diff-card';
 import { useAuthStore, usePendingChangesStore } from '@/stores';
-import { changesToRRSets } from '@/lib/pending-changes-utils';
+import { changesToRRSets, findStaleChanges } from '@/lib/pending-changes-utils';
 import * as api from '@/lib/api';
 import { generateId } from '@/lib/utils';
 import type { ChangesetSubmission } from '@/types/powerdns';
@@ -42,14 +42,38 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
     setIsSubmitting(true);
     setError(null);
 
-    const rrsets = changesToRRSets(changes);
+    const reductions = changes.filter((c) => c.action === 'EDIT' && c.before && c.after && c.after.records.length < c.before.records.length);
+    if (reductions.length && !window.confirm(`These changes reduce the number of values in ${reductions.map((c) => c.rrsetKey).join(', ')}. Continue?`)) {
+      setIsSubmitting(false);
+      return;
+    }
+    const fresh = await api.fetchZone(zoneId);
+    if (fresh.error || !fresh.data?.rrsets) {
+      setError(`Unable to reload the zone before applying changes: ${fresh.error || 'missing RRsets'}`);
+      setIsSubmitting(false);
+      return;
+    }
+    const stale = findStaleChanges(changes, fresh.data.rrsets);
+    if (stale.length) {
+      setError(`The following RRsets changed since editing: ${stale.map((c) => c.rrsetKey).join(', ')}. Remove these pending changes, refresh the zone and edit them again.`);
+      setIsSubmitting(false);
+      return;
+    }
+    const beforeChanges = changes.map((change) => ({ ...change, before: fresh.data!.rrsets!.find((r) => r.name === (change.before || change.after)?.name && r.type === (change.before || change.after)?.type) || null }));
+    const rrsets = changesToRRSets(beforeChanges);
     const result = await api.updateZoneRecords(zoneId, rrsets);
+    const updated = result.error ? null : await api.fetchZone(zoneId);
+    const historyChanges = beforeChanges.map((change) => {
+      if (!updated?.data?.rrsets) return change;
+      const target = change.after || change.before;
+      return { ...change, after: updated.data.rrsets.find((r) => r.name === target?.name && r.type === target?.type) || null };
+    });
 
     const submission: ChangesetSubmission = {
       id: generateId(),
       zoneId,
       zoneName,
-      changes,
+      changes: historyChanges,
       reason: reason.trim(),
       user: user?.username || 'unknown',
       submittedAt: Date.now(),
@@ -67,6 +91,9 @@ export function ValidationModal({ open, onOpenChange, zoneId, zoneName, onSucces
     }
 
     clearZone(zoneId);
+    if (!updated?.data?.rrsets) {
+      alert('Changes were applied, but the zone could not be reloaded. History contains the intended state, not the verified server state.');
+    }
     setReason('');
     setIsSubmitting(false);
     onOpenChange(false);

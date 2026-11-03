@@ -28,7 +28,7 @@ interface RecordsTableProps {
   isLoading?: boolean;
   onEdit?: (record: RRSet, recordContent?: string) => void;
   onDelete?: (record: RRSet, recordContent?: string) => void;
-  onToggle?: (record: RRSet, disabled: boolean) => void;
+  onToggle?: (record: RRSet, disabled: boolean, content: string) => void;
   onUpdateComment?: (record: RRSet, comment: string) => void;
   onAdd?: () => void;
   onCopyAll?: () => void;
@@ -139,7 +139,9 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
       const key = makeRecordKey(rrset.name, rrset.type, index);
       if (selectedKeys.has(key)) {
         const rrsetKey = `${rrset.name}::${rrset.type}`;
-        if (!rrsetMap.has(rrsetKey)) rrsetMap.set(rrsetKey, rrset);
+        const selected = rrsetMap.get(rrsetKey);
+        if (selected) selected.records.push(rrset.records[index]);
+        else rrsetMap.set(rrsetKey, { ...rrset, records: [rrset.records[index]] });
       }
     }
     return Array.from(rrsetMap.values());
@@ -628,7 +630,7 @@ export function RecordsTable({ records, zoneName, isLoading, onEdit, onDelete, o
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(record.content)}><Copy className="h-3.5 w-3.5" /></Button>
                         </TooltipTrigger><TooltipContent>Copy</TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onToggle?.(rrset, !record.disabled)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onToggle?.(rrset, !record.disabled, record.content)}>
                             {record.disabled ? <Power className="h-3.5 w-3.5" /> : <PowerOff className="h-3.5 w-3.5" />}
                           </Button>
                         </TooltipTrigger><TooltipContent>{record.disabled ? 'Enable' : 'Disable'}</TooltipContent></Tooltip>

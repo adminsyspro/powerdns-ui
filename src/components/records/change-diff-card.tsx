@@ -46,7 +46,7 @@ export function ChangeDiffCard({ change, zoneName, onRemove }: ChangeDiffCardPro
 
       <div className="space-y-1 text-sm">
         {/* Before */}
-        {change.before && change.action !== 'ADD' && (
+        {change.before && (
           <div className="flex gap-2">
             <span className="text-red-600 font-mono text-xs w-4 flex-shrink-0">-</span>
             <div className="bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 flex-1 font-mono text-xs">
@@ -62,8 +62,12 @@ export function ChangeDiffCard({ change, zoneName, onRemove }: ChangeDiffCardPro
           </div>
         )}
 
+        {change.before?.records.filter((r) => !change.after?.records.some((a) => a.content === r.content)).map((r, i) => (
+          <div key={i} className="text-red-700 dark:text-red-300 text-xs font-mono break-all">Removed: {r.content}</div>
+        ))}
+
         {/* After */}
-        {change.after && change.action !== 'DELETE' && (
+        {change.after && (
           <div className="flex gap-2">
             <span className="text-green-600 font-mono text-xs w-4 flex-shrink-0">+</span>
             <div className="bg-green-50 dark:bg-green-950/30 rounded px-2 py-1 flex-1 font-mono text-xs">

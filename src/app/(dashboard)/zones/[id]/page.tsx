@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import type { ChangesetSubmission } from '@/types/powerdns';
 import type { RRSet, ZoneListItem, Zone } from '@/types/powerdns';
 import { formatSerial, getZoneKindColor, parseSOA, copyToClipboard } from '@/lib/utils';
-import { mergeRecordsWithPending, buildAddRecordChange } from '@/lib/pending-changes-utils';
+import { mergeRecordsWithPending, buildAddRecordChange, buildEditRecordChange } from '@/lib/pending-changes-utils';
 import { normalizeRecordContent, makeRrsetKey, compareRrsets } from '@/lib/record-fields';
 import { useZone, useZoneSync } from '@/hooks/use-pdns';
 import { PageTitle } from '@/components/layout/page-title';
@@ -519,7 +519,9 @@ export default function ZoneDetailPage() {
   const soaData = soaRecord ? parseSOA(soaRecord.records[0]?.content || '') : null;
 
   const handleEditRecord = (record: RRSet, recordContent?: string) => {
-    setEditingRecord(record);
+    const full = pendingMap.get(makeRrsetKey(record.name, record.type))?.after || zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type);
+    if (!full) return;
+    setEditingRecord(full);
     setEditingOriginalContent(recordContent ?? record.records[0]?.content);
     setRecordDialogOpen(true);
   };
@@ -571,12 +573,11 @@ export default function ZoneDetailPage() {
     }
   };
 
-  const handleToggleRecord = (record: RRSet, disabled: boolean) => {
-    const after: RRSet = {
-      ...record,
-      records: record.records.map((r) => ({ ...r, disabled })),
-    };
-    addChange(zoneId, 'TOGGLE', record, after);
+  const handleToggleRecord = (record: RRSet, disabled: boolean, content: string) => {
+    const full = pendingMap.get(makeRrsetKey(record.name, record.type))?.after || zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type);
+    if (!full) return;
+    const after: RRSet = { ...full, records: full.records.map((r) => r.content === content ? { ...r, disabled } : r) };
+    addChange(zoneId, 'TOGGLE', full, after);
   };
 
   const handleSaveRecord = async (data: {
@@ -609,17 +610,17 @@ export default function ZoneDetailPage() {
     const rrsetKey = makeRrsetKey(recordName, data.type);
 
     if (editingRecord) {
-      // Replace exactly the record that was opened (matched by its original
-      // content — unique within an RRSet), leaving every other value untouched.
-      // Drop both the original value and any sibling already equal to the new
-      // content so a content collision can't produce duplicate records.
+      if (editingRecord.name !== recordName || editingRecord.type !== data.type) {
+        throw new Error('Changing the name or type is not supported when editing a record. Add the new record and delete the old one.');
+      }
+      const base = pendingMap.get(makeRrsetKey(editingRecord.name, editingRecord.type))?.after || editingRecord;
       const originalContent = editingOriginalContent ?? editingRecord.records[0]?.content;
-      rrset.records = [
-        ...editingRecord.records.filter(
-          (r) => r.content !== originalContent && r.content !== data.content
-        ),
-        { content: data.content, disabled: data.disabled || false },
-      ];
+      if (!originalContent) throw new Error('The original record is missing. Refresh and try again.');
+      Object.assign(rrset, buildEditRecordChange(base, originalContent, rrset));
+      if (rrset.records.length < base.records.length) {
+        const ok = await confirm({ title: 'Record count reduced', description: 'This edit removes an existing value from the RRset. Continue?', confirmLabel: 'Continue', variant: 'destructive' });
+        if (!ok) return;
+      }
       addChange(zoneId, 'EDIT', editingRecord, rrset);
     } else {
       const originalRRSet = zone?.rrsets?.find((r) => r.name === recordName && r.type === data.type);
@@ -641,17 +642,19 @@ export default function ZoneDetailPage() {
     });
     if (!ok) return;
     for (const record of records) {
-      addChange(zoneId, 'DELETE', record, null);
+      const full = pendingMap.get(makeRrsetKey(record.name, record.type))?.after || zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type);
+      if (!full) continue;
+      const remaining = full.records.filter((r) => !record.records.some((selected) => selected.content === r.content));
+      addChange(zoneId, remaining.length ? 'EDIT' : 'DELETE', full, remaining.length ? { ...full, records: remaining } : null);
     }
   };
 
   const handleBulkToggle = (records: RRSet[], disabled: boolean) => {
     for (const record of records) {
-      const after: RRSet = {
-        ...record,
-        records: record.records.map((r) => ({ ...r, disabled })),
-      };
-      addChange(zoneId, 'TOGGLE', record, after);
+      const full = pendingMap.get(makeRrsetKey(record.name, record.type))?.after || zone?.rrsets?.find((r) => r.name === record.name && r.type === record.type);
+      if (!full) continue;
+      const after: RRSet = { ...full, records: full.records.map((r) => record.records.some((selected) => selected.content === r.content) ? { ...r, disabled } : r) };
+      addChange(zoneId, 'TOGGLE', full, after);
     }
   };
 

@@ -904,7 +904,8 @@ export default function ZoneDetailPage() {
                 </TooltipTrigger>
                 <TooltipContent>Refresh</TooltipContent>
               </Tooltip>
-              {cfProxy?.linked && canManageZone && (
+              {/* dnsReplicated comes from a cheap local lookup and shows the button immediately; cfProxy.linked needs the full Cloudflare record listing (slow on big zones) but also covers errored links that still have a remote zone. */}
+              {(dnsReplicated || cfProxy?.linked) && canManageZone && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="icon" className="h-9 w-9" onClick={handlePurgeCache} disabled={cachePurging} aria-label={cachePurged ? 'Cloudflare cache purged' : 'Purge Cloudflare cache'}>

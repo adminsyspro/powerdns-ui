@@ -4,7 +4,7 @@ import type { RRSet } from '@/types/powerdns';
 import { getJob, recordJobOrder, recordJobChallenges, markJobCleanupDone, finishJob } from './job-store';
 import {
   getCertificate as getCert, updateCertificateIssuance, setCertificateRenewalFailure,
-  setCertificatePrivateKey, getCertificatePrivateKey, setCertificateMaterialized, setCertRunLog,
+  setCertificatePrivateKey, getCertificatePrivateKey, setCertRunLog,
 } from './cert-store';
 import { getAcmeAccount, getAccountSecrets } from './store';
 import { reloadAcmeTrust } from './acme-trust';
@@ -12,12 +12,10 @@ import { appendCertEvent } from './event-store';
 import { resolveZonesForSans, resolveZoneForFqdn } from './zone-match';
 import { challengeFqdn, mergeTxtValues, removeTxtValues, buildTxtRrset, buildTxtDelete } from './dns-txt';
 import { splitPemChain, parseCertInfo } from './cert-info';
-import { materializeCert } from './materialize';
+import { reconcileCertificate } from './distribution/reconcile';
 import { getConnectionById } from '@/lib/integrations/connections';
 import { PowerDNSClient } from '@/lib/powerdns-client';
 import { classifyError, groupChallengesByFqdn } from './engine-util';
-import { isInfisicalEnabled } from './infisical-config';
-import { syncCertToInfisical } from './infisical-sync';
 
 const PROP_TIMEOUT_MS = Math.max(30_000, Number(process.env.CERT_DNS_PROPAGATION_TIMEOUT_MS) || 120_000);
 
@@ -195,9 +193,6 @@ export async function runJob(jobId: string): Promise<void> {
       notBefore: info.notBefore, notAfter: info.notAfter,
       serial: info.serial, fingerprint: info.fingerprintSha256, issuer: info.issuer,
     });
-    const liveDir = materializeCert({ name: cert.name, leafPem: leaf, chainPem: chain, privkeyPem: keyPem.toString() });
-    setCertificateMaterialized(cert.id);
-    runLog(`materialized to ${liveDir}`);
     appendCertEvent({
       certificateId: cert.id,
       type: job.kind === 'renew' ? 'renew' : 'issue',
@@ -205,20 +200,14 @@ export async function runJob(jobId: string): Promise<void> {
       message: `issued (expires ${new Date(info.notAfter * 1000).toISOString()})`,
     });
 
-    // 6b. Infisical sync (best-effort — never blocks issuance)
+    // 6b. Distribution (local disk / NFS, Infisical, …). Never fails the job:
+    // the certificate is already persisted, and any distribution that fails
+    // here is retried by the distribution worker with backoff.
     try {
-      if (isInfisicalEnabled()) {
-        await syncCertToInfisical(cert.id);
-        runLog('synced to Infisical');
-      }
-    } catch (syncErr) {
-      appendCertEvent({
-        certificateId: cert.id,
-        type: 'infisical_sync_error',
-        status: 'error',
-        message: `Infisical sync failed: ${(syncErr as Error).message}`,
-      });
-      runLog(`⚠ Infisical sync failed: ${(syncErr as Error).message}`);
+      const d = await reconcileCertificate(cert.id, { log: runLog });
+      runLog(`distribution: ${d.published} published, ${d.failed} failed, ${d.skipped} skipped`);
+    } catch (distErr) {
+      runLog(`⚠ distribution error: ${(distErr as Error).message}`);
     }
 
     // 7. Cleanup TXT + finish. Only mark cleanup done when every per-fqdn

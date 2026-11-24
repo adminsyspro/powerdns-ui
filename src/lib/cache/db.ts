@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { seedDefaultAdmin } from '@/lib/auth/seed';
 import { cryptoSanityCheck } from '@/lib/crypto';
+import { migrateDistribution } from '@/lib/certs/distribution/schema';
 
 let db: Database.Database | null = null;
 
@@ -516,6 +517,11 @@ function initSchema(db: Database.Database) {
   db.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;'
   );
+
+  // Certificate distribution (filesystem / Infisical / …): tables + one-shot
+  // migration of the legacy infisical_config singleton. Must run after the
+  // certificates column migrations above (reads materialized_at / infisical_synced_at).
+  migrateDistribution(db);
 
   seedDefaultAdmin(db);
 

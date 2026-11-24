@@ -19,6 +19,8 @@ export async function register() {
     } else {
       const { startCertWorker } = await import('@/lib/certs/cert-worker');
       startCertWorker();
+      const { startDistributionWorker } = await import('@/lib/certs/distribution/distribution-worker');
+      startDistributionWorker();
       if (isCertRenewalEnabled()) {
         const { startRenewalWorker } = await import('@/lib/certs/renewal-worker');
         startRenewalWorker();

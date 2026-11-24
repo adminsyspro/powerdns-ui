@@ -113,6 +113,8 @@ export interface Certificate {
   lastRenewalSuccessAt: number | null;
   materializedAt: number | null;
   infisicalSyncedAt: number | null;
+  /** Distribution status counts — only on the list endpoint. */
+  distribution?: { total: number; published: number; pending: number; error: number; disabled: number } | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -135,7 +137,11 @@ export interface CertJob {
   nextAttemptAt: number | null;
 }
 
-export type CertEventType = 'issue' | 'renew' | 'error' | 'materialize' | 'delete' | 'download' | 'infisical_synced' | 'infisical_sync_error';
+export type CertEventType =
+  | 'issue' | 'renew' | 'error' | 'materialize' | 'delete' | 'download'
+  // legacy (pre-distribution) events, still present in history
+  | 'infisical_synced' | 'infisical_sync_error'
+  | 'distribution_published' | 'distribution_error' | 'distribution_removed';
 
 export interface CertEvent {
   id: string;
@@ -146,20 +152,4 @@ export interface CertEvent {
   actor: string | null;
   actorIp: string | null;
   message: string | null;
-}
-
-export interface InfisicalConfig {
-  enabled: boolean;
-  siteUrl: string;
-  clientId: string;
-  hasClientSecret: boolean;
-  projectId: string;
-  environment: string;
-  secretBasePath: string;
-}
-
-export interface SyncSummary {
-  synced: number;
-  failed: number;
-  errors: Array<{ certId: string; name: string; error: string }>;
 }

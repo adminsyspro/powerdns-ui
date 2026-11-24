@@ -3,11 +3,9 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { getCertificate, deleteCertificate, updateCertificateSettings } from '@/lib/certs/cert-store';
 import { appendCertEvent } from '@/lib/certs/event-store';
-import { removeMaterializedCert } from '@/lib/certs/materialize';
 import { listActiveJobs } from '@/lib/certs/job-store';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
-import { deleteCertFromInfisical } from '@/lib/certs/infisical-sync';
-import { isInfisicalEnabled } from '@/lib/certs/infisical-config';
+import { removeAllForCertificate } from '@/lib/certs/distribution/reconcile';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -101,23 +99,19 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
         { status: 409 }
       );
     }
+    // Unpublish from every destination while the cert row (and the recorded
+    // published locations) still exist. Best-effort per destination: failures
+    // are reported in the activity log, the deletion goes on.
+    const distErrors = await removeAllForCertificate(id);
     appendCertEvent({ certificateId: id, type: 'delete', status: 'ok', message: `certificate "${cert.name}" deleted` });
     deleteCertificate(id);
-    if (isInfisicalEnabled()) {
-      try { await deleteCertFromInfisical(cert.name, cert.category); } catch { /* best-effort */ }
-    }
-    try {
-      removeMaterializedCert(cert.name);
-    } catch {
-      // best-effort filesystem cleanup — DB row is already gone
-    }
     logActivity({
       ...actorFromRequest(request, ctx),
       action: 'delete',
       resourceType: 'certificate',
       resourceId: cert.id,
       resourceName: cert.name,
-      details: cert.sans.join(', '),
+      details: [cert.sans.join(', '), ...distErrors.map((e) => `unpublish failed: ${e}`)].join('; '),
     });
     return new NextResponse(null, { status: 204 });
   } catch (e) {

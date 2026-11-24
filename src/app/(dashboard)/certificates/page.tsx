@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight, CloudUpload, Infinity, FolderOpen } from 'lucide-react';
+import { Loader2, Download, KeyRound, RefreshCw, Trash2, ShieldCheck, ChevronDown, ChevronRight, CloudUpload, FolderOpen } from 'lucide-react';
 import { PageTitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -19,7 +19,7 @@ import { CreateCertDialog } from './create-cert-dialog';
 import { AcmeAccountsTab } from './acme-accounts-tab';
 import { InternalCaTab } from './internal-ca-tab';
 import { CertsOverview } from './certs-overview';
-import { InfisicalSettings } from './infisical-settings';
+import { DistributionSettings } from './distribution-settings';
 import { CategoriesTab } from './categories-tab';
 
 const INTERNAL_CA_UI = process.env.NEXT_PUBLIC_INTERNAL_CA_ENABLED === 'true';
@@ -51,7 +51,6 @@ export default function CertificatesPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
-  const [infisicalEnabled, setInfisicalEnabled] = React.useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   const load = React.useCallback(async () => {
@@ -75,10 +74,6 @@ export default function CertificatesPage() {
     const t = setInterval(() => { load(); }, 4000);
     return () => clearInterval(t);
   }, [anyInProgress, load]);
-
-  React.useEffect(() => {
-    api.fetchInfisicalConfig().then((r) => { if (r.data?.enabled) setInfisicalEnabled(true); });
-  }, []);
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
@@ -194,22 +189,23 @@ export default function CertificatesPage() {
         <TableCell>
           <Switch checked={cert.autoRenew} onCheckedChange={(v) => onToggleAutoRenew(cert, v)} aria-label="auto-renew" />
         </TableCell>
-        {infisicalEnabled && (
-          <TableCell className="text-center">
-            {(() => {
-              const synced = cert.infisicalSyncedAt != null && cert.notBefore != null && cert.infisicalSyncedAt >= cert.notBefore;
-              const stale = cert.infisicalSyncedAt != null && cert.notBefore != null && cert.infisicalSyncedAt < cert.notBefore;
-              const label = synced ? 'Synced to Infisical' : stale ? 'Sync stale — cert renewed since last sync' : 'Not synced to Infisical';
-              const icon = <CloudUpload className={`h-4 w-4 mx-auto ${synced ? 'text-green-600' : stale ? 'text-amber-500' : 'text-muted-foreground'}`} />;
-              return (
-                <Tooltip>
-                  <TooltipTrigger asChild><span className="inline-flex">{icon}</span></TooltipTrigger>
-                  <TooltipContent>{label}</TooltipContent>
-                </Tooltip>
-              );
-            })()}
-          </TableCell>
-        )}
+        <TableCell className="text-center">
+          {(() => {
+            const d = cert.distribution;
+            const color = !d || d.total === 0 || d.disabled === d.total ? 'text-muted-foreground'
+              : d.error > 0 ? 'text-destructive'
+              : d.pending > 0 ? 'text-amber-500' : 'text-green-600';
+            const label = !d || d.total === 0 ? 'No destination'
+              : `${d.published}/${d.total} published` + (d.pending ? `, ${d.pending} pending` : '')
+                + (d.error ? `, ${d.error} in error` : '') + (d.disabled ? `, ${d.disabled} disabled` : '');
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild><span className="inline-flex"><CloudUpload className={`h-4 w-4 mx-auto ${color}`} /></span></TooltipTrigger>
+                <TooltipContent>{label}</TooltipContent>
+              </Tooltip>
+            );
+          })()}
+        </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <Button variant="ghost" size="icon" title="Issue now" onClick={() => onIssue(cert)}>
@@ -255,7 +251,7 @@ export default function CertificatesPage() {
           <TabsTrigger value="accounts"><KeyRound className="mr-2 h-4 w-4" />ACME Accounts</TabsTrigger>
           {INTERNAL_CA_UI && <TabsTrigger value="internal-ca"><ShieldCheck className="mr-2 h-4 w-4" />Internal CA</TabsTrigger>}
           <TabsTrigger value="organisation"><FolderOpen className="mr-2 h-4 w-4" />Organisation</TabsTrigger>
-          <TabsTrigger value="infisical"><Infinity className="mr-2 h-4 w-4" />Infisical</TabsTrigger>
+          <TabsTrigger value="distribution"><CloudUpload className="mr-2 h-4 w-4" />Distribution</TabsTrigger>
         </TabsList>
 
         <TabsContent value="certificates" className="space-y-4">
@@ -292,7 +288,7 @@ export default function CertificatesPage() {
                       <TableHead>Renewal</TableHead>
                       <TableHead>Expiry</TableHead>
                       <TableHead>Auto</TableHead>
-                      {infisicalEnabled && <TableHead className="text-center w-[50px]"><Infinity className="h-4 w-4 mx-auto" /></TableHead>}
+                      <TableHead className="text-center w-[50px]" title="Distribution"><CloudUpload className="h-4 w-4 mx-auto" /></TableHead>
                       <TableHead className="text-right">
                         <span className="inline-flex items-center justify-end gap-2">
                           Actions
@@ -307,7 +303,7 @@ export default function CertificatesPage() {
                       : groups!.map((g) => (
                           <React.Fragment key={g.key}>
                             <TableRow className="hover:bg-transparent">
-                              <TableCell colSpan={infisicalEnabled ? 9 : 8} className="bg-muted/50 py-2">
+                              <TableCell colSpan={9} className="bg-muted/50 py-2">
                                 <button
                                   type="button"
                                   onClick={() => toggleGroup(g.key)}
@@ -343,8 +339,8 @@ export default function CertificatesPage() {
           <CategoriesTab onChange={() => { load(); loadCategories(); }} />
         </TabsContent>
 
-        <TabsContent value="infisical">
-          <InfisicalSettings />
+        <TabsContent value="distribution">
+          <DistributionSettings />
         </TabsContent>
       </Tabs>
 

@@ -294,9 +294,16 @@ docker restart step-ca
 
 Already-issued certificates keep their original duration, so re-issue to pick up the new one. Re-apply this after reinitializing step-ca on a fresh volume.
 
-### Distributing certificates to Nginx servers
+### Distributing certificates
 
-Certificates stored in Infisical can be automatically pulled and deployed to Nginx servers using a lightweight cron-based sync script. Each server uses its own Machine Identity scoped to only its certificate paths (least privilege). See [`docs/ssl-infisical-nginx.md`](docs/ssl-infisical-nginx.md) for the full setup guide.
+PowerDNS-UI is the issuer; every issued certificate is then **published to one or more destinations** (SSL Certificates → **Distribution**):
+
+- **Local disk / NFS** — `${CERTS_DIR}/live/<name>/` (applies to every certificate by default; see [`docs/ssl-certs-nfs-export.md`](docs/ssl-certs-nfs-export.md)).
+- **Infisical (secrets)** — `PRIVKEY` / `CERT` / `CHAIN` / `FULLCHAIN` under a project, environment and path. A connection can apply to every certificate (path template with `{category}` / `{name}`), and each certificate can get extra destinations — typically **one Infisical project per consumer**, read by that consumer's identity with the built-in **Viewer** role (no paid custom role needed).
+
+Renewals are republished automatically; a failed publish is retried with backoff (5 min → 6 h) by a background worker (`CERT_DISTRIBUTION_INTERVAL_MS`, default 5 min), and each destination shows its status, last publish and last error on the certificate page.
+
+Consumers pull from Infisical: Nginx servers with a cron script, Kubernetes clusters with the Infisical Operator. See [`docs/ssl-infisical-nginx.md`](docs/ssl-infisical-nginx.md).
 
 ---
 

@@ -159,10 +159,11 @@ if [ "$CHANGED" -eq 1 ]; then
   else
     log "Certificates updated (Nginx not installed)"
   fi
-else
+elif [ "$FAILED" -eq 0 ]; then
   log "No certificate changes"
 fi
 
+[ "$FAILED" -eq 0 ] || log "ERROR: sync finished with errors (see above)"
 exit "$FAILED"
 SCRIPT
 

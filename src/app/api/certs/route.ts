@@ -3,6 +3,7 @@ import { requireAdmin, authzErrorResponse } from '@/lib/auth/authz';
 import { isCertsEnabled } from '@/lib/certs/config';
 import { createCertificate, listCertificates } from '@/lib/certs/cert-store';
 import { enqueueJob } from '@/lib/certs/job-store';
+import { ensureAutoDistributions, summarizeDistributions } from '@/lib/certs/distribution/distribution-store';
 import { connectionExists } from '@/lib/integrations/connections';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 import type { KeyType } from '@/lib/certs/types';
@@ -13,7 +14,9 @@ export async function GET(request: NextRequest) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     requireAdmin(request);
-    return NextResponse.json(listCertificates());
+    ensureAutoDistributions();
+    const summaries = summarizeDistributions();
+    return NextResponse.json(listCertificates().map((c) => ({ ...c, distribution: summaries.get(c.id) ?? null })));
   } catch (e) {
     return authzErrorResponse(e);
   }

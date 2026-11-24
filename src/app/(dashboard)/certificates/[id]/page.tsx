@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useConfirm } from '@/hooks/use-confirm';
 import { formatDate } from '@/lib/utils';
 import * as api from '@/lib/api';
+import { CertDistributions } from './cert-distributions';
 import { isCertInProgress, type Certificate, type CertEvent, type AcmeAccount } from '@/lib/certs/types';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -40,7 +41,7 @@ function LiveDot() {
 // acme-client's internal trace dimmed, everything else default.
 function runLineClass(line: string): string {
   if (/✖|\berror\b|failed|invalid/i.test(line)) return 'text-red-400';
-  if (/✔|issued|materialized|complete|validated|confirmed/i.test(line)) return 'text-emerald-400';
+  if (/✔|issued|materialized|published|complete|validated|confirmed/i.test(line)) return 'text-emerald-400';
   if (/\]\s*acme:/.test(line)) return 'text-neutral-400';
   return 'text-neutral-200';
 }
@@ -54,8 +55,8 @@ export default function CertificateDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
-  const [syncing, setSyncing] = React.useState(false);
-  const [infisicalEnabled, setInfisicalEnabled] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [distKey, setDistKey] = React.useState(0);
   const { confirm, ConfirmDialog } = useConfirm();
 
   const load = React.useCallback(async () => {
@@ -91,10 +92,6 @@ export default function CertificateDetailPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [cert?.lastRunLog]);
 
-  React.useEffect(() => {
-    api.fetchInfisicalConfig().then((r) => { if (r.data?.enabled) setInfisicalEnabled(true); });
-  }, []);
-
   async function patch(p: { autoRenew?: boolean; renewBeforeDays?: number; keyDownloadEnabled?: boolean; category?: string | null; comment?: string | null }) {
     const res = await api.updateCertificateApi(id, p);
     if (res.error) setError(res.error); else setCert(res.data ?? cert);
@@ -114,22 +111,25 @@ export default function CertificateDetailPage() {
   async function onDelete() {
     const ok = await confirm({
       title: `Delete "${cert!.name}"?`,
-      description: 'DB row + materialized files deleted. No automatic revocation. Irreversible.',
+      description: 'The certificate and its private key are removed from every destination (disk, Infisical…), then deleted. No automatic revocation. Irreversible.',
       confirmLabel: 'Delete', variant: 'destructive',
     });
     if (!ok) return;
     const res = await api.deleteCertificateApi(id);
     if (res.error) setError(res.error); else router.push('/certificates');
   }
-  const handleInfisicalSync = async () => {
-    setSyncing(true);
-    const r = await api.syncCertApi(cert!.id);
-    if (r.data?.ok) {
-      refresh();
-    } else {
-      alert(`Sync failed: ${r.data?.error || r.error || 'Unknown error'}`);
-    }
-    setSyncing(false);
+  const handlePublishAll = async () => {
+    setPublishing(true);
+    setError(''); setSuccess('');
+    const r = await api.publishCertApi(cert!.id);
+    if (r.error || !r.data) setError(r.error || 'Publish failed');
+    else if (r.data.failed > 0) {
+      setError(`Publish: ${r.data.published} published, ${r.data.failed} failed — ` +
+        r.data.outcomes.filter((o) => o.action === 'failed').map((o) => `${o.connectionName}: ${o.error}`).join('; '));
+    } else setSuccess(`Published to ${r.data.published} destination(s).`);
+    setPublishing(false);
+    setDistKey((k) => k + 1);
+    refresh();
   };
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -163,10 +163,10 @@ export default function CertificateDetailPage() {
             <Button variant="outline" size="sm" disabled><Download className="mr-2 h-4 w-4" />Chain</Button>
           )}
           <Button variant="outline" size="sm" disabled={!cert.hasCert || !cert.keyDownloadEnabled} onClick={onDownloadBundle}><KeyRound className="mr-2 h-4 w-4" />Key + bundle</Button>
-          {infisicalEnabled && cert.hasCert && (
-            <Button variant="outline" size="sm" onClick={handleInfisicalSync} disabled={syncing}>
-              {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CloudUpload className="mr-2 h-4 w-4" />}
-              Sync to Infisical
+          {cert.hasCert && (
+            <Button variant="outline" size="sm" onClick={handlePublishAll} disabled={publishing}>
+              {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CloudUpload className="mr-2 h-4 w-4" />}
+              Publish everywhere
             </Button>
           )}
           <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
@@ -178,6 +178,7 @@ export default function CertificateDetailPage() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="distribution">Distribution</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -193,10 +194,6 @@ export default function CertificateDetailPage() {
               <Row label="Last successful renewal" value={ts(cert.lastRenewalSuccessAt)} />
               <Row label="Next attempt" value={ts(cert.nextAttemptAt)} />
               {cert.lastRenewalError && <Row label="Last error" value={<span className="text-destructive">{cert.errorClass}: {cert.lastRenewalError}</span>} />}
-              <Row label="Materialized at" value={ts(cert.materializedAt)} />
-              {infisicalEnabled && (
-                <Row label="Infisical synced" value={cert.infisicalSyncedAt ? formatDate(cert.infisicalSyncedAt * 1000) : 'not synced'} />
-              )}
               <div className="mt-4 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   Generation log
@@ -254,6 +251,10 @@ export default function CertificateDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="distribution" className="grid gap-4 md:grid-cols-2">
+          <CertDistributions key={distKey} certId={id} hasCert={cert.hasCert} onChanged={refresh} />
         </TabsContent>
 
         <TabsContent value="history">

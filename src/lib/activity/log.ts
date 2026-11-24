@@ -8,7 +8,7 @@ type Db = Database.Database;
 export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'login_failed' | 'sync' | 'test';
 export type ActivityResource = 'zone' | 'record' | 'user' | 'group' | 'setting' | 'connection'
   | 'proxy_env' | 'proxy_key' | 'integration' | 'custom_ns_set' | 'certificate' | 'acme_account' | 'session'
-  | 'infisical_config' | 'certificate_category';
+  | 'infisical_config' | 'certificate_category' | 'distribution_connection' | 'certificate_distribution';
 
 export interface ActivityEntry {
   id: string; ts: number; actorId: string | null; actorName: string; actorIp: string | null;

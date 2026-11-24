@@ -18,6 +18,7 @@ import type { IntegrationSyncState } from '@/lib/integrations/sync';
 import type { ZonePreview } from '@/lib/integrations/preview';
 import type { AcmeAccount, AcmeAccountInput, AcmeAccountPatch, Certificate, CertEvent, InternalCaStatus } from '@/lib/certs/types';
 import type { ActivityEntry } from '@/lib/activity/log';
+import type { CertificateDistribution, DistributionConnection, ProviderType } from '@/lib/certs/distribution/types';
 
 export type NsAuditResponse = NsAuditResults & { scan: NsAuditScanState };
 
@@ -660,61 +661,102 @@ export function downloadCertBundle(id: string) {
   return apiRequest<string>(`/api/certs/${id}/download`, { method: 'POST' });
 }
 
-// --- SSL certificates: Infisical sync ---
+// --- SSL certificates: distribution (filesystem / Infisical / …) ---
 
-export interface InfisicalConfigResponse {
-  enabled: boolean;
-  siteUrl: string;
-  clientId: string;
-  hasClientSecret: boolean;
-  projectId: string;
-  environment: string;
-  secretBasePath: string;
+export interface DistributionProviderInfo {
+  type: ProviderType;
+  label: string;
+  needsSecret: boolean;
 }
 
-export function fetchInfisicalConfig() {
-  return apiRequest<InfisicalConfigResponse>('/api/certs/infisical');
+export interface ReconcileSummaryResponse {
+  published: number;
+  upToDate: number;
+  skipped: number;
+  failed: number;
+  outcomes: Array<{ distributionId: string; connectionName: string; action: string; error?: string }>;
 }
 
-export function saveInfisicalConfigApi(config: {
-  enabled: boolean;
-  siteUrl: string;
-  clientId: string;
-  clientSecret?: string;
-  projectId: string;
-  environment: string;
-  secretBasePath: string;
-}) {
-  return apiRequest<InfisicalConfigResponse>('/api/certs/infisical', {
-    method: 'PUT',
-    body: JSON.stringify({
-      enabled: config.enabled,
-      site_url: config.siteUrl,
-      client_id: config.clientId,
-      client_secret: config.clientSecret || undefined,
-      project_id: config.projectId,
-      environment: config.environment,
-      secret_base_path: config.secretBasePath,
-    }),
+export interface ConnectionPayload {
+  name?: string;
+  type?: ProviderType;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+  secret?: string;
+  autoAttach?: boolean;
+  defaultTarget?: Record<string, unknown> | null;
+}
+
+export function fetchDistributionConnections() {
+  return apiRequest<{ connections: DistributionConnection[]; providers: DistributionProviderInfo[] }>(
+    '/api/certs/distribution/connections',
+  );
+}
+
+export function createDistributionConnection(payload: ConnectionPayload) {
+  return apiRequest<DistributionConnection>('/api/certs/distribution/connections', {
+    method: 'POST', body: JSON.stringify(payload),
   });
 }
 
-export function testInfisicalApi() {
-  return apiRequest<{ ok: boolean; error?: string }>('/api/certs/infisical/test', { method: 'POST' });
+export function updateDistributionConnection(id: string, payload: ConnectionPayload) {
+  return apiRequest<DistributionConnection>(`/api/certs/distribution/connections/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(payload),
+  });
 }
 
-export function syncAllCertsApi() {
-  return apiRequest<{ synced: number; failed: number; errors: Array<{ certId: string; name: string; error: string }> }>(
-    '/api/certs/infisical/sync',
+export function deleteDistributionConnection(id: string) {
+  return apiRequest<void>(`/api/certs/distribution/connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function testDistributionConnection(id: string, target?: Record<string, unknown>) {
+  return apiRequest<{ ok: boolean; error?: string; detail?: string }>(
+    `/api/certs/distribution/connections/${encodeURIComponent(id)}/test`,
+    { method: 'POST', body: JSON.stringify(target ? { target } : {}) },
+  );
+}
+
+export function publishAllCertsApi(force = false) {
+  return apiRequest<ReconcileSummaryResponse>('/api/certs/distribution/publish', {
+    method: 'POST', body: JSON.stringify({ force }),
+  });
+}
+
+export function fetchCertDistributions(certId: string) {
+  return apiRequest<CertificateDistribution[]>(`/api/certs/${encodeURIComponent(certId)}/distributions`);
+}
+
+export function addCertDistribution(certId: string, connectionId: string, target: Record<string, unknown>) {
+  return apiRequest<{ distribution: CertificateDistribution; outcome: { action: string; error?: string } | null }>(
+    `/api/certs/${encodeURIComponent(certId)}/distributions`,
+    { method: 'POST', body: JSON.stringify({ connectionId, target }) },
+  );
+}
+
+export function removeCertDistribution(certId: string, distId: string) {
+  return apiRequest<void>(
+    `/api/certs/${encodeURIComponent(certId)}/distributions/${encodeURIComponent(distId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function publishCertDistribution(certId: string, distId: string) {
+  return apiRequest<{ action: string; error?: string }>(
+    `/api/certs/${encodeURIComponent(certId)}/distributions/${encodeURIComponent(distId)}/publish`,
     { method: 'POST' },
   );
 }
 
-export function syncCertApi(id: string) {
-  return apiRequest<{ ok: boolean; error?: string }>(
-    `/api/certs/${encodeURIComponent(id)}/sync`,
+export function testCertDistribution(certId: string, distId: string) {
+  return apiRequest<{ ok: boolean; error?: string; detail?: string }>(
+    `/api/certs/${encodeURIComponent(certId)}/distributions/${encodeURIComponent(distId)}/test`,
     { method: 'POST' },
   );
+}
+
+/** Publish one certificate to all of its destinations now. */
+export function publishCertApi(id: string) {
+  return apiRequest<ReconcileSummaryResponse>(`/api/certs/${encodeURIComponent(id)}/sync`, { method: 'POST' });
 }
 
 // ---- Certificate categories ----

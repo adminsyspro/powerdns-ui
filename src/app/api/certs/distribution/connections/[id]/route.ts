@@ -5,6 +5,7 @@ import { getConnection, updateConnection, countDistributionsForConnection } from
 import { clearInfisicalTokenCache } from '@/lib/certs/distribution/providers/infisical-secrets';
 import { removeConnection } from '@/lib/certs/distribution/reconcile';
 import { distributionErrorResponse, readJson } from '@/lib/certs/distribution/route-util';
+import { asString } from '@/lib/certs/distribution/text';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -29,7 +30,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const { id } = await params;
     const body = await readJson(request);
     const conn = updateConnection(id, {
-      name: body.name !== undefined ? String(body.name) : undefined,
+      name: body.name === undefined ? undefined : asString(body.name),
       enabled: body.enabled !== undefined ? !!body.enabled : undefined,
       config: body.config,
       secret: typeof body.secret === 'string' && body.secret ? body.secret : undefined,

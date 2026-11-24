@@ -7,6 +7,7 @@ import {
 } from '@/lib/certs/distribution/distribution-store';
 import { reconcileDistribution } from '@/lib/certs/distribution/reconcile';
 import { distributionErrorResponse, readJson } from '@/lib/certs/distribution/route-util';
+import { asString } from '@/lib/certs/distribution/text';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const cert = getCertificate(id);
     if (!cert) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const body = await readJson(request);
-    const dist = addManualDistribution({ certificateId: id, connectionId: String(body.connectionId ?? ''), target: body.target });
+    const dist = addManualDistribution({ certificateId: id, connectionId: asString(body.connectionId), target: body.target });
     logActivity({
       ...actorFromRequest(request, ctx),
       action: 'create', resourceType: 'certificate_distribution',

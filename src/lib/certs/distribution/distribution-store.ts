@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { getDb } from '@/lib/cache/db';
 import { getProvider } from './registry';
@@ -17,7 +17,7 @@ function parseJson<T>(s: string | null | undefined, fallback: T): T {
 /** Order-insensitive structural equality for small JSON objects. */
 export function sameTarget(a: ResolvedTarget | null, b: ResolvedTarget | null): boolean {
   if (!a || !b) return a === b;
-  const norm = (o: ResolvedTarget) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
+  const norm = (o: ResolvedTarget) => JSON.stringify(Object.keys(o).sort((x, y) => x.localeCompare(y)).map((k) => [k, o[k]]));
   return norm(a) === norm(b);
 }
 

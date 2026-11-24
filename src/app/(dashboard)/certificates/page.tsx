@@ -37,6 +37,25 @@ const RENEWAL_BADGE: Record<string, string> = {
   failed: 'bg-destructive/10 text-destructive',
 };
 
+type DistributionCounts = NonNullable<Certificate['distribution']>;
+
+/** Icon color + tooltip for the list's distribution column. */
+function distributionBadge(d: Certificate['distribution']): { color: string; label: string } {
+  if (!d || d.total === 0) return { color: 'text-muted-foreground', label: 'No destination' };
+  const parts = [`${d.published}/${d.total} published`];
+  if (d.pending) parts.push(`${d.pending} pending`);
+  if (d.error) parts.push(`${d.error} in error`);
+  if (d.disabled) parts.push(`${d.disabled} disabled`);
+  return { color: distributionColor(d), label: parts.join(', ') };
+}
+
+function distributionColor(d: DistributionCounts): string {
+  if (d.disabled === d.total) return 'text-muted-foreground';
+  if (d.error > 0) return 'text-destructive';
+  if (d.pending > 0) return 'text-amber-500';
+  return 'text-green-600';
+}
+
 function Pill({ map, value }: { map: Record<string, string>; value: string }) {
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${map[value] ?? 'bg-muted text-muted-foreground'}`}>
@@ -191,13 +210,7 @@ export default function CertificatesPage() {
         </TableCell>
         <TableCell className="text-center">
           {(() => {
-            const d = cert.distribution;
-            const color = !d || d.total === 0 || d.disabled === d.total ? 'text-muted-foreground'
-              : d.error > 0 ? 'text-destructive'
-              : d.pending > 0 ? 'text-amber-500' : 'text-green-600';
-            const label = !d || d.total === 0 ? 'No destination'
-              : `${d.published}/${d.total} published` + (d.pending ? `, ${d.pending} pending` : '')
-                + (d.error ? `, ${d.error} in error` : '') + (d.disabled ? `, ${d.disabled} disabled` : '');
+            const { color, label } = distributionBadge(cert.distribution);
             return (
               <Tooltip>
                 <TooltipTrigger asChild><span className="inline-flex"><CloudUpload className={`h-4 w-4 mx-auto ${color}`} /></span></TooltipTrigger>

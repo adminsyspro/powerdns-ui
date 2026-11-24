@@ -1,3 +1,4 @@
+import { trimTrailingSlashes, asString } from '../text';
 import type { DistributionProvider, ProviderContext, ConnectionConfig, TargetSpec, ResolvedTarget, TestResult } from '../types';
 
 /**
@@ -76,9 +77,9 @@ async function bodyText(res: Response): Promise<string> {
 }
 
 async function login(ctx: ProviderContext): Promise<Auth> {
-  const baseUrl = String(ctx.config.siteUrl || '').replace(/\/+$/, '');
+  const baseUrl = trimTrailingSlashes(asString(ctx.config.siteUrl));
   const cached = tokenCache.get(ctx.connectionId);
-  if (cached && cached.version === ctx.connectionVersion && Date.now() < cached.expiresAt) {
+  if (cached?.version === ctx.connectionVersion && Date.now() < cached.expiresAt) {
     return { token: cached.token, baseUrl };
   }
   if (!baseUrl) throw new Error('Infisical site URL not configured');
@@ -105,7 +106,7 @@ function headers(auth: Auth): Record<string, string> {
 interface Scope { projectId: string; environment: string; path: string }
 
 function scopeOf(target: ResolvedTarget): Scope {
-  return { projectId: String(target.projectId), environment: String(target.environment), path: String(target.path) };
+  return { projectId: asString(target.projectId), environment: asString(target.environment), path: asString(target.path) };
 }
 
 /** Infisical answers "already exists" with 400 (not 409) on current versions — accept both. */
@@ -185,7 +186,7 @@ export const infisicalSecretsProvider: DistributionProvider = {
 
   normalizeConfig(input: unknown): ConnectionConfig {
     const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-    const siteUrl = str(o, 'siteUrl').replace(/\/+$/, '');
+    const siteUrl = trimTrailingSlashes(str(o, 'siteUrl'));
     const clientId = str(o, 'clientId');
     if (!/^https?:\/\/[^\s/]+/i.test(siteUrl)) throw new Error('siteUrl must be an http(s) URL');
     if (!clientId) throw new Error('clientId is required');
@@ -203,9 +204,9 @@ export const infisicalSecretsProvider: DistributionProvider = {
 
   resolveTarget(target, cert): ResolvedTarget {
     return {
-      projectId: String(target.projectId),
-      environment: String(target.environment),
-      path: resolvePath(String(target.path || DEFAULT_PATH_TEMPLATE), cert),
+      projectId: asString(target.projectId),
+      environment: asString(target.environment),
+      path: resolvePath(asString(target.path) || DEFAULT_PATH_TEMPLATE, cert),
     };
   },
 
@@ -220,8 +221,9 @@ export const infisicalSecretsProvider: DistributionProvider = {
       // Historical format: leaf + "\n" + chain (consumers compare file contents).
       FULLCHAIN: material.chainPem ? `${material.leafPem}\n${material.chainPem}` : material.leafPem,
     };
+    // Sequential on purpose: four small writes, ordered, gentle on the API.
     for (const name of SECRET_NAMES) {
-      await upsertSecret(auth, scope, name, values[name]);
+      await upsertSecret(auth, scope, name, values[name]); // NOSONAR — intentional sequential writes
     }
   },
 
@@ -229,7 +231,7 @@ export const infisicalSecretsProvider: DistributionProvider = {
     const auth = await login(ctx);
     const scope = scopeOf(target);
     for (const name of SECRET_NAMES) {
-      await deleteSecret(auth, scope, name);
+      await deleteSecret(auth, scope, name); // NOSONAR — intentional sequential deletes
     }
   },
 

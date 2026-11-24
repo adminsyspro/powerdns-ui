@@ -27,7 +27,7 @@ export function describeResolved(type: string, t: Record<string, unknown> | null
   return JSON.stringify(t);
 }
 
-export function CertDistributions({ certId, hasCert, onChanged }: { certId: string; hasCert: boolean; onChanged?: () => void }) {
+export function CertDistributions({ certId, hasCert, onChanged }: Readonly<{ certId: string; hasCert: boolean; onChanged?: () => void }>) {
   const [rows, setRows] = React.useState<CertificateDistribution[]>([]);
   const [connections, setConnections] = React.useState<DistributionConnection[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -89,9 +89,9 @@ export function CertDistributions({ certId, hasCert, onChanged }: { certId: stri
     const r = await api.addCertDistribution(certId, selected.id, target);
     if (r.error) { setMessage({ ok: false, text: r.error }); return; }
     const o = r.data?.outcome;
-    setMessage(o && o.action === 'failed'
-      ? { ok: false, text: `Destination added, but publish failed: ${o.error}` }
-      : { ok: true, text: o ? `Destination added and ${o.action}` : 'Destination added (published once the certificate is issued)' });
+    if (o?.action === 'failed') setMessage({ ok: false, text: `Destination added, but publish failed: ${o.error}` });
+    else if (o) setMessage({ ok: true, text: `Destination added and ${o.action}` });
+    else setMessage({ ok: true, text: 'Destination added (published once the certificate is issued)' });
     setAdding(false);
     setProjectId('');
   });
@@ -158,11 +158,9 @@ export function CertDistributions({ certId, hasCert, onChanged }: { certId: stri
           </div>
         )}
 
-        {loading ? (
-          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No destination.</p>
-        ) : (
+        {loading && <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>}
+        {!loading && rows.length === 0 && <p className="text-sm text-muted-foreground">No destination.</p>}
+        {!loading && rows.length > 0 && (
           <div className="rounded-md border">
             <Table>
               <TableHeader>

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { getDb } from '@/lib/cache/db';
 import { encrypt, decryptStrict } from '@/lib/crypto';
@@ -92,45 +92,57 @@ export function createConnection(input: ConnectionInput, db: Db = getDb()): Dist
   return getConnection(id, db)!;
 }
 
-export function updateConnection(
-  id: string,
-  patch: Partial<Omit<ConnectionInput, 'type'>>,
-  db: Db = getDb(),
-): DistributionConnection {
+type ConnectionPatch = Partial<Omit<ConnectionInput, 'type'>>;
+
+/** Merge a patch onto the current connection, validating each provided field. */
+function mergePatch(cur: DistributionConnection, patch: ConnectionPatch) {
+  const provider = getProvider(cur.type);
+  const autoAttach = patch.autoAttach === undefined ? cur.autoAttach : !!patch.autoAttach;
+  let defaultTarget = patch.defaultTarget === undefined ? cur.defaultTarget : provider.normalizeTarget(patch.defaultTarget);
+  if (autoAttach && !defaultTarget) defaultTarget = provider.normalizeTarget({});
+  return {
+    name: patch.name === undefined ? cur.name : validateName(patch.name),
+    enabled: patch.enabled === undefined ? cur.enabled : !!patch.enabled,
+    config: patch.config === undefined ? cur.config : provider.normalizeConfig(patch.config),
+    autoAttach,
+    defaultTarget,
+  };
+}
+
+/**
+ * Turning auto-attach off: auto distributions that never published anything
+ * simply go; published ones are kept (as manual, same target) so nothing is
+ * left orphaned silently.
+ */
+function demoteAutoDistributions(id: string, previousTarget: TargetSpec | null, db: Db): void {
+  db.prepare(`DELETE FROM certificate_distributions WHERE connection_id = ? AND origin = 'auto' AND published_target_json IS NULL`).run(id);
+  db.prepare(
+    `UPDATE certificate_distributions SET origin = 'manual', target_json = ? WHERE connection_id = ? AND origin = 'auto'`,
+  ).run(JSON.stringify(previousTarget ?? {}), id);
+}
+
+export function updateConnection(id: string, patch: ConnectionPatch, db: Db = getDb()): DistributionConnection {
   const cur = getConnection(id, db);
   if (!cur) throw new Error('connection not found');
-  const provider = getProvider(cur.type);
-  const name = patch.name !== undefined ? validateName(patch.name) : cur.name;
-  const config = patch.config !== undefined ? provider.normalizeConfig(patch.config) : cur.config;
-  const autoAttach = patch.autoAttach !== undefined ? !!patch.autoAttach : cur.autoAttach;
-  let defaultTarget = cur.defaultTarget;
-  if (patch.defaultTarget !== undefined) defaultTarget = provider.normalizeTarget(patch.defaultTarget);
-  if (autoAttach && !defaultTarget) defaultTarget = provider.normalizeTarget({});
-  const enabled = patch.enabled !== undefined ? !!patch.enabled : cur.enabled;
+  const next = mergePatch(cur, patch);
 
   // updated_at must strictly increase: providers key their auth cache on it.
   const now = Math.max(Math.floor(Date.now() / 1000), cur.updatedAt + 1);
+  const params: unknown[] = [next.name, next.enabled ? 1 : 0, JSON.stringify(next.config), next.autoAttach ? 1 : 0,
+    next.defaultTarget ? JSON.stringify(next.defaultTarget) : null, now];
+  if (patch.secret) params.push(encrypt(patch.secret));
   try {
     db.prepare(
       `UPDATE distribution_connections
           SET name = ?, enabled = ?, config_json = ?, auto_attach = ?, default_target_json = ?, updated_at = ?
               ${patch.secret ? ', secret_enc = ?' : ''}
         WHERE id = ?`,
-    ).run(...([name, enabled ? 1 : 0, JSON.stringify(config), autoAttach ? 1 : 0,
-      defaultTarget ? JSON.stringify(defaultTarget) : null, now] as unknown[]),
-      ...(patch.secret ? [encrypt(patch.secret)] : []), id);
+    ).run(...params, id);
   } catch (e) {
-    if (/UNIQUE/.test((e as Error).message)) throw new Error(`a connection named "${name}" already exists`);
+    if (/UNIQUE/.test((e as Error).message)) throw new Error(`a connection named "${next.name}" already exists`);
     throw e;
   }
-  if (cur.autoAttach && !autoAttach) {
-    // Auto distributions that never published anything can simply go; published
-    // ones are kept (as manual, same target) so nothing is left orphaned silently.
-    db.prepare(`DELETE FROM certificate_distributions WHERE connection_id = ? AND origin = 'auto' AND published_target_json IS NULL`).run(id);
-    db.prepare(
-      `UPDATE certificate_distributions SET origin = 'manual', target_json = ? WHERE connection_id = ? AND origin = 'auto'`,
-    ).run(JSON.stringify(cur.defaultTarget ?? {}), id);
-  }
+  if (cur.autoAttach && !next.autoAttach) demoteAutoDistributions(id, cur.defaultTarget, db);
   return getConnection(id, db)!;
 }
 

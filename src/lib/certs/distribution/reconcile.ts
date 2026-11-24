@@ -52,7 +52,7 @@ export function describeTarget(type: string, t: ResolvedTarget | null): string {
 function loadMaterial(certificateId: string, db: Db): CertMaterial | null {
   const cert = db.prepare('SELECT id, name, category, fingerprint_sha256, not_after FROM certificates WHERE id = ?')
     .get(certificateId) as { id: string; name: string; category: string | null; fingerprint_sha256: string | null; not_after: number | null } | undefined;
-  if (!cert || !cert.fingerprint_sha256) return null;
+  if (!cert?.fingerprint_sha256) return null;
   const bundle = getCertificateBundle(certificateId, db);
   const privkey = getCertificatePrivateKey(certificateId, db);
   if (!bundle || !privkey) return null;
@@ -150,7 +150,7 @@ export async function reconcileCertificate(
   const summary = emptySummary();
   const material = loadMaterial(certificateId, db);
   for (const r of listDistributionRows(certificateId, db)) {
-    add(summary, await reconcileRow(r, { force: !!opts.force, material, log: opts.log }, db));
+    add(summary, await reconcileRow(r, { force: !!opts.force, material, log: opts.log }, db)); // NOSONAR — sequential on purpose (remote APIs, run-log order)
   }
   return summary;
 }
@@ -176,7 +176,7 @@ export async function runDistributionCycle(db: Db = getDb(), now = Math.floor(Da
     let due = false;
     try { due = isOutOfDate(r); } catch { due = true; } // unresolvable target → surface the error
     if (!due) continue;
-    add(summary, await reconcileRow(r, { force: false }, db));
+    add(summary, await reconcileRow(r, { force: false }, db)); // NOSONAR — sequential on purpose (gentle on remote APIs)
   }
   return summary;
 }
@@ -213,7 +213,7 @@ export async function removeAllForCertificate(certificateId: string, db: Db = ge
   const errors: string[] = [];
   for (const r of listDistributionRows(certificateId, db)) {
     try {
-      await unpublishRow(r, db);
+      await unpublishRow(r, db); // NOSONAR — sequential, per-row error collection
     } catch (e) {
       errors.push(`${r.conn_name}: ${(e as Error).message}`);
     }
@@ -229,7 +229,7 @@ export async function removeConnection(connectionId: string, db: Db = getDb()): 
   }
   if (!getConnection(connectionId, db)) throw new Error('connection not found');
   for (const r of listDistributionRowsForConnection(connectionId, db)) {
-    await unpublishRow(r, db);
+    await unpublishRow(r, db); // NOSONAR — sequential: stop at the first unpublish failure
     deleteDistributionRow(r.id, db);
   }
   deleteConnection(connectionId, db);

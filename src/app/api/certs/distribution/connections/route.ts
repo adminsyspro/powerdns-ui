@@ -4,9 +4,10 @@ import { isCertsEnabled } from '@/lib/certs/config';
 import { listConnections, createConnection } from '@/lib/certs/distribution/connection-store';
 import { listProviders } from '@/lib/certs/distribution/registry';
 import { distributionErrorResponse, readJson } from '@/lib/certs/distribution/route-util';
+import { asString } from '@/lib/certs/distribution/text';
 import { logActivity, actorFromRequest } from '@/lib/activity/log';
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
   try {
     if (!isCertsEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     requireAdmin(request);
@@ -25,8 +26,8 @@ export async function POST(request: NextRequest) {
     const ctx = requireAdmin(request);
     const body = await readJson(request);
     const conn = createConnection({
-      name: String(body.name ?? ''),
-      type: String(body.type ?? ''),
+      name: asString(body.name),
+      type: asString(body.type),
       enabled: body.enabled !== false,
       config: body.config,
       secret: typeof body.secret === 'string' && body.secret ? body.secret : undefined,

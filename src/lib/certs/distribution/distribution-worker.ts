@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { acquireLease } from '../cert-lease';
 import { runDistributionCycle } from './reconcile';
 

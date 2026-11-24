@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { materializeCert, removeMaterializedCert, sanitizeCertName } from '../../materialize';
 import { getCertsDir } from '../../config';
 import type { DistributionProvider, ConnectionConfig, TargetSpec, ResolvedTarget } from '../types';

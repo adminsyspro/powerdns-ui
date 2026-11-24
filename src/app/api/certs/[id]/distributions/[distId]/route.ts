@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const ctx = requireAdmin(request);
     const { id, distId } = await params;
     const row = getDistributionRow(distId);
-    if (!row || row.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (row?.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     await removeDistribution(distId);
     logActivity({
       ...actorFromRequest(request, ctx),

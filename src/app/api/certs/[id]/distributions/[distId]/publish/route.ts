@@ -15,13 +15,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const ctx = requireAdmin(request);
     const { id, distId } = await params;
     const row = getDistributionRow(distId);
-    if (!row || row.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (row?.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const outcome = await reconcileDistribution(distId, { force: true });
     logActivity({
       ...actorFromRequest(request, ctx),
       action: 'sync', resourceType: 'certificate_distribution',
       resourceId: distId, resourceName: row.cert_name,
-      details: `${row.conn_name}: ${outcome.action}${outcome.error ? ` (${outcome.error})` : ''}`,
+      details: outcome.error ? `${row.conn_name}: ${outcome.action} (${outcome.error})` : `${row.conn_name}: ${outcome.action}`,
     });
     return NextResponse.json(outcome);
   } catch (e) {

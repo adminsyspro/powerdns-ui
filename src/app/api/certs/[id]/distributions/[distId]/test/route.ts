@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     requireAdmin(request);
     const { id, distId } = await params;
     const row = getDistributionRow(distId);
-    if (!row || row.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (row?.certificate_id !== id) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const conn = getConnection(row.connection_id);
     if (!conn) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const result = await getProvider(conn.type).test(providerContext(conn), resolveRowTarget(row));

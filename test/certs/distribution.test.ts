@@ -1,7 +1,8 @@
 import assert from 'node:assert';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { test } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import Database from 'better-sqlite3';
 import { encrypt } from '../../src/lib/crypto';
 import { migrateDistribution, FILESYSTEM_DEFAULT_ID, INFISICAL_DEFAULT_ID } from '../../src/lib/certs/distribution/schema';
@@ -122,6 +123,7 @@ __setInfisicalFetch(fakeInfisical());
 const S = (project: string, p: string, name: string) => secrets.get(`${project}|prod|${p}|${name}`);
 
 // ================================================================ path templates
+test('path templates', () => {
 assert.equal(normalizePathTemplate(''), '/{category}/{name}', 'default template');
 assert.equal(normalizePathTemplate('/{name}/'), '/{name}', 'trailing slash dropped');
 assert.throws(() => normalizePathTemplate('ssl'), /start with/, 'relative path refused');
@@ -130,9 +132,10 @@ assert.throws(() => normalizePathTemplate('/a b'), /invalid path segment/, 'bad 
 assert.equal(resolvePath('/{category}/{name}', { name: 'proxcenter.api.infra', category: 'DATACENTER' }),
   '/DATACENTER/proxcenter-api-infra', 'historical layout (dots → dashes)');
 assert.equal(resolvePath('/ssl/{category}/{name}', { name: 'web', category: null }), '/ssl/_default/web', 'null category → _default');
+});
 
 // ================================================================ migration
-{
+test('migration of the legacy config + republish of stale copies', async () => {
   const db = makeDb({ base: '/', enabled: true });
   const T0 = 1_780_000_000;
   // fresh on both destinations
@@ -166,7 +169,7 @@ assert.equal(resolvePath('/ssl/{category}/{name}', { name: 'web', category: null
   // The legacy stale cert gets republished by the first cycle (this is the proxcenter fix).
   secrets.set('proj-pdns|prod|/DATACENTER/proxcenter-api-infra|PRIVKEY', 'OLD'); // exists → POST answers 400
   folders.add('proj-pdns|prod|/DATACENTER'); folders.add('proj-pdns|prod|/DATACENTER/proxcenter-api-infra');
-  (async () => {
+  {
     const s = await runDistributionCycle(db);
     assert.equal(s.failed, 0, `cycle without failure: ${JSON.stringify(s.outcomes)}`);
     assert.equal(S('proj-pdns', '/DATACENTER/proxcenter-api-infra', 'PRIVKEY'), 'KEY-stale\n',
@@ -175,9 +178,8 @@ assert.equal(resolvePath('/ssl/{category}/{name}', { name: 'web', category: null
       'historical FULLCHAIN format: leaf + "\\n" + chain');
     const again = await runDistributionCycle(db);
     assert.equal(again.published + again.failed, 0, 'second cycle: nothing to do');
-    console.log('  migration + legacy republish: ok');
-  })().then(() => scenario2()).catch((e) => { console.error(e); process.exit(1); });
-}
+  }
+});
 
 // ================================================================ reconcile scenarios
 async function scenario2() {
@@ -284,5 +286,6 @@ async function scenario2() {
   assert.ok(!JSON.stringify(getConnection(INFISICAL_DEFAULT_ID, db)).includes('client-secret'), 'no secret in public shape');
 
   fs.rmSync(CERTS_DIR, { recursive: true, force: true });
-  console.log('certs/distribution: ALL PASSED');
 }
+
+test('reconcile: publish, renew, retry, move, remove', scenario2);

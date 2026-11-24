@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     if (force) {
       summary = { published: 0, upToDate: 0, skipped: 0, failed: 0, outcomes: [] };
       for (const c of listCertificates().filter((x) => x.hasCert)) {
-        const s = await reconcileCertificate(c.id, { force: true });
+        const s = await reconcileCertificate(c.id, { force: true }); // NOSONAR — sequential on purpose (gentle on remote APIs)
         summary.published += s.published; summary.upToDate += s.upToDate;
         summary.skipped += s.skipped; summary.failed += s.failed;
         summary.outcomes.push(...s.outcomes);

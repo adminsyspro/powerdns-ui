@@ -56,10 +56,10 @@ function toPayload(f: FormState, isNew: boolean): api.ConnectionPayload {
   };
 }
 
-function ConnectionForm({ initial, connectionId, hasSecret, onSaved, onCancel }: {
+function ConnectionForm({ initial, connectionId, hasSecret, onSaved, onCancel }: Readonly<{
   initial: FormState; connectionId?: string; hasSecret: boolean;
   onSaved: (c: DistributionConnection) => void; onCancel: () => void;
-}) {
+}>) {
   const isNew = !connectionId;
   const [f, setF] = React.useState<FormState>(initial);
   const [saving, setSaving] = React.useState(false);

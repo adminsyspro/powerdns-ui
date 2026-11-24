@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       ...actorFromRequest(request, ctx),
       action: 'test', resourceType: 'distribution_connection',
       resourceId: id, resourceName: conn.name,
-      details: `ok=${result.ok}${result.error ? `, error=${result.error}` : ''}`,
+      details: result.error ? `ok=${result.ok}, error=${result.error}` : `ok=${result.ok}`,
     });
     return NextResponse.json(result);
   } catch (e) {
